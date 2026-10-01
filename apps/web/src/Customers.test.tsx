@@ -16,14 +16,20 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { toProfilePayload } from "./api/customerProfiles";
 import {
   ADDRESS_FIELDS_RULE,
+  BACKGROUND_DATE_RULE,
+  BACKGROUND_NOTE_RULE,
+  COUNTRY_RULE,
   CUSTOMER_EMAIL_RULE,
   CUSTOMER_NAME_RULE,
   CUSTOMER_SINCE_RULE,
+  HIDDEN_FACT_RULE,
 } from "./lib/fieldRules";
 import { todayInput } from "./lib/orders";
+import { itemFormReason } from "./lib/unsavedWork";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectWayBack } from "./test/header";
 import { expectPublicationPill, indexCard } from "./test/indexes";
+import { expectRulesInFieldOrder } from "./test/itemForm";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -1027,9 +1033,9 @@ describe("typed controls on the customer editor", () => {
     const book = within(screen.getByRole("region", { name: "Address book" }));
     // Closed, the row reads the country by its name…
     expect(book.getByText(/69005 Lyon · France$/)).toBeVisible();
-    // …and open, the field holds the code and reads it back as the country.
+    // …and loaded into the form, the field holds the code and reads it back as the country.
     await user.click(book.getByRole("button", { name: "Edit Home" }));
-    const row = within(book.getByRole("form", { name: "Edit Home" })).getByLabelText("Country");
+    const row = within(book.getByRole("group", { name: "Edit Home" })).getByLabelText("Country");
     expect(row).toHaveValue("FR");
     expect(row).toHaveAccessibleDescription(/France/);
   });
@@ -1079,25 +1085,26 @@ describe("every enum has a name", () => {
 });
 
 /**
- * PLAN-UX Slice 7 on the customer editor. Both lists here carried their fields as
- * `aria-label`s on always-open boxes: the row could be corrected, but only by a reader who
- * could see which box was which, and the entry it wrote was assembled at the call site rather
- * than by the function the add form used.
+ * A profile's background and hidden facts are items, edited in the one form below each list
+ * (ADR 0074): Edit loads the entry, *Save changes* writes it where it stands through the builder
+ * the form's Add uses, and the entry's own ID is kept.
  */
-describe("editing a saved customer entry in place", () => {
+describe("editing a saved customer entry in the form below its list", () => {
+  const REFUND = {
+    id: "refund-2025",
+    kind: "support_contact" as const,
+    occurred_on: "2026-05-02",
+    note: "Asked about a refund window.",
+  };
+  const SECOND_ADDRESS = {
+    id: "second-address",
+    note: "Has a second address.",
+    revealed_when: "Asked directly.",
+  };
+
   it("corrects a background note and leaves its kind, date and id alone", async () => {
     const user = userEvent.setup();
-    currentProfile = {
-      ...PROFILE_CONTENT,
-      background: [
-        {
-          id: "refund-2025",
-          kind: "support_contact",
-          occurred_on: "2026-05-02",
-          note: "Asked about a refund window.",
-        },
-      ],
-    };
+    currentProfile = { ...PROFILE_CONTENT, background: [REFUND] };
     currentPreview = profilePreview({ content: currentProfile });
     // Captured before the save, because the PUT handler merges the payload back into
     // `currentProfile`: reading the baseline afterwards would compare the save to itself.
@@ -1105,63 +1112,186 @@ describe("editing a saved customer entry in place", () => {
     renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
 
     const card = within(await screen.findByRole("region", { name: "Background" }));
-    await user.click(card.getByRole("button", { name: "Edit 2026-05-02 · Support contact" }));
+    const item = card.getByText("2026-05-02 · Support contact").closest("li") as HTMLElement;
+    expect(within(item).getByText("refund-2025", { selector: "code" })).toBeVisible();
+    expect(within(item).getByText("Asked about a refund window.")).toBeVisible();
+    // The trash keeps the name a journey reached it by.
+    expect(
+      within(item).getByRole("button", { name: "Remove the 2026-05-02 background entry" }),
+    ).toBeVisible();
+    const pencil = card.getByRole("button", { name: "Edit 2026-05-02 · Support contact" });
+    await user.click(pencil);
 
-    const open = within(card.getByRole("form", { name: "Edit 2026-05-02 · Support contact" }));
-    // The row now asks its questions in words, not only in the accessible name.
-    expect(open.getByLabelText("Note")).toHaveValue("Asked about a refund window.");
-    await user.clear(open.getByLabelText("Note"));
-    await user.type(open.getByLabelText("Note"), "Asked about the refund window.");
-    await user.click(open.getByRole("button", { name: "Save 2026-05-02 · Support contact" }));
+    const form = within(card.getByRole("group", { name: "Edit 2026-05-02 · Support contact" }));
+    expect(item).toHaveAttribute("aria-current", "true");
+    expect(form.getByLabelText("Kind")).toHaveFocus();
+    expect(form.getByLabelText("Note")).toHaveValue("Asked about a refund window.");
+    await user.clear(form.getByLabelText("Note"));
+    await user.type(form.getByLabelText("Note"), "Asked about the refund window.  ");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    expect(pencil).toHaveFocus();
+    expect(card.getByRole("group", { name: "Add a background entry" })).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
 
     // Against the whole payload, not the one list: a sibling collection moving, or a key that
-    // quietly became `undefined`, is exactly what a second payload builder would do.
+    // quietly became `undefined`, is exactly what a second payload builder would do. The note
+    // is stored stripped, which `require_text` asks.
     expect(savedPayloads[0]).toStrictEqual({
       ...before,
-      background: [
-        {
-          id: "refund-2025",
-          kind: "support_contact",
-          occurred_on: "2026-05-02",
-          note: "Asked about the refund window.",
-        },
-      ],
+      background: [{ ...REFUND, note: "Asked about the refund window." }],
     });
   });
 
   it("corrects a hidden fact's reveal condition without touching the fact itself", async () => {
     const user = userEvent.setup();
-    currentProfile = {
-      ...PROFILE_CONTENT,
-      hidden_facts: [
-        { id: "second-address", note: "Has a second address.", revealed_when: "Asked directly." },
-      ],
-    };
+    currentProfile = { ...PROFILE_CONTENT, hidden_facts: [SECOND_ADDRESS] };
     currentPreview = profilePreview({ content: currentProfile });
     const before = toProfilePayload(currentProfile);
     renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
 
     const card = within(await screen.findByRole("region", { name: "Hidden simulator facts" }));
+    const item = card.getByText("Has a second address.").closest("li") as HTMLElement;
+    expect(within(item).getByText("Revealed when Asked directly.")).toBeVisible();
+    expect(
+      within(item).getByRole("button", { name: "Remove Has a second address." }),
+    ).toBeVisible();
     await user.click(card.getByRole("button", { name: "Edit Has a second address." }));
 
-    const open = within(card.getByRole("form", { name: "Edit Has a second address." }));
-    expect(open.getByLabelText("Hidden fact")).toHaveValue("Has a second address.");
-    await user.clear(open.getByLabelText("Revealed when"));
-    await user.type(open.getByLabelText("Revealed when"), "Asked twice.");
-    await user.click(open.getByRole("button", { name: "Save Has a second address." }));
+    const form = within(card.getByRole("group", { name: "Edit Has a second address." }));
+    expect(form.getByLabelText("Hidden fact")).toHaveValue("Has a second address.");
+    expect(form.getByLabelText("Hidden fact")).toHaveFocus();
+    await user.clear(form.getByLabelText(/^Revealed when/));
+    await user.type(form.getByLabelText(/^Revealed when/), "Asked twice.");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
 
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
 
     expect(savedPayloads[0]).toStrictEqual({
       ...before,
-      hidden_facts: [
-        { id: "second-address", note: "Has a second address.", revealed_when: "Asked twice." },
-      ],
+      hidden_facts: [{ ...SECOND_ADDRESS, revealed_when: "Asked twice." }],
     });
+  });
+
+  it("leaves the draft clean when an untouched background entry or hidden fact is saved", async () => {
+    const user = userEvent.setup();
+    currentProfile = { ...PROFILE_CONTENT, background: [REFUND], hidden_facts: [SECOND_ADDRESS] };
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    for (const [card, name] of [
+      ["Background", "2026-05-02 · Support contact"],
+      ["Hidden simulator facts", "Has a second address."],
+    ] as const) {
+      const region = within(screen.getByRole("region", { name: card }));
+      const pencil = region.getByRole("button", { name: `Edit ${name}` });
+      await user.click(pencil);
+      await user.click(region.getByRole("button", { name: "Save changes" }));
+      expect(pencil).toHaveFocus();
+      expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    }
+  });
+
+  it("gives a fact without a reveal condition no detail line", async () => {
+    currentProfile = {
+      ...PROFILE_CONTENT,
+      hidden_facts: [{ ...SECOND_ADDRESS, revealed_when: "" }],
+    };
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    const card = within(await screen.findByRole("region", { name: "Hidden simulator facts" }));
+    const item = card.getByText("Has a second address.").closest("li") as HTMLElement;
+    expect(within(item).queryByText(/Revealed when/)).toBeNull();
+  });
+
+  it("refuses the background form with its first rule after Add entry, in the order it asks", async () => {
+    const user = userEvent.setup();
+    currentProfile = { ...PROFILE_CONTENT, background: [REFUND] };
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    const card = within(await screen.findByRole("region", { name: "Background" }));
+
+    // Blank, the form is refused and says why, and marks nothing until something is typed.
+    const add = card.getByRole("group", { name: "Add a background entry" });
+    const addButton = within(add).getByRole("button", { name: "Add entry" });
+    expectRefused(addButton, BACKGROUND_NOTE_RULE);
+    expect(within(add).getByLabelText("Note")).not.toHaveAttribute("aria-invalid");
+    // Only spaces is empty, as the lab strips it.
+    await user.type(within(add).getByLabelText("Note"), "   ");
+    expectRefused(addButton, BACKGROUND_NOTE_RULE);
+    expect(within(add).getByLabelText("Note")).toHaveAttribute("aria-invalid", "true");
+    await user.click(addButton);
+    await submitWithoutPressing(addButton);
+    expect(card.getAllByRole("listitem")).toHaveLength(1);
+
+    await user.click(card.getByRole("button", { name: "Edit 2026-05-02 · Support contact" }));
+    const form = card.getByRole("group", { name: "Edit 2026-05-02 · Support contact" });
+    await expectRulesInFieldOrder(
+      user,
+      form,
+      within(form).getByRole("button", { name: "Save changes" }),
+      {
+        Date: { rule: BACKGROUND_DATE_RULE, answer: "2026-05-03" },
+        Note: { rule: BACKGROUND_NOTE_RULE, answer: "Called back." },
+      },
+    );
+  });
+
+  it("refuses the hidden-fact form with its first rule after Add fact, in the order it asks", async () => {
+    const user = userEvent.setup();
+    currentProfile = { ...PROFILE_CONTENT, hidden_facts: [SECOND_ADDRESS] };
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    const card = within(await screen.findByRole("region", { name: "Hidden simulator facts" }));
+
+    const add = card.getByRole("group", { name: "Add a hidden fact" });
+    const addButton = within(add).getByRole("button", { name: "Add fact" });
+    expectRefused(addButton, HIDDEN_FACT_RULE);
+    expect(within(add).getByLabelText("Hidden fact")).not.toHaveAttribute("aria-invalid");
+    expect(within(add).getByLabelText("Hidden fact")).not.toBeRequired();
+
+    await user.click(card.getByRole("button", { name: "Edit Has a second address." }));
+    const form = card.getByRole("group", { name: "Edit Has a second address." });
+    await expectRulesInFieldOrder(
+      user,
+      form,
+      within(form).getByRole("button", { name: "Save changes" }),
+      { "Hidden fact": { rule: HIDDEN_FACT_RULE, answer: "Keeps a second flat." } },
+    );
+  });
+
+  it("asks before leaving a fact edited in its form, with the form's own reason", async () => {
+    const user = userEvent.setup();
+    currentProfile = { ...PROFILE_CONTENT, hidden_facts: [SECOND_ADDRESS] };
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    const card = within(await screen.findByRole("region", { name: "Hidden simulator facts" }));
+
+    await user.click(card.getByRole("button", { name: "Edit Has a second address." }));
+    await user.type(card.getByLabelText(/^Revealed when/), " Twice.");
+    await user.click(railEntry("Customers"));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      "The Hidden simulator facts form holds an edit to Has a second address. that has not reached the draft.",
+    );
+    expect(prompt).toHaveTextContent(itemFormReason("a hidden fact", "draft"));
+  });
+
+  it("empties the form when the background entry it edits is removed", async () => {
+    const user = userEvent.setup();
+    currentProfile = { ...PROFILE_CONTENT, background: [REFUND] };
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    const card = within(await screen.findByRole("region", { name: "Background" }));
+
+    await user.click(card.getByRole("button", { name: "Edit 2026-05-02 · Support contact" }));
+    await user.type(card.getByLabelText("Note"), " Twice.");
+    await user.click(card.getByRole("button", { name: "Remove the 2026-05-02 background entry" }));
+    await user.click(card.getByRole("button", { name: "Remove it" }));
+
+    const form = within(card.getByRole("group", { name: "Add a background entry" }));
+    expect(form.getByLabelText("Note")).toHaveValue("");
+    expect(form.getByLabelText("Date")).toHaveValue(todayInput());
+    expect(form.queryByRole("button", { name: "Save changes" })).toBeNull();
   });
 });
 
@@ -1298,16 +1428,20 @@ describe("removing is deliberate", () => {
     const remove = screen.getByRole("button", { name: "Remove Home" });
     await user.click(remove);
 
-    // The confirm takes the row's place: the row's own fields are gone, the question stands
-    // there instead, and it holds focus so the question and its consequence are read out.
+    // The confirm takes the item's place: the item's own controls are gone, the question
+    // stands in the list instead, and it holds focus so the question and its consequence are
+    // read out.
     const confirm = confirmNamed("Remove the address “Home”?");
     expect(screen.queryByRole("button", { name: "Edit Home" })).toBeNull();
+    expect(confirm.closest("li")?.parentElement).toBe(
+      within(screen.getByRole("group", { name: "Entries" })).getByRole("list"),
+    );
     expect(confirm).toHaveFocus();
     expect(confirm).toHaveAccessibleDescription(
       /^It is the profile's last address, and a profile with none is refused at publication\. An order shipped to it keeps its frozen copy, and its findings warn that the entry can no longer be reselected\./,
     );
 
-    // Walking back puts the row back, focus on the Remove that asked, and writes nothing.
+    // Walking back puts the item back, focus on the Remove that asked, and writes nothing.
     await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
     expect(screen.queryByRole("group", { name: "Remove the address “Home”?" })).toBeNull();
     expect(screen.getByRole("button", { name: "Edit Home" })).toBeVisible();
@@ -1327,7 +1461,7 @@ describe("removing is deliberate", () => {
       }),
     );
     expect(screen.queryByRole("button", { name: "Edit Home" })).toBeNull();
-    // The row is gone, so focus is left on the line that says so. Focus is what announces it:
+    // The item is gone, so focus is left on the line that says so. Focus is what announces it:
     // it is not also a live region, which would read it twice.
     const said = screen.getByText("Removed the address “Home” from the draft.");
     expect(said).toHaveFocus();
@@ -1897,9 +2031,10 @@ describe("the customer editor's side panel", () => {
 });
 
 /**
- * *Address book* is a list on `EntryCard` (PLAN-UX Slice 33): an address opens where it stands,
- * the default chip and *Make default* stay on the row, and a new one arrives through the add
- * form below the list — both paths through one builder.
+ * *Address book* is items under *Entries* and one form below them (ADR 0074): the default pill
+ * beside the name and *Make default* on the item, as `Workspace.dc.html` :2888–2891 draws them;
+ * an address loaded into the form and saved where it stands through the builder the form's Add
+ * uses, which never moves the default.
  */
 describe("the address book", () => {
   const OFFICE = {
@@ -1917,57 +2052,88 @@ describe("the address book", () => {
     return within(screen.getByRole("region", { name: "Address book" }));
   }
 
-  it("keeps the one address line typed in through a Discard, and moves every other line", async () => {
+  /** The item an entry stands on, found by its name. */
+  function itemOf(book: ReturnType<typeof within>, label: string): HTMLElement {
+    return book.getByText(label, { selector: "span" }).closest("li") as HTMLElement;
+  }
+
+  it("follows the draft through a Discard while the form is clean, and keeps its work while it is not", async () => {
     const user = userEvent.setup();
     const book = await openBook();
 
-    // In the draft: Home moved to another street and city, and the row saved.
+    // In the draft: Home moved to another street, and saved into it.
     await user.click(book.getByRole("button", { name: "Edit Home" }));
-    let open = within(book.getByRole("form", { name: "Edit Home" }));
-    await user.clear(open.getByLabelText("Street"));
-    await user.type(open.getByLabelText("Street"), "1 place Bellecour");
-    await user.clear(open.getByLabelText("City"));
-    await user.type(open.getByLabelText("City"), "Villeurbanne");
-    await user.click(open.getByRole("button", { name: "Save Home" }));
-    // Reopened, and only the second line typed in.
-    await user.click(book.getByRole("button", { name: "Edit Home" }));
-    open = within(book.getByRole("form", { name: "Edit Home" }));
-    await user.type(open.getByLabelText(/^Street line 2/), "Bâtiment B");
+    let form = within(book.getByRole("group", { name: "Edit Home" }));
+    await user.clear(form.getByLabelText("Street"));
+    await user.type(form.getByLabelText("Street"), "1 place Bellecour");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
 
+    // Loaded again and left alone, the form is clean: a Discard puts the street back in it.
+    await user.click(book.getByRole("button", { name: "Edit Home" }));
+    form = within(book.getByRole("group", { name: "Edit Home" }));
+    expect(form.getByLabelText("Street")).toHaveValue("1 place Bellecour");
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(form.getByLabelText("Street")).toHaveValue("18 rue des Écoles"));
+    expect(book.getByRole("group", { name: "Edit Home" })).toBeVisible();
+
+    // Saved again, then loaded and typed in: the form is dirty, and a Discard leaves all of it.
+    await user.clear(form.getByLabelText("Street"));
+    await user.type(form.getByLabelText("Street"), "1 place Bellecour");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    await user.click(book.getByRole("button", { name: "Edit Home" }));
+    form = within(book.getByRole("group", { name: "Edit Home" }));
+    await user.type(form.getByLabelText(/^Street line 2/), "Bâtiment B");
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
 
-    // Each line is its own field — the lab checks each alone — so only the typed one stays.
-    open = within(book.getByRole("form", { name: "Edit Home" }));
-    await waitFor(() => expect(open.getByLabelText("Street")).toHaveValue("18 rue des Écoles"));
-    expect(open.getByLabelText("City")).toHaveValue("Lyon");
-    expect(open.getByLabelText(/^Street line 2/)).toHaveValue("Bâtiment B");
+    await waitFor(() => expect(book.getByText(/18 rue des Écoles/)).toBeVisible());
+    expect(form.getByLabelText("Street")).toHaveValue("1 place Bellecour");
+    expect(form.getByLabelText(/^Street line 2/)).toHaveValue("Bâtiment B");
   });
 
-  it("reads an address back on its row and opens every field it stores on Edit", async () => {
+  it("reads an address back as an item and loads every field it stores on Edit", async () => {
     const user = userEvent.setup();
     const book = await openBook();
 
-    expect(book.getByText("Maya Laurent · 18 rue des Écoles · 69005 Lyon · France")).toBeVisible();
-    expect(book.getByText("Default")).toBeVisible();
-    expect(book.queryByRole("form", { name: "Edit Home" })).toBeNull();
+    const home = itemOf(book, "Home");
+    expect(
+      within(home).getByText("Maya Laurent · 18 rue des Écoles · 69005 Lyon · France"),
+    ).toBeVisible();
+    expect(within(home).getByText("Default")).toBeVisible();
+    expect(within(home).getByText("home", { selector: "code" })).toBeVisible();
+    // The list is the card's first row, under the prototype's label and its rule.
+    expect(
+      within(book.getByRole("group", { name: "Entries" })).getByText(
+        "Exactly one is the default before the profile can publish; the first entry added becomes it.",
+      ),
+    ).toBeVisible();
+    expect(book.queryByRole("group", { name: "Edit Home" })).toBeNull();
 
-    await user.click(book.getByRole("button", { name: "Edit Home" }));
+    await user.click(within(home).getByRole("button", { name: "Edit Home" }));
 
-    const open = within(book.getByRole("form", { name: "Edit Home" }));
-    expect(open.getByLabelText("Label")).toHaveValue("Home");
-    expect(open.getByLabelText("Recipient")).toHaveValue("Maya Laurent");
-    expect(open.getByLabelText("Street")).toHaveValue("18 rue des Écoles");
-    expect(open.getByLabelText("Street line 2 (optional)")).toHaveValue("");
-    expect(open.getByLabelText("Postal code")).toHaveValue("69005");
-    expect(open.getByLabelText("City")).toHaveValue("Lyon");
-    expect(open.getByLabelText("Region (optional)")).toHaveValue("");
-    // The identifier stays on the header line, and so does the default chip.
-    expect(book.getByText("home", { selector: "code" })).toBeVisible();
-    expect(book.getByText("Default")).toBeVisible();
-    expect(book.queryByRole("button", { name: "Remove Home" })).toBeNull();
+    const form = within(book.getByRole("group", { name: "Edit Home" }));
+    expect(home).toHaveAttribute("aria-current", "true");
+    expect(form.getByLabelText("Label")).toHaveFocus();
+    expect(form.getByLabelText("Label")).toHaveValue("Home");
+    expect(form.getByLabelText("Recipient")).toHaveValue("Maya Laurent");
+    expect(form.getByLabelText("Street")).toHaveValue("18 rue des Écoles");
+    expect(form.getByLabelText("Street line 2 (optional)")).toHaveValue("");
+    expect(form.getByLabelText("Postal code")).toHaveValue("69005");
+    expect(form.getByLabelText("City")).toHaveValue("Lyon");
+    expect(form.getByLabelText("Region (optional)")).toHaveValue("");
+    expect(form.getByLabelText("Country")).toHaveValue("FR");
+    // Not refused, the field is described by its own rule, which it leaves only while the
+    // refusal's line says it.
+    expect(form.getByLabelText("Country")).not.toHaveAttribute("aria-invalid");
+    expect(form.getByLabelText("Country")).toHaveAccessibleDescription(
+      new RegExp(COUNTRY_RULE.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    );
+    // The pill and the trash stay on the item; the default is not a question the form asks.
+    expect(within(home).getByText("Default")).toBeVisible();
+    expect(within(home).getByRole("button", { name: "Remove Home" })).toBeVisible();
+    expect(form.queryByRole("checkbox")).toBeNull();
   });
 
-  it("saves a corrected address with the payload the add form writes, and keeps the default where it was", async () => {
+  it("saves a corrected address with the payload the add form writes, and never moves the default", async () => {
     const user = userEvent.setup();
     const book = await openBook();
     const answers = {
@@ -1977,114 +2143,262 @@ describe("the address book", () => {
       city: "Lyon",
     };
 
-    const add = within(screen.getByRole("group", { name: "Add an address" }));
+    const add = within(book.getByRole("group", { name: "Add an address" }));
     await user.type(add.getByLabelText("Label"), answers.label);
     await user.type(add.getByLabelText("Street"), answers.street);
     await user.type(add.getByLabelText("Postal code"), answers.postal);
     await user.type(add.getByLabelText("City"), answers.city);
     await user.click(add.getByRole("button", { name: "Add address" }));
 
+    // The default entry edited with the added one's answers…
     await user.click(book.getByRole("button", { name: "Edit Home" }));
-    const open = within(book.getByRole("form", { name: "Edit Home" }));
+    let form = within(book.getByRole("group", { name: "Edit Home" }));
     for (const [label, value] of [
       ["Label", answers.label],
       ["Street", answers.street],
       ["Postal code", answers.postal],
       ["City", answers.city],
     ] as const) {
-      await user.clear(open.getByLabelText(label));
-      await user.type(open.getByLabelText(label), value);
+      await user.clear(form.getByLabelText(label));
+      await user.type(form.getByLabelText(label), value);
     }
-    await user.click(open.getByRole("button", { name: "Save Home" }));
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    // …and the added entry edited too — both are called Office now: neither edit moves which
+    // one is the default.
+    const [, second] = book.getAllByRole("button", { name: "Edit Office" });
+    await user.click(second);
+    form = within(book.getByRole("group", { name: "Edit Office" }));
+    await user.type(form.getByLabelText("City"), " 2e");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
     const [edited, added] = savedPayloads[0].addresses as Array<Record<string, unknown>>;
     expect(edited.id).toBe("home");
     expect(added.id).toBe("office");
-    // The only differences are the id and which one is the default — the row's own answer.
     expect(edited.is_default).toBe(true);
     expect(added.is_default).toBe(false);
     expect({ ...edited, id: null, is_default: null }).toEqual({
       ...added,
       id: null,
       is_default: null,
+      city: "Lyon",
     });
     expect(added).toMatchObject({ label: "Office", line1: "12 quai Perrache", line2: null });
+    expect(added.city).toBe("Lyon 2e");
   });
 
-  it("writes nothing on Cancel, and nothing typed in an open row reaches Save draft", async () => {
+  it("leaves the draft clean when an untouched address is saved", async () => {
+    const user = userEvent.setup();
+    const book = await openBook();
+
+    const pencil = book.getByRole("button", { name: "Edit Home" });
+    await user.click(pencil);
+    await user.click(book.getByRole("button", { name: "Save changes" }));
+
+    expect(pencil).toHaveFocus();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+  });
+
+  it("makes another entry the default from its item, and moves the pill there", async () => {
+    const user = userEvent.setup();
+    currentProfile = { ...PROFILE_CONTENT, addresses: [PROFILE_CONTENT.addresses[0], OFFICE] };
+    const book = await openBook();
+
+    const office = itemOf(book, "Office");
+    const home = itemOf(book, "Home");
+    // On the item, before its pencil; the default carries none.
+    const makeDefault = within(office).getByRole("button", {
+      name: "Make Office the default address",
+    });
+    expect(
+      makeDefault.compareDocumentPosition(
+        within(office).getByRole("button", { name: "Edit Office" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(within(home).queryByRole("button", { name: /the default address/ })).toBeNull();
+    expect(within(office).queryByText("Default")).toBeNull();
+
+    // The form holding a typed edit to Home does not stop it, and does not take the answer:
+    // Home's edit, saved after the default moved, writes its city and not the flag it opened on.
+    await user.click(within(home).getByRole("button", { name: "Edit Home" }));
+    const form = within(book.getByRole("group", { name: "Edit Home" }));
+    await user.clear(form.getByLabelText("City"));
+    await user.type(form.getByLabelText("City"), "Villeurbanne");
+    await user.click(makeDefault);
+
+    expect(within(itemOf(book, "Office")).getByText("Default")).toBeVisible();
+    expect(within(itemOf(book, "Home")).queryByText("Default")).toBeNull();
+    expect(
+      within(itemOf(book, "Home")).getByRole("button", { name: "Make Home the default address" }),
+    ).toBeVisible();
+    expect(form.getByLabelText("City")).toHaveValue("Villeurbanne");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    expect(within(itemOf(book, "Office")).getByText("Default")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const addresses = savedPayloads[0].addresses as Array<{
+      id: string;
+      city: string;
+      is_default: boolean;
+    }>;
+    expect(addresses.map(({ id, city, is_default }) => ({ id, city, is_default }))).toEqual([
+      { id: "home", city: "Villeurbanne", is_default: false },
+      { id: "office", city: "Lyon", is_default: true },
+    ]);
+  });
+
+  it("writes nothing on Cancel, and nothing typed in the form reaches Save draft", async () => {
     const user = userEvent.setup();
     const book = await openBook();
 
     await user.type(screen.getByLabelText("Given name"), "h");
-    await user.click(book.getByRole("button", { name: "Edit Home" }));
-    const open = within(book.getByRole("form", { name: "Edit Home" }));
-    await user.clear(open.getByLabelText("City"));
-    await user.type(open.getByLabelText("City"), "Villeurbanne");
+    const pencil = book.getByRole("button", { name: "Edit Home" });
+    await user.click(pencil);
+    const form = within(book.getByRole("group", { name: "Edit Home" }));
+    await user.clear(form.getByLabelText("City"));
+    await user.type(form.getByLabelText("City"), "Villeurbanne");
 
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
     expect((savedPayloads[0].addresses as Array<{ city: string }>)[0].city).toBe("Lyon");
 
-    await user.click(book.getByRole("button", { name: "Cancel editing Home" }));
+    await user.click(form.getByRole("button", { name: "Cancel" }));
+    expect(pencil).toHaveFocus();
+    expect(book.getByRole("group", { name: "Add an address" })).toBeVisible();
     expect(book.getByText(/69005 Lyon/)).toBeVisible();
     expect(book.queryByText(/Villeurbanne/)).toBeNull();
   });
 
-  it("holds one open row, and the other Edit says why it is disabled", async () => {
+  it("replaces what the form holds when another entry's Edit is pressed", async () => {
     const user = userEvent.setup();
     currentProfile = { ...PROFILE_CONTENT, addresses: [PROFILE_CONTENT.addresses[0], OFFICE] };
     const book = await openBook();
 
     await user.click(book.getByRole("button", { name: "Edit Home" }));
+    const other = book.getByRole("button", { name: "Edit Office" });
+    expect(other).toBeEnabled();
+    await user.click(other);
 
-    const sibling = book.getByRole("button", { name: "Edit Office" });
-    expect(sibling).toBeDisabled();
-    expect(sibling).toHaveAccessibleDescription(
-      "Editing Home. Save or Cancel before opening another row; nothing in the open row reaches the draft until you press Save.",
-    );
-    // *Make default* is on the closed row still.
-    expect(book.getByRole("button", { name: "Make Office the default address" })).toBeVisible();
+    const form = within(book.getByRole("group", { name: "Edit Office" }));
+    expect(form.getByLabelText("Street")).toHaveValue("12 quai Perrache");
+    expect(book.queryByRole("group", { name: "Edit Home" })).toBeNull();
+    expect(itemOf(book, "Office")).toHaveAttribute("aria-current", "true");
+    expect(itemOf(book, "Home")).not.toHaveAttribute("aria-current");
   });
 
-  it("refuses an open row's Save, and the add form, only for what `required` lets through", async () => {
+  it("refuses the add form with its first rule after Add address, in the order it asks", async () => {
     const user = userEvent.setup();
     const book = await openBook();
+    const add = book.getByRole("group", { name: "Add an address" });
+    const button = within(add).getByRole("button", { name: "Add address" });
 
-    await user.click(book.getByRole("button", { name: "Edit Home" }));
-    const open = within(book.getByRole("form", { name: "Edit Home" }));
-    const save = open.getByRole("button", { name: "Save Home" });
-    // Emptied, the field is `required` and says so itself; the row's Save does not.
-    await user.clear(open.getByLabelText("Recipient"));
-    expect(open.getByLabelText("Recipient")).toBeInvalid();
-    expectNotRefused(save);
-    // …and the browser stops the press, so the row stays open with nothing written.
-    await user.click(save);
-    expect(book.getByRole("form", { name: "Edit Home" })).toBeVisible();
-    await user.type(open.getByLabelText("Recipient"), "  ");
-    expectRefused(save, ADDRESS_FIELDS_RULE);
-    await user.click(save);
-    expect(book.getByRole("form", { name: "Edit Home" })).toBeVisible();
+    // Blank, it is refused and says why, and marks nothing until something is typed.
+    expectRefused(button, ADDRESS_FIELDS_RULE);
+    expect(within(add).getByLabelText("Label")).not.toHaveAttribute("aria-invalid");
+    expect(within(add).getByLabelText("Street")).not.toBeRequired();
+    // While adding it asks what a new entry cannot do without; the recipient is the customer.
+    expect(within(add).queryByLabelText("Recipient")).toBeNull();
+    expect(
+      within(add).getByText(
+        "A new entry ships to the customer, Maya Laurent; edit it to name another recipient.",
+      ),
+    ).toBeVisible();
 
-    const add = within(screen.getByRole("group", { name: "Add an address" }));
-    const button = add.getByRole("button", { name: "Add address" });
-    // An empty field is its own `required` to say (ADR 0063): nothing typed refuses nothing.
-    expectNotRefused(button);
-    expect(add.getByLabelText("Street")).toBeRequired();
-    await user.click(button);
-    expect(book.queryByRole("button", { name: "Edit Office" })).toBeNull();
-    await user.type(add.getByLabelText("Label"), "Office");
-    await user.type(add.getByLabelText("Street"), "   ");
-    await user.type(add.getByLabelText("Postal code"), "69002");
-    await user.type(add.getByLabelText("City"), "Lyon");
+    await expectRulesInFieldOrder(user, add, button, {
+      Label: { rule: ADDRESS_FIELDS_RULE, answer: "Office" },
+      Street: { rule: ADDRESS_FIELDS_RULE, answer: "12 quai Perrache" },
+      "Postal code": { rule: ADDRESS_FIELDS_RULE, answer: "69002" },
+      City: { rule: ADDRESS_FIELDS_RULE, answer: "Lyon" },
+      Country: { rule: COUNTRY_RULE, answer: "FR" },
+    });
+    // Only spaces is empty, as the lab strips it.
+    await user.clear(within(add).getByLabelText("Street"));
+    await user.type(within(add).getByLabelText("Street"), "   ");
     expectRefused(button, ADDRESS_FIELDS_RULE);
     await user.click(button);
     await submitWithoutPressing(button);
     expect(book.queryByRole("button", { name: "Edit Office" })).toBeNull();
+  });
 
-    await user.clear(add.getByLabelText("Street"));
-    await user.type(add.getByLabelText("Street"), "12 quai Perrache");
-    expectNotRefused(button);
+  it("refuses Save changes with its first rule, in the order the form asks every field", async () => {
+    const user = userEvent.setup();
+    const book = await openBook();
+
+    await user.click(book.getByRole("button", { name: "Edit Home" }));
+    const form = book.getByRole("group", { name: "Edit Home" });
+    await expectRulesInFieldOrder(
+      user,
+      form,
+      within(form).getByRole("button", { name: "Save changes" }),
+      {
+        Label: { rule: ADDRESS_FIELDS_RULE, answer: "Home" },
+        Recipient: { rule: ADDRESS_FIELDS_RULE, answer: "Maya Laurent" },
+        Street: { rule: ADDRESS_FIELDS_RULE, answer: "1 place Bellecour" },
+        "Postal code": { rule: ADDRESS_FIELDS_RULE, answer: "69002" },
+        City: { rule: ADDRESS_FIELDS_RULE, answer: "Lyon" },
+        Country: { rule: COUNTRY_RULE, answer: "FR" },
+      },
+    );
+  });
+
+  it("follows the profile's locale with the country of an entry being added, until one is typed", async () => {
+    const user = userEvent.setup();
+    const book = await openBook();
+    const add = within(book.getByRole("group", { name: "Add an address" }));
+
+    expect(add.getByLabelText("Country")).toHaveValue("FR");
+    await user.type(add.getByLabelText("Label"), "Berlin office");
+    const locale = within(screen.getByRole("region", { name: "Identity" })).getByLabelText(
+      "Locale",
+    );
+    await user.clear(locale);
+    await user.type(locale, "de-DE");
+    expect(add.getByLabelText("Country")).toHaveValue("DE");
+    expect(add.getByLabelText("Label")).toHaveValue("Berlin office");
+
+    await user.clear(add.getByLabelText("Country"));
+    await user.type(add.getByLabelText("Country"), "AT");
+    await user.clear(locale);
+    await user.type(locale, "fr-FR");
+    expect(add.getByLabelText("Country")).toHaveValue("AT");
+  });
+
+  it("empties the form when the entry it edits is removed", async () => {
+    const user = userEvent.setup();
+    currentProfile = { ...PROFILE_CONTENT, addresses: [PROFILE_CONTENT.addresses[0], OFFICE] };
+    const book = await openBook();
+
+    await user.click(book.getByRole("button", { name: "Edit Office" }));
+    await user.type(book.getByLabelText("City"), " 2e");
+    await user.click(book.getByRole("button", { name: "Remove Office" }));
+    await user.click(book.getByRole("button", { name: "Remove it" }));
+
+    const form = within(book.getByRole("group", { name: "Add an address" }));
+    expect(form.getByLabelText("Label")).toHaveValue("");
+    expect(form.getByLabelText("City")).toHaveValue("");
+    expect(form.queryByRole("button", { name: "Save changes" })).toBeNull();
+    // Add cannot write the removed entry back: the form holds nothing of it.
+    await user.click(railEntry("Customers"));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent("The customer profile draft has unsaved changes.");
+    expect(prompt).not.toHaveTextContent(/Address book form/);
+  });
+
+  it("asks before leaving an address typed in its form, with the form's own reason", async () => {
+    const user = userEvent.setup();
+    const book = await openBook();
+
+    await user.type(
+      within(book.getByRole("group", { name: "Add an address" })).getByLabelText("Label"),
+      "Office",
+    );
+    await user.click(railEntry("Customers"));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      "The Address book form holds “Office”, which has not been added to the draft.",
+    );
+    expect(prompt).toHaveTextContent(itemFormReason("an address", "draft"));
   });
 });

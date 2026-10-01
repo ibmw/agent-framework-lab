@@ -21,17 +21,26 @@ import { PrimaryAction, RefusalLine } from "./PrimaryAction";
 /**
  * One entry on its list: the name at 13.5px 700, the key in monospace, one detail line, and
  * its actions. Its border and ground say it is the one the form is editing.
+ *
+ * `tag` stands beside the name, ahead of the key, for what the list says of one entry among
+ * the others — the address book's *Default* pill (`Workspace.dc.html` :2888). `detail` may be
+ * nothing, where the entry has no line to give, and `multiline` keeps the line breaks of a
+ * detail authored in a text area — a guidance note's body — which otherwise read run-on.
  */
 export function ListItem({
   name,
   id,
   detail,
+  tag,
+  multiline = false,
   editing,
   children,
 }: {
   name: string;
   id: string;
-  detail: string;
+  detail: string | null;
+  tag?: ReactNode;
+  multiline?: boolean;
   editing: boolean;
   children: ReactNode;
 }) {
@@ -40,9 +49,16 @@ export function ListItem({
       <div className="min-w-0 flex-[1_1_180px]">
         <div className="flex flex-wrap items-baseline gap-2">
           <span className="text-[13.5px] font-bold text-admin-ink">{name}</span>
+          {tag}
           <code className="font-mono text-[11.5px] text-[#8c9196]">{id}</code>
         </div>
-        <div className="mt-[3px] text-[12.5px] text-[#6a7580]">{detail}</div>
+        {detail === null ? null : (
+          <div
+            className={`mt-[3px] text-[12.5px] text-[#6a7580]${multiline ? " whitespace-pre-line" : ""}`}
+          >
+            {detail}
+          </div>
+        )}
       </div>
       {/* The actions wrap as one group, so a narrow row never leaves the trash on a line of
           its own. */}
@@ -75,9 +91,14 @@ export function EditButton({
   );
 }
 
-/** The 30px trash, named "Remove {name}", asking twice where the preference says to (ADR 0060). */
+/**
+ * The 30px trash, named "Remove {name}", asking twice where the preference says to (ADR 0060).
+ * `label` replaces that name where a list names its entries otherwise: a background entry's
+ * trash is "Remove the 2026-05-02 background entry", as its confirm and its notice name it.
+ */
 export function RemoveButton({
   name,
+  label = `Remove ${name}`,
   entryKey,
   removal,
   notice,
@@ -86,6 +107,7 @@ export function RemoveButton({
   onRemove,
 }: {
   name: string;
+  label?: string;
   entryKey: string;
   removal: Removal;
   notice: string;
@@ -99,8 +121,8 @@ export function RemoveButton({
       ref={removal.trigger(entryKey)}
       type="button"
       className={itemRemoveButtonClasses}
-      aria-label={`Remove ${name}`}
-      title={held ?? `Remove ${name}`}
+      aria-label={label}
+      title={held ?? label}
       disabled={held !== undefined}
       aria-describedby={held !== undefined ? describedBy : undefined}
       onClick={removal.ask(entryKey, onRemove, notice)}
@@ -127,7 +149,8 @@ export function ItemFormRow({
   children,
 }: {
   title: string;
-  hint: string;
+  /** The form's rule, where it has one to state (*Guidance lives under the field*). */
+  hint?: string;
   editing: boolean;
   addLabel: string;
   refusal: ItemRefusal | null;

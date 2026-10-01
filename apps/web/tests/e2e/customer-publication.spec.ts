@@ -64,7 +64,11 @@ test("an author publishes a customer profile with an address book and persona", 
   await expect(country).toHaveValue("FR");
   await expect(addAddress.getByText("France", { exact: true })).toBeVisible();
   await addAddress.getByRole("button", { name: "Add address" }).click();
-  await expect(addressBook.getByText("Default")).toBeVisible();
+  // Read on the item: the *Entries* row's rule names the default too, so a read of the whole
+  // card would find two.
+  await expect(
+    addressBook.getByRole("listitem").filter({ hasText: "Home" }).getByText("Default"),
+  ).toBeVisible();
 
   const persona = card(page, "Behavioral persona");
   await persona

@@ -4,7 +4,7 @@ import type {
   SupportIdentityPreviewResponse,
   SupportPermission,
 } from "@agent-lab/contracts";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   getSupportIdentityDraft,
@@ -12,18 +12,13 @@ import {
   publishSupportIdentity,
   replaceSupportIdentityDraft,
 } from "../api/supportIdentities";
-import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
-import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
-import { PrimaryAction } from "../components/PrimaryAction";
+import { Field, FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
+import { EditButton, ItemFormRow, ListItem, RemoveButton } from "../components/ItemList";
 import {
   Card,
   EditorSaveActions,
-  EntryCard,
-  EntryEditNotice,
-  EntryId,
-  EntryText,
   Fingerprint,
   GateCard,
   IssueList,
@@ -33,7 +28,6 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
-import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { optionText, SUPPORT_PERMISSION } from "../lib/enumLabels";
 import {
@@ -41,15 +35,28 @@ import {
   ESCALATION_CONDITIONS_RULE,
   IDENTITY_TONE_RULE,
 } from "../lib/fieldRules";
+import {
+  BLANK_GUIDANCE,
+  type GuidanceFields,
+  guidanceEntry,
+  guidanceFields,
+  guidanceRefusal,
+} from "../lib/guidanceNotes";
+import {
+  formTitle,
+  type ItemFormWords,
+  refusedProps,
+  useEditButtons,
+  useFocusAfterCommit,
+  useItemForm,
+} from "../lib/itemForm";
+import { pythonStrip } from "../lib/pythonText";
 import { consequenceOf, findingClauses, useRemoval } from "../lib/removal";
 import {
-  addFormClasses,
-  destructiveSubtleButtonClasses,
   editorColumnsClasses,
   editorMainClasses,
   editorPanelClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   textAreaClasses,
 } from "../lib/ui";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
@@ -96,13 +103,6 @@ export function SupportIdentityEditorPage() {
   });
   const { content, preview, edit } = editor;
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
-  const guidanceEditor = useEntryEdit(content?.guidance ?? [], {
-    keyOf: (note) => note.id,
-    labelOf: (note) => note.title,
-    fieldsOf: (note): GuidanceFields => ({ title: note.title, body: note.body }),
-  });
-  const guidanceNotice = useId();
-  const guidanceRemoval = useRemoval(identityId);
 
   if (editor.loading) {
     return <p className="text-sm text-admin-muted">Loading support identity…</p>;
@@ -126,23 +126,6 @@ export function SupportIdentityEditorPage() {
       permissions: granted
         ? content.permissions.filter((entry) => entry !== permission)
         : [...content.permissions, permission],
-    });
-  }
-
-  function dropGuidance(id: string) {
-    if (!content) {
-      return;
-    }
-    edit({ ...content, guidance: content.guidance.filter((entry) => entry.id !== id) });
-  }
-
-  function saveGuidance(id: string, fields: GuidanceFields) {
-    if (!content) {
-      return;
-    }
-    edit({
-      ...content,
-      guidance: content.guidance.map((note) => (note.id === id ? guidanceEntry(id, fields) : note)),
     });
   }
 
@@ -284,87 +267,9 @@ export function SupportIdentityEditorPage() {
           </Card>
 
           <Card title="Guidance">
-            {content.guidance.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">No guidance authored yet.</p>
-            ) : (
-              <ul className="grid gap-2 text-[13px]">
-                {content.guidance.map((note) =>
-                  guidanceRemoval.isArmed(note.id) ? (
-                    <ConfirmRemove
-                      key={note.id}
-                      as="li"
-                      title={`Remove the guidance “${note.title}”?`}
-                      consequence={consequenceOf(
-                        "An agent running as this identity is no longer given it.",
-                        findingClauses([
-                          content.guidance.length === 1 && "identity_without_guidance",
-                        ]),
-                        "Nothing is written until you save the draft, and a published version keeps it.",
-                      )}
-                      onConfirm={guidanceRemoval.confirm(
-                        () => dropGuidance(note.id),
-                        `Removed the guidance “${note.title}” from the draft.`,
-                      )}
-                      onKeep={guidanceRemoval.keep}
-                    />
-                  ) : (
-                    <EntryCard
-                      key={note.id}
-                      title={note.title}
-                      chips={<EntryId value={note.id} />}
-                      edit={entryEdit(
-                        guidanceEditor,
-                        guidanceNotice,
-                        note.id,
-                        (fields) => saveGuidance(note.id, fields),
-                        (value, onChange) => (
-                          <div className="flex flex-wrap items-end gap-2">
-                            <GuidanceFieldset value={value} onChange={onChange} />
-                          </div>
-                        ),
-                      )}
-                      actions={
-                        <button
-                          className={destructiveSubtleButtonClasses}
-                          type="button"
-                          aria-label={`Remove ${note.title}`}
-                          ref={guidanceRemoval.trigger(note.id)}
-                          onClick={guidanceRemoval.ask(
-                            note.id,
-                            () => dropGuidance(note.id),
-                            `Removed the guidance “${note.title}” from the draft.`,
-                          )}
-                        >
-                          <ButtonIcon verb="delete" />
-                          Remove
-                        </button>
-                      }
-                    >
-                      <EntryText label="Guidance" value={note.body} />
-                    </EntryCard>
-                  ),
-                )}
-              </ul>
-            )}
-            <EntryEditNotice id={guidanceNotice} label={guidanceEditor.open?.label ?? null} />
-            <RemovalNotice removal={guidanceRemoval} />
-            <GuidanceForm
-              onAdd={(fields) =>
-                edit({
-                  ...content,
-                  guidance: [
-                    ...content.guidance,
-                    guidanceEntry(
-                      uniqueId(
-                        slugify(fields.title, "note"),
-                        content.guidance.map((note) => note.id),
-                      ),
-                      fields,
-                    ),
-                  ],
-                })
-              }
-            />
+            <FieldRows>
+              <GuidanceNotes identityId={identityId} content={content} edit={edit} />
+            </FieldRows>
           </Card>
 
           <Card title="Escalation">
@@ -465,74 +370,162 @@ function PermissionBoxes({
   );
 }
 
+const GUIDANCE_WORDS: ItemFormWords = { form: "Guidance", entry: "a note", record: "draft" };
+
 /**
- * A guidance note's two fields, and the one function that turns them into the note the draft
- * stores.
- *
- * These rows are where PLAN-UX takes edit mode from: they already corrected in place, but they
- * asked their two questions through `aria-label` alone, so a reader with a pointer saw two
- * unlabelled boxes. Slice 7 asks for visible labels, and the way a row gets them is by asking
- * with the same words — and the same component — the add form asks with.
+ * The identity's guidance, as items, and the one form that adds a note or edits the one chosen
+ * (ADR 0074). The prototype draws a note with a one-press × and no Edit (`Workspace.dc.html`
+ * :1858–1866); the item carries the pencil and a trash that asks twice (ADR 0060).
  */
-interface GuidanceFields {
-  title: string;
-  body: string;
-}
-
-function guidanceEntry(id: string, fields: GuidanceFields): GuidanceNoteSchema {
-  return { id, title: fields.title, body: fields.body };
-}
-
-function GuidanceFieldset({
-  value,
-  onChange,
+function GuidanceNotes({
+  identityId,
+  content,
+  edit,
 }: {
-  value: GuidanceFields;
-  onChange: (next: GuidanceFields) => void;
+  identityId: string;
+  content: SupportIdentityPayloadSchema;
+  edit: (next: SupportIdentityPayloadSchema) => void;
 }) {
+  const notes = content.guidance;
+  const ids = notes.map((note) => note.id);
+  const noteOf = (id: string) => notes.find((note) => note.id === id) as GuidanceNoteSchema;
+  const nameOf = (id: string) => notes.find((note) => note.id === id)?.title ?? id;
+  const form = useItemForm<GuidanceFields>({
+    blank: BLANK_GUIDANCE,
+    ids,
+    words: GUIDANCE_WORDS,
+    nameOf,
+    formOf: (id) => guidanceFields(noteOf(id)),
+    typedOf: (fields) => fields.title,
+  });
+  const removal = useRemoval(identityId);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const titleInput = useRef<HTMLInputElement>(null);
+  const reasonId = useId();
+  const refusal = guidanceRefusal(form.fields);
+  const marked = form.dirty ? refusal : null;
+
+  function drop(id: string) {
+    edit({ ...content, guidance: notes.filter((note) => note.id !== id) });
+  }
+
+  function submit() {
+    if (refusal !== null) {
+      return;
+    }
+    const editing = form.editing;
+    if (editing !== null) {
+      // An edit that changed nothing writes nothing, so the draft stays as clean as it was.
+      if (form.dirty) {
+        edit({
+          ...content,
+          guidance: notes.map((note) =>
+            note.id === editing ? guidanceEntry(note.id, form.fields) : note,
+          ),
+        });
+      }
+      focusAfterCommit(() => editButtons.get(editing));
+    } else {
+      const id = uniqueId(slugify(pythonStrip(form.fields.title), "note"), ids);
+      edit({ ...content, guidance: [...notes, guidanceEntry(id, form.fields)] });
+    }
+    form.reset();
+  }
+
   return (
     <>
-      <label className={`${fieldLabelClasses} min-w-48 flex-1`}>
-        Title
-        <input
-          className={`${fieldControlClasses} w-full`}
-          value={value.title}
-          required
-          onChange={(event) => onChange({ ...value, title: event.target.value })}
-        />
-      </label>
-      <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
-        Guidance
-        <input
-          className={`${fieldControlClasses} w-full`}
-          value={value.body}
-          required
-          onChange={(event) => onChange({ ...value, body: event.target.value })}
-        />
-      </label>
+      <FieldGroup label="Notes">
+        <div className="grid gap-2">
+          {notes.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {notes.map((note) => {
+                const notice = `Removed the guidance “${note.title}” from the draft.`;
+                if (removal.isArmed(note.id)) {
+                  return (
+                    <ConfirmRemove
+                      key={note.id}
+                      as="li"
+                      title={`Remove the guidance “${note.title}”?`}
+                      consequence={consequenceOf(
+                        "An agent running as this identity is no longer given it.",
+                        findingClauses([notes.length === 1 && "identity_without_guidance"]),
+                        "Nothing is written until you save the draft, and a published version keeps it.",
+                      )}
+                      onConfirm={removal.confirm(() => drop(note.id), notice)}
+                      onKeep={removal.keep}
+                    />
+                  );
+                }
+                return (
+                  <ListItem
+                    key={note.id}
+                    name={note.title}
+                    id={note.id}
+                    detail={note.body}
+                    multiline
+                    editing={form.editing === note.id}
+                  >
+                    <EditButton
+                      name={note.title}
+                      buttonRef={editButtons.ref(note.id)}
+                      onEdit={() => {
+                        form.begin(note.id, guidanceFields(note));
+                        focusAfterCommit(() => titleInput.current);
+                      }}
+                    />
+                    <RemoveButton
+                      name={note.title}
+                      entryKey={note.id}
+                      removal={removal}
+                      notice={notice}
+                      onRemove={() => drop(note.id)}
+                    />
+                  </ListItem>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-admin-muted">No guidance authored yet.</p>
+          )}
+          <RemovalNotice removal={removal} />
+        </div>
+      </FieldGroup>
+      <ItemFormRow
+        title={formTitle(form.editing, nameOf, GUIDANCE_WORDS.entry)}
+        editing={form.editing !== null}
+        addLabel="Add guidance"
+        refusal={refusal}
+        reasonId={reasonId}
+        onSubmit={submit}
+        onCancel={() => {
+          const editing = form.editing;
+          form.reset();
+          if (editing !== null) {
+            focusAfterCommit(() => editButtons.get(editing));
+          }
+        }}
+      >
+        <FieldHint label="Title">
+          <input
+            ref={titleInput}
+            className={`${fieldControlClasses} w-full`}
+            value={form.fields.title}
+            {...refusedProps(marked, "title", reasonId)}
+            onChange={(event) => form.update({ title: event.target.value })}
+          />
+        </FieldHint>
+        <div className="col-span-full">
+          <FieldHint label="Guidance">
+            <textarea
+              className={`${textAreaClasses} w-full`}
+              value={form.fields.body}
+              {...refusedProps(marked, "body", reasonId)}
+              onChange={(event) => form.update({ body: event.target.value })}
+            />
+          </FieldHint>
+        </div>
+      </ItemFormRow>
     </>
-  );
-}
-
-function GuidanceForm({ onAdd }: { onAdd: (fields: GuidanceFields) => void }) {
-  const [fields, setFields] = useState<GuidanceFields>({ title: "", body: "" });
-
-  return (
-    <form
-      className={addFormClasses}
-      onSubmit={(event) => {
-        event.preventDefault();
-        onAdd(fields);
-        setFields({ title: "", body: "" });
-      }}
-    >
-      <div className="flex flex-wrap items-end gap-2">
-        <GuidanceFieldset value={fields} onChange={setFields} />
-        <PrimaryAction variant="ink" type="submit">
-          <ButtonIcon verb="create" />
-          Add guidance
-        </PrimaryAction>
-      </div>
-    </form>
   );
 }

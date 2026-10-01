@@ -55,21 +55,36 @@ function atValidationWeight(tone: ExtraTone): boolean {
  * read for truth rather than for `undefined`, because a caller computing a rule conditionally
  * hands back `null` or `false` as readily as nothing at all, and each of those renders the
  * same empty paragraph.
+ *
+ * `hintDescribes` is false while the control is described by a line that says the hint's own
+ * sentence — a refusal whose reason is the field's rule — so the rule is heard once rather than
+ * twice in a row; the hint stays drawn.
  */
 function useBoundControl(
   children: ReactElement<ControlProps>,
   {
     htmlFor,
     hasHint,
+    hintDescribes = true,
     invalid,
     extraId: givenExtraId,
-  }: { htmlFor?: string; hasHint: boolean; invalid: boolean; extraId?: string },
+  }: {
+    htmlFor?: string;
+    hasHint: boolean;
+    hintDescribes?: boolean;
+    invalid: boolean;
+    extraId?: string;
+  },
 ) {
   const generatedId = useId();
   const controlId = htmlFor ?? children.props.id ?? generatedId;
   const hintId = `${generatedId}-hint`;
   const extraId = givenExtraId ?? `${generatedId}-extra`;
-  const describedBy = [children.props["aria-describedby"], hasHint ? hintId : null, extraId]
+  const describedBy = [
+    children.props["aria-describedby"],
+    hasHint && hintDescribes ? hintId : null,
+    extraId,
+  ]
     .filter(Boolean)
     .join(" ");
   return {
@@ -173,6 +188,11 @@ type FieldHintProps = {
    */
   extraId?: string;
   optional?: boolean;
+  /**
+   * False while a line the control is described by says the hint's own sentence, so the hint
+   * is drawn and not read a second time (`useBoundControl`).
+   */
+  hintDescribes?: boolean;
   /** `"row"` draws this field as a `Field`. See `FieldHint` for the one case it is for. */
   arrangement?: Arrangement;
   children: ReactElement<ControlProps>;
@@ -188,10 +208,12 @@ function StackedFieldHint({
   extraTone = "muted",
   extraId: givenExtraId,
   optional = false,
+  hintDescribes,
   children,
 }: Omit<FieldHintProps, "arrangement">) {
   const { controlId, hintId, extraId, control } = useBoundControl(children, {
     hasHint: Boolean(hint),
+    hintDescribes,
     invalid: extraTone === "error" && Boolean(extra),
     extraId: givenExtraId,
   });
@@ -254,6 +276,7 @@ export function Field({
   extraTone = "muted",
   extraId: givenExtraId,
   optional = false,
+  hintDescribes,
   children,
 }: {
   label: string;
@@ -265,11 +288,14 @@ export function Field({
   /** As on `FieldHint`: the second line's `id`, where something else names it too. */
   extraId?: string;
   optional?: boolean;
+  /** As on `FieldHint`. */
+  hintDescribes?: boolean;
   children: ReactElement<ControlProps>;
 }) {
   const { controlId, hintId, extraId, control } = useBoundControl(children, {
     htmlFor,
     hasHint: Boolean(hint),
+    hintDescribes,
     invalid: extraTone === "error" && Boolean(extra),
     extraId: givenExtraId,
   });

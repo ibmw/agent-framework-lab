@@ -487,3 +487,43 @@ describe("FieldRows", () => {
     expect(container.firstElementChild?.firstElementChild?.children).toHaveLength(2);
   });
 });
+
+/**
+ * `hintDescribes`: a control described by a line that says the hint's own sentence — a refusal
+ * whose reason is the field's rule — leaves the hint out of its description, so the rule is heard
+ * once; the hint stays drawn. Left out, the hint describes the control as always.
+ */
+describe("a hint that does not describe its control", () => {
+  const HINT = "Two letters, like FR.";
+
+  for (const arrangement of ["stacked", "row"] as const) {
+    it(`stays drawn and leaves the description when told to (${arrangement})`, () => {
+      render(
+        <FieldHint label="Country" hint={HINT} arrangement={arrangement} hintDescribes={false}>
+          <input aria-describedby="refusal" />
+        </FieldHint>,
+      );
+
+      const hint = screen.getByText(HINT);
+      expect(hint).toBeVisible();
+      const ids = (screen.getByLabelText("Country").getAttribute("aria-describedby") ?? "").split(
+        " ",
+      );
+      expect(ids).toContain("refusal");
+      expect(ids).not.toContain(hint.id);
+    });
+
+    it(`describes its control when the prop is left out (${arrangement})`, () => {
+      render(
+        <FieldHint label="Country" hint={HINT} arrangement={arrangement}>
+          <input />
+        </FieldHint>,
+      );
+
+      const hint = screen.getByText(HINT);
+      expect(
+        (screen.getByLabelText("Country").getAttribute("aria-describedby") ?? "").split(" "),
+      ).toContain(hint.id);
+    });
+  }
+});

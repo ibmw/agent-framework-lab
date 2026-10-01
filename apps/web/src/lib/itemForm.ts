@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { itemFormReason, useRegisterUnsavedWork } from "./unsavedWork";
 
 /**
- * The state behind a list edited in the form below it — Shop details' two method lists and an
- * order's lines and events (ADR 0072, ADR 0074). The drawing is `components/ItemList.tsx`.
+ * The state behind a list edited in the form below it — Shop details' two method lists, an
+ * order's lines and events, a profile's addresses, background and hidden facts, and an
+ * identity's guidance notes (ADR 0072, ADR 0074). The drawing is `components/ItemList.tsx`.
  */
 
 /**

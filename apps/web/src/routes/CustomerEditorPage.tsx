@@ -9,7 +9,7 @@ import type {
   HiddenFactSchema,
   LoyaltyTier,
 } from "@agent-lab/contracts";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
@@ -26,16 +26,12 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { CountryField } from "../components/CountryField";
-import { Field, FieldRows } from "../components/FieldHint";
+import { Field, FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
+import { EditButton, ItemFormRow, ListItem, RemoveButton } from "../components/ItemList";
 import { LocaleField } from "../components/LocaleField";
-import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import {
   Card,
   EditorSaveActions,
-  EntryCard,
-  EntryEditNotice,
-  EntryId,
-  EntryText,
   Fingerprint,
   GateCard,
   IssueList,
@@ -45,14 +41,31 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { countryName } from "../lib/countries";
+import {
+  ADDRESS_FORM_FIELDS,
+  type AddressField,
+  type AddressFields,
+  addressEntry,
+  addressFields,
+  addressRefusal,
+  type BackgroundFields,
+  BLANK_ADDRESS,
+  backgroundEntry,
+  backgroundFields,
+  backgroundName,
+  backgroundRefusal,
+  type HiddenFactFields,
+  hiddenFactEntry,
+  hiddenFactFields,
+  hiddenFactRefusal,
+  resolvedAddress,
+} from "../lib/customerEntries";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
-import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { BACKGROUND_KIND, labelOf, optionsOf } from "../lib/enumLabels";
 import {
   ACCOUNT_NOTES_RULE,
   ACCOUNT_STATUS_RULE,
-  ADDRESS_FIELDS_RULE,
   CHIP_LABEL_MAX_LENGTH,
   CUSTOMER_EMAIL_RULE,
   CUSTOMER_NAME_RULE,
@@ -62,7 +75,16 @@ import {
   PERSONA_SUMMARY_RULE,
   PERSONA_TRAITS_RULE,
 } from "../lib/fieldRules";
+import {
+  formTitle,
+  type ItemFormWords,
+  refusedProps,
+  useEditButtons,
+  useFocusAfterCommit,
+  useItemForm,
+} from "../lib/itemForm";
 import { todayInput } from "../lib/orders";
+import { pythonStrip } from "../lib/pythonText";
 import {
   consequenceOf,
   findingClauses,
@@ -71,13 +93,10 @@ import {
   useRemoval,
 } from "../lib/removal";
 import {
-  addFormClasses,
-  destructiveSubtleButtonClasses,
   editorColumnsClasses,
   editorMainClasses,
   editorPanelClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
@@ -97,118 +116,6 @@ const CLIENT: DefinitionClient<
 };
 
 const BACKGROUND_KINDS = optionsOf(BACKGROUND_KIND);
-
-/**
- * The authored fields of the profile's two keyed lists, and the one builder each.
- *
- * The add form below a list and the open row inside it hold the same object and call the same
- * function, so the two paths cannot grow different payloads. The identifier is the builder's
- * first argument: it is derived once, when the entry is created, and an edit hands back the
- * one the entry already has — which is what makes an edit read as one updated entry rather
- * than a removal and an addition in the draft's change summary.
- */
-interface BackgroundFields {
-  kind: BackgroundKind;
-  occurredOn: string;
-  note: string;
-}
-
-interface HiddenFactFields {
-  note: string;
-  revealedWhen: string;
-}
-
-function backgroundEntry(id: string, fields: BackgroundFields): BackgroundEntrySchema {
-  return { id, kind: fields.kind, occurred_on: fields.occurredOn, note: fields.note };
-}
-
-function hiddenFactEntry(id: string, fields: HiddenFactFields): HiddenFactSchema {
-  return { id, note: fields.note, revealed_when: fields.revealedWhen };
-}
-
-/**
- * The background entry's three controls, on the add form and in an open row alike.
- *
- * The row carried them as three `aria-label`s and a date printed as a heading; PLAN-UX Slice 7
- * asks for visible labels where a row had only the accessible one, and the way a row gets them
- * is by asking its questions with the same words the add form asks them with.
- */
-function BackgroundFieldset({
-  value,
-  onChange,
-}: {
-  value: BackgroundFields;
-  onChange: (next: BackgroundFields) => void;
-}) {
-  return (
-    <>
-      <label className={fieldLabelClasses}>
-        Kind
-        <select
-          className={`${fieldControlClasses} w-full`}
-          value={value.kind}
-          onChange={(event) => onChange({ ...value, kind: event.target.value as BackgroundKind })}
-        >
-          {BACKGROUND_KINDS.map((entry) => (
-            <option key={entry.value} value={entry.value}>
-              {entry.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className={fieldLabelClasses}>
-        Date
-        <input
-          className={`${fieldControlClasses} w-full`}
-          type="date"
-          value={value.occurredOn}
-          onChange={(event) => onChange({ ...value, occurredOn: event.target.value })}
-        />
-      </label>
-      <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
-        Note
-        <input
-          className={`${fieldControlClasses} w-full`}
-          value={value.note}
-          required
-          onChange={(event) => onChange({ ...value, note: event.target.value })}
-        />
-      </label>
-    </>
-  );
-}
-
-/** A hidden fact's two controls, on the add form and in an open row alike. */
-function HiddenFactFieldset({
-  value,
-  onChange,
-}: {
-  value: HiddenFactFields;
-  onChange: (next: HiddenFactFields) => void;
-}) {
-  return (
-    <>
-      <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
-        Hidden fact
-        <input
-          className={`${fieldControlClasses} w-full`}
-          value={value.note}
-          required
-          onChange={(event) => onChange({ ...value, note: event.target.value })}
-        />
-      </label>
-      <label className={`${fieldLabelClasses} min-w-48 flex-1`}>
-        Revealed when
-        <input
-          className={`${fieldControlClasses} w-full`}
-          placeholder="Revealed when…"
-          value={value.revealedWhen}
-          onChange={(event) => onChange({ ...value, revealedWhen: event.target.value })}
-        />
-      </label>
-    </>
-  );
-}
 
 /**
  * The customer editor, mounted afresh for every profile (ADR 0060).
@@ -239,33 +146,7 @@ export function CustomerEditorPage() {
   const [attachedShops, setAttachedShops] = useState<string[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
-  const backgroundEditor = useEntryEdit(content?.background ?? [], {
-    keyOf: (entry) => entry.id,
-    labelOf: (entry) => `${entry.occurred_on} · ${labelOf(BACKGROUND_KIND, entry.kind)}`,
-    fieldsOf: (entry): BackgroundFields => ({
-      kind: entry.kind,
-      occurredOn: entry.occurred_on,
-      note: entry.note,
-    }),
-  });
-  const hiddenFactEditor = useEntryEdit(content?.hidden_facts ?? [], {
-    keyOf: (fact) => fact.id,
-    labelOf: (fact) => fact.note,
-    fieldsOf: (fact): HiddenFactFields => ({ note: fact.note, revealedWhen: fact.revealed_when }),
-  });
-  const addressEditor = useEntryEdit(content?.addresses ?? [], {
-    keyOf: (entry) => entry.id,
-    labelOf: (entry) => entry.label,
-    fieldsOf: addressFields,
-  });
-  const addressNotice = useId();
-  const openAddressRefusalId = useId();
-  const backgroundNotice = useId();
-  const hiddenFactNotice = useId();
   const navigate = useNavigate();
-  const addressRemoval = useRemoval(profileId);
-  const backgroundRemoval = useRemoval(profileId);
-  const hiddenFactRemoval = useRemoval(profileId);
   const shopRemoval = useRemoval(profileId);
   // The shops an attach or a detach is in flight for, held twice: the ref answers a second
   // press in the same event, the state disables the control until the write settles.
@@ -311,87 +192,11 @@ export function CustomerEditorPage() {
     );
   }
 
-  function addAddress(fields: AddressFields) {
-    if (!content) {
-      return;
-    }
-    const entry = addressEntry(
-      uniqueId(
-        slugify(fields.label),
-        content.addresses.map((existing) => existing.id),
-      ),
-      fields,
-      // The first address is the default, because a published profile must hold one.
-      content.addresses.length === 0,
-    );
-    edit({ ...content, addresses: [...content.addresses, entry] });
-  }
-
-  function makeDefault(id: string) {
-    if (!content) {
-      return;
-    }
-    edit({
-      ...content,
-      addresses: content.addresses.map((entry) => ({ ...entry, is_default: entry.id === id })),
-    });
-  }
-
-  function removeAddress(id: string) {
-    if (!content) {
-      return;
-    }
-    edit({
-      ...content,
-      addresses: content.addresses.filter((entry) => entry.id !== id),
-    });
-  }
-
   function editAccount(next: Partial<CustomerProfileContentSchema["account"]>) {
     if (!content) {
       return;
     }
     edit({ ...content, account: { ...content.account, ...next } });
-  }
-
-  /** The entry is replaced where it stands, with the ID it already had, so the list's order
-   * never moves and the change summary reads one updated entry. */
-  function saveBackground(id: string, fields: BackgroundFields) {
-    if (!content) {
-      return;
-    }
-    edit({
-      ...content,
-      background: content.background.map((entry) =>
-        entry.id === id ? backgroundEntry(id, fields) : entry,
-      ),
-    });
-  }
-
-  function removeBackground(id: string) {
-    if (!content) {
-      return;
-    }
-    edit({ ...content, background: content.background.filter((entry) => entry.id !== id) });
-  }
-
-  function saveHiddenFact(id: string, fields: HiddenFactFields) {
-    if (!content) {
-      return;
-    }
-    edit({
-      ...content,
-      hidden_facts: content.hidden_facts.map((fact) =>
-        fact.id === id ? hiddenFactEntry(id, fields) : fact,
-      ),
-    });
-  }
-
-  function removeHiddenFact(id: string) {
-    if (!content) {
-      return;
-    }
-    edit({ ...content, hidden_facts: content.hidden_facts.filter((fact) => fact.id !== id) });
   }
 
   /**
@@ -667,125 +472,9 @@ export function CustomerEditorPage() {
               </>
             }
           >
-            {content.addresses.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">
-                No address yet. A published profile must hold at least one, with one default.
-              </p>
-            ) : (
-              <ul className="grid gap-2 text-[13px]">
-                {content.addresses.map((entry) => {
-                  const notice = `Removed the address “${entry.label}” from the draft.`;
-                  if (addressRemoval.isArmed(entry.id)) {
-                    return (
-                      <ConfirmRemove
-                        key={entry.id}
-                        as="li"
-                        title={`Remove the address “${entry.label}”?`}
-                        consequence={consequenceOf(
-                          findingClauses([
-                            content.addresses.length === 1
-                              ? "profile_without_address"
-                              : entry.is_default && "address_book_without_default",
-                            "shipping_address_source_removed",
-                          ]),
-                          "Published scenarios and snapshots are never rewritten. Nothing is written until you save the draft.",
-                        )}
-                        onConfirm={addressRemoval.confirm(() => removeAddress(entry.id), notice)}
-                        onKeep={addressRemoval.keep}
-                      />
-                    );
-                  }
-                  return (
-                    <EntryCard
-                      key={entry.id}
-                      title={entry.label}
-                      chips={
-                        <>
-                          <EntryId value={entry.id} />
-                          {entry.is_default ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-published px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-published-ink">
-                              <span aria-hidden>●</span> Default
-                            </span>
-                          ) : null}
-                        </>
-                      }
-                      edit={entryEdit(
-                        addressEditor,
-                        addressNotice,
-                        entry.id,
-                        (fields) =>
-                          edit({
-                            ...content,
-                            addresses: content.addresses.map((item) =>
-                              item.id === entry.id
-                                ? // Which entry is the default is *Make default*'s answer on
-                                  // the row, never the form's: correcting a street must not
-                                  // move it.
-                                  addressEntry(entry.id, fields, entry.is_default)
-                                : item,
-                            ),
-                          }),
-                        (value, onChange) => {
-                          const refused = addressRefusal(value);
-                          return (
-                            <>
-                              <AddressFieldset asks="every" value={value} onChange={onChange} />
-                              {refused === null ? null : (
-                                <RefusalLine id={openAddressRefusalId}>{refused}</RefusalLine>
-                              )}
-                            </>
-                          );
-                        },
-                        (value) => {
-                          const refused = addressRefusal(value);
-                          return refused === null
-                            ? true
-                            : { id: openAddressRefusalId, reason: refused };
-                        },
-                      )}
-                      actions={
-                        <>
-                          {entry.is_default ? null : (
-                            <button
-                              className={subtleButtonClasses}
-                              type="button"
-                              aria-label={`Make ${entry.label} the default address`}
-                              onClick={() => makeDefault(entry.id)}
-                            >
-                              <ButtonIcon verb="makeDefault" />
-                              Make default
-                            </button>
-                          )}
-                          <button
-                            className={destructiveSubtleButtonClasses}
-                            type="button"
-                            aria-label={`Remove ${entry.label}`}
-                            ref={addressRemoval.trigger(entry.id)}
-                            onClick={addressRemoval.ask(
-                              entry.id,
-                              () => removeAddress(entry.id),
-                              notice,
-                            )}
-                          >
-                            <ButtonIcon verb="delete" />
-                            Remove
-                          </button>
-                        </>
-                      }
-                    >
-                      <p className="text-admin-ink-soft">{addressLine(entry)}</p>
-                    </EntryCard>
-                  );
-                })}
-              </ul>
-            )}
-            <EntryEditNotice id={addressNotice} label={addressEditor.open?.label ?? null} />
-            <RemovalNotice removal={addressRemoval} />
-            <AddressForm
-              defaultCountry={countryForLocale(content.identity.locale)}
-              recipient={content.display_name}
-              onAdd={addAddress}
-            />
+            <FieldRows>
+              <AddressBook profileId={profileId} content={content} edit={edit} />
+            </FieldRows>
           </Card>
 
           <Card
@@ -836,87 +525,9 @@ export function CustomerEditorPage() {
               </>
             }
           >
-            {content.background.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">No background authored yet.</p>
-            ) : (
-              <ul className="grid gap-2 text-[13px]">
-                {content.background.map((entry) =>
-                  backgroundRemoval.isArmed(entry.id) ? (
-                    <ConfirmRemove
-                      key={entry.id}
-                      as="li"
-                      title={`Remove the ${entry.occurred_on} background entry?`}
-                      consequence={consequenceOf(
-                        "Its note leaves the profile's authored history, and the customer side of a simulation no longer has it to draw on.",
-                        findingClauses([
-                          content.background.length === 1 && "profile_without_background",
-                        ]),
-                        "Nothing is written until you save the draft; a published version keeps it.",
-                      )}
-                      onConfirm={backgroundRemoval.confirm(
-                        () => removeBackground(entry.id),
-                        `Removed the ${entry.occurred_on} background entry from the draft.`,
-                      )}
-                      onKeep={backgroundRemoval.keep}
-                    />
-                  ) : (
-                    <EntryCard
-                      key={entry.id}
-                      title={`${entry.occurred_on} · ${labelOf(BACKGROUND_KIND, entry.kind)}`}
-                      chips={<EntryId value={entry.id} />}
-                      edit={entryEdit(
-                        backgroundEditor,
-                        backgroundNotice,
-                        entry.id,
-                        (fields) => saveBackground(entry.id, fields),
-                        (value, onChange) => (
-                          <div className="flex flex-wrap items-end gap-2">
-                            <BackgroundFieldset value={value} onChange={onChange} />
-                          </div>
-                        ),
-                      )}
-                      actions={
-                        <button
-                          className={destructiveSubtleButtonClasses}
-                          type="button"
-                          aria-label={`Remove the ${entry.occurred_on} background entry`}
-                          ref={backgroundRemoval.trigger(entry.id)}
-                          onClick={backgroundRemoval.ask(
-                            entry.id,
-                            () => removeBackground(entry.id),
-                            `Removed the ${entry.occurred_on} background entry from the draft.`,
-                          )}
-                        >
-                          <ButtonIcon verb="delete" />
-                          Remove
-                        </button>
-                      }
-                    >
-                      <EntryText label="Note" value={entry.note} />
-                    </EntryCard>
-                  ),
-                )}
-              </ul>
-            )}
-            <EntryEditNotice id={backgroundNotice} label={backgroundEditor.open?.label ?? null} />
-            <RemovalNotice removal={backgroundRemoval} />
-            <BackgroundForm
-              onAdd={(fields) =>
-                edit({
-                  ...content,
-                  background: [
-                    ...content.background,
-                    backgroundEntry(
-                      uniqueId(
-                        slugify(fields.note.slice(0, 40)),
-                        content.background.map((entry) => entry.id),
-                      ),
-                      fields,
-                    ),
-                  ],
-                })
-              }
-            />
+            <FieldRows>
+              <BackgroundList profileId={profileId} content={content} edit={edit} />
+            </FieldRows>
           </Card>
 
           <Card
@@ -928,83 +539,9 @@ export function CustomerEditorPage() {
               </>
             }
           >
-            {content.hidden_facts.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">No hidden fact authored yet.</p>
-            ) : (
-              <ul className="grid gap-2 text-[13px]">
-                {content.hidden_facts.map((fact) =>
-                  hiddenFactRemoval.isArmed(fact.id) ? (
-                    <ConfirmRemove
-                      key={fact.id}
-                      as="li"
-                      title={`Remove the hidden fact “${fact.note}”?`}
-                      consequence="The customer side of a simulation no longer knows it, so nothing it would have revealed can come up. Nothing is written until you save the draft; a published version keeps it."
-                      onConfirm={hiddenFactRemoval.confirm(
-                        () => removeHiddenFact(fact.id),
-                        `Removed the hidden fact “${fact.note}” from the draft.`,
-                      )}
-                      onKeep={hiddenFactRemoval.keep}
-                    />
-                  ) : (
-                    <EntryCard
-                      key={fact.id}
-                      title={fact.note}
-                      chips={<EntryId value={fact.id} />}
-                      edit={entryEdit(
-                        hiddenFactEditor,
-                        hiddenFactNotice,
-                        fact.id,
-                        (fields) => saveHiddenFact(fact.id, fields),
-                        (value, onChange) => (
-                          <div className="flex flex-wrap items-end gap-2">
-                            <HiddenFactFieldset value={value} onChange={onChange} />
-                          </div>
-                        ),
-                      )}
-                      actions={
-                        <button
-                          className={destructiveSubtleButtonClasses}
-                          type="button"
-                          aria-label={`Remove ${fact.note}`}
-                          ref={hiddenFactRemoval.trigger(fact.id)}
-                          onClick={hiddenFactRemoval.ask(
-                            fact.id,
-                            () => removeHiddenFact(fact.id),
-                            `Removed the hidden fact “${fact.note}” from the draft.`,
-                          )}
-                        >
-                          <ButtonIcon verb="delete" />
-                          Remove
-                        </button>
-                      }
-                    >
-                      {fact.revealed_when ? (
-                        <EntryText label="Revealed when" value={fact.revealed_when} />
-                      ) : null}
-                    </EntryCard>
-                  ),
-                )}
-              </ul>
-            )}
-            <EntryEditNotice id={hiddenFactNotice} label={hiddenFactEditor.open?.label ?? null} />
-            <RemovalNotice removal={hiddenFactRemoval} />
-            <HiddenFactForm
-              onAdd={(fields) =>
-                edit({
-                  ...content,
-                  hidden_facts: [
-                    ...content.hidden_facts,
-                    hiddenFactEntry(
-                      uniqueId(
-                        slugify(fields.note.slice(0, 40)),
-                        content.hidden_facts.map((fact) => fact.id),
-                      ),
-                      fields,
-                    ),
-                  ],
-                })
-              }
-            />
+            <FieldRows>
+              <HiddenFacts profileId={profileId} content={content} edit={edit} />
+            </FieldRows>
           </Card>
         </div>
 
@@ -1123,74 +660,6 @@ function countryForLocale(locale: string): string {
   return region ?? "";
 }
 
-/**
- * The questions an address answers, as the add form below the book and an open row both hold
- * them. The two optional lines are held as text and stored as nothing when left empty.
- */
-interface AddressFields {
-  label: string;
-  recipient: string;
-  line1: string;
-  line2: string;
-  postalCode: string;
-  city: string;
-  region: string;
-  country: string;
-}
-
-function addressFields(entry: AddressSchema): AddressFields {
-  return {
-    label: entry.label,
-    recipient: entry.recipient,
-    line1: entry.line1,
-    line2: entry.line2 ?? "",
-    postalCode: entry.postal_code,
-    city: entry.city,
-    region: entry.region ?? "",
-    country: entry.country,
-  };
-}
-
-/**
- * The one function that turns an address's fields into the entry the book stores, called by the
- * add form and an open row's Save alike, so the two paths cannot write different payloads.
- *
- * Every text is stored trimmed — `AddressEntry` refuses padding (`require_label` in
- * `domain/content.py`) — and an optional line left empty is stored as none rather than as an
- * empty string the lab would refuse.
- */
-function addressEntry(id: string, fields: AddressFields, isDefault: boolean): AddressSchema {
-  const optional = (value: string) => (value.trim() === "" ? null : value.trim());
-  return {
-    id,
-    label: fields.label.trim(),
-    recipient: fields.recipient.trim(),
-    line1: fields.line1.trim(),
-    line2: optional(fields.line2),
-    postal_code: fields.postalCode.trim(),
-    city: fields.city.trim(),
-    region: optional(fields.region),
-    country: fields.country,
-    is_default: isDefault,
-  };
-}
-
-/** The fields an address cannot be stored without: `AddressEntry` refuses each empty or padded. */
-function requiredAddressFields(fields: AddressFields): string[] {
-  return [fields.label, fields.recipient, fields.line1, fields.postalCode, fields.city];
-}
-
-/**
- * Why the lab would refuse these fields when no field says so, or null — one answer for both
- * paths. A field left empty is not here: each is `required`, and the browser says that on the
- * field (ADR 0063, *Deliberately not here*). What `required` lets through is a field of nothing
- * but spaces, which `require_label` then refuses.
- */
-function addressRefusal(fields: AddressFields): string | null {
-  const padded = requiredAddressFields(fields).some((value) => value !== "" && value.trim() === "");
-  return padded ? ADDRESS_FIELDS_RULE : null;
-}
-
 /** An entry read back on one line, as the order editor reads its frozen copy. */
 function addressLine(entry: AddressSchema): string {
   return [
@@ -1206,179 +675,582 @@ function addressLine(entry: AddressSchema): string {
     .join(" · ");
 }
 
+const ADDRESS_WORDS: ItemFormWords = { form: "Address book", entry: "an address", record: "draft" };
+const BACKGROUND_WORDS: ItemFormWords = {
+  form: "Background",
+  entry: "a background entry",
+  record: "draft",
+};
+const HIDDEN_FACT_WORDS: ItemFormWords = {
+  form: "Hidden simulator facts",
+  entry: "a hidden fact",
+  record: "draft",
+};
+
+/** The labels the address form asks by, in the words the book asked them in before. */
+const ADDRESS_LABELS: Record<AddressField, string> = {
+  label: "Label",
+  recipient: "Recipient",
+  line1: "Street",
+  line2: "Street line 2",
+  postalCode: "Postal code",
+  city: "City",
+  region: "Region",
+  country: "Country",
+};
+
 /**
- * An address's questions, in the same words on the add form and in an open row. The add form
- * asks what a new entry cannot do without — the recipient is the customer until the entry is
- * corrected — and the open row asks every field the entry stores.
+ * The address book, as items, and the one form that adds an entry or edits the one chosen
+ * (ADR 0074). Which entry is the default is the list's answer — the pill beside the name and
+ * *Make default* on the item, as `Workspace.dc.html` :2888–2891 draws them — never the form's:
+ * correcting a street must not move it, and the first entry added becomes it, because a
+ * published profile must hold one. While adding, the form asks what a new entry cannot do
+ * without: it ships to the customer, and its country follows the profile's locale until the
+ * author types one.
  */
-function AddressFieldset({
-  asks,
-  value,
-  onChange,
+function AddressBook({
+  profileId,
+  content,
+  edit,
 }: {
-  asks: "new" | "every";
-  value: AddressFields;
-  onChange: (next: AddressFields) => void;
+  profileId: string;
+  content: CustomerProfileContentSchema;
+  edit: (next: CustomerProfileContentSchema) => void;
 }) {
-  const every = asks === "every";
-  function text(label: string, key: keyof AddressFields, options: { optional?: boolean } = {}) {
+  const addresses = content.addresses;
+  const ids = addresses.map((entry) => entry.id);
+  const entryOf = (id: string) => addresses.find((entry) => entry.id === id) as AddressSchema;
+  const nameOf = (id: string) => addresses.find((entry) => entry.id === id)?.label ?? id;
+  const form = useItemForm<AddressFields>({
+    blank: BLANK_ADDRESS,
+    ids,
+    words: ADDRESS_WORDS,
+    nameOf,
+    formOf: (id) => addressFields(entryOf(id)),
+    typedOf: (fields) => fields.label,
+  });
+  const removal = useRemoval(profileId);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const firstField = useRef<HTMLInputElement>(null);
+  const reasonId = useId();
+  const mode = form.editing === null ? "adding" : "editing";
+  const resolved = resolvedAddress(form.fields, {
+    recipient: form.editing === null ? content.display_name : undefined,
+    country: countryForLocale(content.identity.locale),
+  });
+  const refusal = addressRefusal(resolved, mode);
+  const marked = form.dirty ? refusal : null;
+
+  function makeDefault(id: string) {
+    edit({
+      ...content,
+      addresses: addresses.map((entry) => ({ ...entry, is_default: entry.id === id })),
+    });
+  }
+
+  function drop(id: string) {
+    edit({ ...content, addresses: addresses.filter((entry) => entry.id !== id) });
+  }
+
+  function submit() {
+    if (refusal !== null) {
+      return;
+    }
+    const editing = form.editing;
+    if (editing !== null) {
+      // An edit that changed nothing writes nothing, so the draft stays as clean as it was.
+      if (form.dirty) {
+        edit({
+          ...content,
+          addresses: addresses.map((entry) =>
+            entry.id === editing ? addressEntry(entry.id, resolved, entry.is_default) : entry,
+          ),
+        });
+      }
+      focusAfterCommit(() => editButtons.get(editing));
+    } else {
+      const id = uniqueId(slugify(pythonStrip(resolved.label)), ids);
+      edit({
+        ...content,
+        addresses: [...addresses, addressEntry(id, resolved, addresses.length === 0)],
+      });
+    }
+    form.reset();
+  }
+
+  function text(field: Exclude<AddressField, "country">) {
+    const optional = field === "line2" || field === "region";
     return (
-      <label className={fieldLabelClasses}>
-        {options.optional ? `${label} (optional)` : label}
+      <FieldHint key={field} label={ADDRESS_LABELS[field]} optional={optional}>
         <input
+          ref={field === "label" ? firstField : undefined}
           className={`${fieldControlClasses} w-full`}
-          value={value[key]}
-          required={!options.optional}
-          placeholder={key === "label" ? "Home, Office, Parent's house…" : undefined}
-          onChange={(event) => onChange({ ...value, [key]: event.target.value })}
+          value={form.fields[field]}
+          placeholder={field === "label" ? "Home, Office, Parent's house…" : undefined}
+          {...refusedProps(marked, field, reasonId)}
+          onChange={(event) => form.update({ [field]: event.target.value })}
         />
-      </label>
+      </FieldHint>
     );
   }
-  return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      {text("Label", "label")}
-      {every ? text("Recipient", "recipient") : null}
-      {text("Street", "line1")}
-      {every ? text("Street line 2", "line2", { optional: true }) : null}
-      {text("Postal code", "postalCode")}
-      {text("City", "city")}
-      {every ? text("Region", "region", { optional: true }) : null}
-      <CountryField
-        value={value.country}
-        required
-        onChange={(country) => onChange({ ...value, country })}
-      />
-    </div>
-  );
-}
-
-function AddressForm({
-  defaultCountry,
-  recipient,
-  onAdd,
-}: {
-  defaultCountry: string;
-  /** Who a new entry ships to: the customer, until the entry is opened and corrected. */
-  recipient: string;
-  onAdd: (fields: AddressFields) => void;
-}) {
-  const refusalId = useId();
-  const [typed, setTyped] = useState({ label: "", line1: "", postalCode: "", city: "" });
-  // Null until the author types one, so the locale-derived default keeps following an
-  // edit to the profile's locale instead of freezing at the first render's value.
-  const [typedCountry, setTypedCountry] = useState<string | null>(null);
-  const fields: AddressFields = {
-    ...typed,
-    recipient,
-    line2: "",
-    region: "",
-    country: typedCountry ?? defaultCountry,
-  };
-  const refusal = addressRefusal(fields);
 
   return (
-    <form
-      className={addFormClasses}
-      onSubmit={(event) => {
-        event.preventDefault();
-        // The button refuses the press and the browser holds an empty `required` field; a
-        // submission that reaches the form another way is refused here too.
-        // Only the four fields this form asks: the recipient is the customer's name, not a
-        // field here, and an empty one is `addressRefusal`'s and the gate's to say.
-        if (refusal !== null || Object.values(typed).includes("")) {
-          return;
+    <>
+      <FieldGroup label="Entries" hint={ADDRESS_ENTRIES_HINT}>
+        <div className="grid gap-2">
+          {addresses.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {addresses.map((entry) => {
+                const notice = `Removed the address “${entry.label}” from the draft.`;
+                if (removal.isArmed(entry.id)) {
+                  return (
+                    <ConfirmRemove
+                      key={entry.id}
+                      as="li"
+                      title={`Remove the address “${entry.label}”?`}
+                      consequence={consequenceOf(
+                        findingClauses([
+                          addresses.length === 1
+                            ? "profile_without_address"
+                            : entry.is_default && "address_book_without_default",
+                          "shipping_address_source_removed",
+                        ]),
+                        "Published scenarios and snapshots are never rewritten. Nothing is written until you save the draft.",
+                      )}
+                      onConfirm={removal.confirm(() => drop(entry.id), notice)}
+                      onKeep={removal.keep}
+                    />
+                  );
+                }
+                return (
+                  <ListItem
+                    key={entry.id}
+                    name={entry.label}
+                    id={entry.id}
+                    detail={addressLine(entry)}
+                    tag={entry.is_default ? <DefaultPill /> : null}
+                    editing={form.editing === entry.id}
+                  >
+                    {entry.is_default ? null : (
+                      <button
+                        className={subtleButtonClasses}
+                        type="button"
+                        aria-label={`Make ${entry.label} the default address`}
+                        onClick={() => makeDefault(entry.id)}
+                      >
+                        <ButtonIcon verb="makeDefault" />
+                        Make default
+                      </button>
+                    )}
+                    <EditButton
+                      name={entry.label}
+                      buttonRef={editButtons.ref(entry.id)}
+                      onEdit={() => {
+                        form.begin(entry.id, addressFields(entry));
+                        focusAfterCommit(() => firstField.current);
+                      }}
+                    />
+                    <RemoveButton
+                      name={entry.label}
+                      entryKey={entry.id}
+                      removal={removal}
+                      notice={notice}
+                      onRemove={() => drop(entry.id)}
+                    />
+                  </ListItem>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-admin-muted">
+              No address yet. A published profile must hold at least one.
+            </p>
+          )}
+          <RemovalNotice removal={removal} />
+        </div>
+      </FieldGroup>
+      <ItemFormRow
+        title={formTitle(form.editing, nameOf, ADDRESS_WORDS.entry)}
+        hint={
+          form.editing === null
+            ? `A new entry ships to the customer${pythonStrip(content.display_name) === "" ? "" : `, ${content.display_name}`}; edit it to name another recipient.`
+            : undefined
         }
-        onAdd(fields);
-        setTyped({ label: "", line1: "", postalCode: "", city: "" });
-      }}
-    >
-      {/* Grouped so its fields never collide with an open row above, which asks the same
-          questions in the same words. */}
-      <fieldset className="grid gap-2">
-        <legend className="mb-1 text-xs font-semibold text-admin-muted uppercase">
-          Add an address
-        </legend>
-        <AddressFieldset
-          asks="new"
-          value={fields}
-          onChange={(next) => {
-            setTyped({
-              label: next.label,
-              line1: next.line1,
-              postalCode: next.postalCode,
-              city: next.city,
-            });
-            if (next.country !== fields.country) {
-              setTypedCountry(next.country);
-            }
-          }}
-        />
-        <PrimaryAction
-          variant="ink"
-          className="justify-self-start"
-          type="submit"
-          refusal={refusal === null ? null : { id: refusalId, reason: refusal }}
-        >
-          <ButtonIcon verb="create" />
-          Add address
-        </PrimaryAction>
-        {refusal === null ? null : <RefusalLine id={refusalId}>{refusal}</RefusalLine>}
-      </fieldset>
-    </form>
+        editing={form.editing !== null}
+        addLabel="Add address"
+        refusal={refusal}
+        reasonId={reasonId}
+        onSubmit={submit}
+        onCancel={() => {
+          const editing = form.editing;
+          form.reset();
+          if (editing !== null) {
+            focusAfterCommit(() => editButtons.get(editing));
+          }
+        }}
+      >
+        {ADDRESS_FORM_FIELDS[mode].map((field) =>
+          field === "country" ? (
+            <CountryField
+              key={field}
+              value={resolved.country}
+              refused={refusedProps(marked, "country", reasonId)}
+              onChange={(country) => form.update({ country })}
+            />
+          ) : (
+            text(field)
+          ),
+        )}
+      </ItemFormRow>
+    </>
   );
 }
 
-function BackgroundForm({ onAdd }: { onAdd: (fields: BackgroundFields) => void }) {
-  // Today, not a date in someone else's year. A background entry is authored history and its
-  // day is a real choice, but the nearest plausible one is the day the author is standing in
-  // — a fixed `2026-01-01` was a value nobody picked that every entry carried until noticed.
-  const [fields, setFields] = useState<BackgroundFields>(() => ({
-    kind: "purchase",
-    occurredOn: todayInput(),
-    note: "",
-  }));
+/**
+ * The prototype's rule for *Entries* (`Workspace.dc.html` :2880), as the lab holds it: the gate
+ * refuses a book without a default at publication, and the first entry added becomes it.
+ */
+const ADDRESS_ENTRIES_HINT =
+  "Exactly one is the default before the profile can publish; the first entry added becomes it.";
 
+function DefaultPill() {
   return (
-    <form
-      className={addFormClasses}
-      onSubmit={(event) => {
-        event.preventDefault();
-        onAdd(fields);
-        setFields({ ...fields, note: "" });
-      }}
-    >
-      <div className="flex flex-wrap items-end gap-2">
-        <BackgroundFieldset value={fields} onChange={setFields} />
-        <PrimaryAction variant="ink" type="submit">
-          <ButtonIcon verb="create" />
-          Add entry
-        </PrimaryAction>
-      </div>
-    </form>
+    <span className="inline-flex items-center gap-1.5 self-center rounded-full bg-admin-published px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-published-ink">
+      <span aria-hidden>●</span> Default
+    </span>
   );
 }
 
-function HiddenFactForm({ onAdd }: { onAdd: (fields: HiddenFactFields) => void }) {
-  const [fields, setFields] = useState<HiddenFactFields>({ note: "", revealedWhen: "" });
+/**
+ * The profile's background, as items, and the one form that adds an entry or edits the one
+ * chosen (ADR 0074). The form opens on a purchase today — the nearest plausible day is the one
+ * the author is standing in, where a fixed date was a value nobody picked — with the note left
+ * to the author.
+ */
+function BackgroundList({
+  profileId,
+  content,
+  edit,
+}: {
+  profileId: string;
+  content: CustomerProfileContentSchema;
+  edit: (next: CustomerProfileContentSchema) => void;
+}) {
+  const background = content.background;
+  const ids = background.map((entry) => entry.id);
+  const entryOf = (id: string) =>
+    background.find((entry) => entry.id === id) as BackgroundEntrySchema;
+  const nameOf = (id: string) => {
+    const entry = background.find((candidate) => candidate.id === id);
+    return entry === undefined ? id : backgroundName(entry, labelOf(BACKGROUND_KIND, entry.kind));
+  };
+  const today = todayInput();
+  const blank = useMemo<BackgroundFields>(
+    () => ({ kind: "purchase", occurredOn: today, note: "" }),
+    [today],
+  );
+  const form = useItemForm<BackgroundFields>({
+    blank,
+    ids,
+    words: BACKGROUND_WORDS,
+    nameOf,
+    formOf: (id) => backgroundFields(entryOf(id)),
+    typedOf: (fields) => fields.note,
+  });
+  const removal = useRemoval(profileId);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const kindSelect = useRef<HTMLSelectElement>(null);
+  const reasonId = useId();
+  const refusal = backgroundRefusal(form.fields);
+  const marked = form.dirty ? refusal : null;
+
+  function drop(id: string) {
+    edit({ ...content, background: background.filter((entry) => entry.id !== id) });
+  }
+
+  function submit() {
+    if (refusal !== null) {
+      return;
+    }
+    const editing = form.editing;
+    if (editing !== null) {
+      if (form.dirty) {
+        edit({
+          ...content,
+          background: background.map((entry) =>
+            entry.id === editing ? backgroundEntry(entry.id, form.fields) : entry,
+          ),
+        });
+      }
+      focusAfterCommit(() => editButtons.get(editing));
+    } else {
+      const id = uniqueId(slugify(pythonStrip(form.fields.note).slice(0, 40)), ids);
+      edit({ ...content, background: [...background, backgroundEntry(id, form.fields)] });
+    }
+    form.reset();
+  }
 
   return (
-    <form
-      className={addFormClasses}
-      onSubmit={(event) => {
-        event.preventDefault();
-        onAdd(fields);
-        setFields({ note: "", revealedWhen: "" });
-      }}
-    >
-      <div className="flex flex-wrap items-end gap-2">
-        <HiddenFactFieldset value={fields} onChange={setFields} />
-        <PrimaryAction variant="ink" type="submit">
-          <ButtonIcon verb="create" />
-          Add fact
-        </PrimaryAction>
-      </div>
-    </form>
+    <>
+      <FieldGroup label="History">
+        <div className="grid gap-2">
+          {background.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {background.map((entry) => {
+                const notice = `Removed the ${entry.occurred_on} background entry from the draft.`;
+                if (removal.isArmed(entry.id)) {
+                  return (
+                    <ConfirmRemove
+                      key={entry.id}
+                      as="li"
+                      title={`Remove the ${entry.occurred_on} background entry?`}
+                      consequence={consequenceOf(
+                        "Its note leaves the profile's authored history, and the customer side of a simulation no longer has it to draw on.",
+                        findingClauses([background.length === 1 && "profile_without_background"]),
+                        "Nothing is written until you save the draft; a published version keeps it.",
+                      )}
+                      onConfirm={removal.confirm(() => drop(entry.id), notice)}
+                      onKeep={removal.keep}
+                    />
+                  );
+                }
+                const name = nameOf(entry.id);
+                return (
+                  <ListItem
+                    key={entry.id}
+                    name={name}
+                    id={entry.id}
+                    detail={entry.note}
+                    editing={form.editing === entry.id}
+                  >
+                    <EditButton
+                      name={name}
+                      buttonRef={editButtons.ref(entry.id)}
+                      onEdit={() => {
+                        form.begin(entry.id, backgroundFields(entry));
+                        focusAfterCommit(() => kindSelect.current);
+                      }}
+                    />
+                    <RemoveButton
+                      name={name}
+                      label={`Remove the ${entry.occurred_on} background entry`}
+                      entryKey={entry.id}
+                      removal={removal}
+                      notice={notice}
+                      onRemove={() => drop(entry.id)}
+                    />
+                  </ListItem>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-admin-muted">No background authored yet.</p>
+          )}
+          <RemovalNotice removal={removal} />
+        </div>
+      </FieldGroup>
+      <ItemFormRow
+        title={formTitle(form.editing, nameOf, BACKGROUND_WORDS.entry)}
+        editing={form.editing !== null}
+        addLabel="Add entry"
+        refusal={refusal}
+        reasonId={reasonId}
+        onSubmit={submit}
+        onCancel={() => {
+          const editing = form.editing;
+          form.reset();
+          if (editing !== null) {
+            focusAfterCommit(() => editButtons.get(editing));
+          }
+        }}
+      >
+        <FieldHint label="Kind">
+          <select
+            ref={kindSelect}
+            className={`${fieldControlClasses} w-full`}
+            value={form.fields.kind}
+            onChange={(event) => form.update({ kind: event.target.value as BackgroundKind })}
+          >
+            {BACKGROUND_KINDS.map((entry) => (
+              <option key={entry.value} value={entry.value}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </FieldHint>
+        <FieldHint label="Date">
+          <input
+            className={`${fieldControlClasses} w-full`}
+            type="date"
+            value={form.fields.occurredOn}
+            {...refusedProps(marked, "occurredOn", reasonId)}
+            onChange={(event) => form.update({ occurredOn: event.target.value })}
+          />
+        </FieldHint>
+        <div className="col-span-full">
+          <FieldHint label="Note">
+            <input
+              className={`${fieldControlClasses} w-full`}
+              value={form.fields.note}
+              {...refusedProps(marked, "note", reasonId)}
+              onChange={(event) => form.update({ note: event.target.value })}
+            />
+          </FieldHint>
+        </div>
+      </ItemFormRow>
+    </>
+  );
+}
+
+const BLANK_HIDDEN_FACT: HiddenFactFields = { note: "", revealedWhen: "" };
+
+/**
+ * The profile's hidden simulator facts, as items, and the one form that adds a fact or edits
+ * the one chosen (ADR 0074).
+ */
+function HiddenFacts({
+  profileId,
+  content,
+  edit,
+}: {
+  profileId: string;
+  content: CustomerProfileContentSchema;
+  edit: (next: CustomerProfileContentSchema) => void;
+}) {
+  const facts = content.hidden_facts;
+  const ids = facts.map((fact) => fact.id);
+  const factOf = (id: string) => facts.find((fact) => fact.id === id) as HiddenFactSchema;
+  const nameOf = (id: string) => facts.find((fact) => fact.id === id)?.note ?? id;
+  const form = useItemForm<HiddenFactFields>({
+    blank: BLANK_HIDDEN_FACT,
+    ids,
+    words: HIDDEN_FACT_WORDS,
+    nameOf,
+    formOf: (id) => hiddenFactFields(factOf(id)),
+    typedOf: (fields) => fields.note,
+  });
+  const removal = useRemoval(profileId);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const factInput = useRef<HTMLInputElement>(null);
+  const reasonId = useId();
+  const refusal = hiddenFactRefusal(form.fields);
+  const marked = form.dirty ? refusal : null;
+
+  function drop(id: string) {
+    edit({ ...content, hidden_facts: facts.filter((fact) => fact.id !== id) });
+  }
+
+  function submit() {
+    if (refusal !== null) {
+      return;
+    }
+    const editing = form.editing;
+    if (editing !== null) {
+      if (form.dirty) {
+        edit({
+          ...content,
+          hidden_facts: facts.map((fact) =>
+            fact.id === editing ? hiddenFactEntry(fact.id, form.fields) : fact,
+          ),
+        });
+      }
+      focusAfterCommit(() => editButtons.get(editing));
+    } else {
+      const id = uniqueId(slugify(pythonStrip(form.fields.note).slice(0, 40)), ids);
+      edit({ ...content, hidden_facts: [...facts, hiddenFactEntry(id, form.fields)] });
+    }
+    form.reset();
+  }
+
+  return (
+    <>
+      <FieldGroup label="Facts">
+        <div className="grid gap-2">
+          {facts.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {facts.map((fact) => {
+                const notice = `Removed the hidden fact “${fact.note}” from the draft.`;
+                if (removal.isArmed(fact.id)) {
+                  return (
+                    <ConfirmRemove
+                      key={fact.id}
+                      as="li"
+                      title={`Remove the hidden fact “${fact.note}”?`}
+                      consequence="The customer side of a simulation no longer knows it, so nothing it would have revealed can come up. Nothing is written until you save the draft; a published version keeps it."
+                      onConfirm={removal.confirm(() => drop(fact.id), notice)}
+                      onKeep={removal.keep}
+                    />
+                  );
+                }
+                return (
+                  <ListItem
+                    key={fact.id}
+                    name={fact.note}
+                    id={fact.id}
+                    detail={fact.revealed_when ? `Revealed when ${fact.revealed_when}` : null}
+                    editing={form.editing === fact.id}
+                  >
+                    <EditButton
+                      name={fact.note}
+                      buttonRef={editButtons.ref(fact.id)}
+                      onEdit={() => {
+                        form.begin(fact.id, hiddenFactFields(fact));
+                        focusAfterCommit(() => factInput.current);
+                      }}
+                    />
+                    <RemoveButton
+                      name={fact.note}
+                      entryKey={fact.id}
+                      removal={removal}
+                      notice={notice}
+                      onRemove={() => drop(fact.id)}
+                    />
+                  </ListItem>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-admin-muted">No hidden fact authored yet.</p>
+          )}
+          <RemovalNotice removal={removal} />
+        </div>
+      </FieldGroup>
+      <ItemFormRow
+        title={formTitle(form.editing, nameOf, HIDDEN_FACT_WORDS.entry)}
+        editing={form.editing !== null}
+        addLabel="Add fact"
+        refusal={refusal}
+        reasonId={reasonId}
+        onSubmit={submit}
+        onCancel={() => {
+          const editing = form.editing;
+          form.reset();
+          if (editing !== null) {
+            focusAfterCommit(() => editButtons.get(editing));
+          }
+        }}
+      >
+        <FieldHint label="Hidden fact">
+          <input
+            ref={factInput}
+            className={`${fieldControlClasses} w-full`}
+            value={form.fields.note}
+            {...refusedProps(marked, "note", reasonId)}
+            onChange={(event) => form.update({ note: event.target.value })}
+          />
+        </FieldHint>
+        <FieldHint label="Revealed when" optional>
+          <input
+            className={`${fieldControlClasses} w-full`}
+            value={form.fields.revealedWhen}
+            onChange={(event) => form.update({ revealedWhen: event.target.value })}
+          />
+        </FieldHint>
+      </ItemFormRow>
+    </>
   );
 }
 

@@ -602,10 +602,43 @@ export const LINE_QUANTITY_RULE = `A line's quantity is a whole number from ${MI
 export const LINE_VARIANT_RULE = "Choose the variant this line orders.";
 
 /**
- * An address's refusal, said by the add form below *Address book* and by an open row's Save
- * alike. `AddressEntry.__post_init__` in `domain/customer_profile.py` refuses a label,
- * recipient, first line, postal code or city that is empty or only padding (`require_label`);
- * the second line and the region are optional and stored as none when left empty.
+ * An address's refusal, said after the buttons of the form below *Address book*, adding or
+ * editing alike, for the first of those fields left empty (`addressRefusal` in
+ * `lib/customerEntries.ts`, ADR 0074). `AddressEntry.__post_init__` in
+ * `domain/customer_profile.py` refuses a label, recipient, first line, postal code or city that
+ * is empty or only padding (`require_label`); the form stores each stripped, and the second line
+ * and the region are optional and stored as none when left empty.
  */
 export const ADDRESS_FIELDS_RULE =
   "An address needs its label, recipient, street, postal code and city; only the second street line and the region may be left empty.";
+
+/**
+ * A background entry's two refusals, said after the buttons of the form below *Background*
+ * (`backgroundRefusal` in `lib/customerEntries.ts`, ADR 0074). `BackgroundEntry.__post_init__`
+ * in `domain/customer_profile.py` refuses a date that is not a calendar day
+ * (`require_iso_date`) and a note left empty (`require_text`); the form stores the note
+ * stripped, so only spaces is empty. The workspace's words: neither is a gate finding.
+ */
+export const BACKGROUND_DATE_RULE = "A background entry needs the day it happened.";
+
+export const BACKGROUND_NOTE_RULE =
+  "A background entry needs a note: it is the history the customer side of a simulation draws on.";
+
+/**
+ * A hidden fact's refusal, said after the buttons of the form below *Hidden simulator facts*
+ * (`hiddenFactRefusal` in `lib/customerEntries.ts`, ADR 0074). `HiddenFact.__post_init__` in
+ * `domain/customer_profile.py` refuses a note left empty (`require_text`); what reveals it may
+ * be left empty.
+ */
+export const HIDDEN_FACT_RULE =
+  "A hidden fact needs its text: it is what the customer side of a simulation knows.";
+
+/**
+ * A guidance note's two refusals, said after the buttons of the form below *Guidance*
+ * (`guidanceRefusal` in `lib/guidanceNotes.ts`, ADR 0074). `GuidanceNote.__post_init__` in
+ * `domain/support_identity.py` refuses a title left empty or only padding (`require_label`) and
+ * a body left empty (`require_text`); the form stores both stripped.
+ */
+export const GUIDANCE_TITLE_RULE = "A note needs a title.";
+
+export const GUIDANCE_BODY_RULE = "A note needs its guidance.";

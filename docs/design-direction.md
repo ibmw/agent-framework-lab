@@ -385,7 +385,8 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   and a note about one field is that field's hint rather than the card's line.
 - **Every editor section is on rows** (`Field`, `FieldGroup`, `FieldRows`, and the
   `arrangement="row"` a self-labelling field draws itself in — `ProvenModelField` among them):
-  stacked labels only inside an add form, as `ParameterForm` and the guidance form draw them;
+  stacked labels only inside an add form, as `ParameterForm` draws them, and inside the form
+  below a list (`ItemFormRow`), whose row names the form and whose fields stand in its grid;
   a self-labelling list (`ChipListField`) keeps its own legend beneath the rows; a value the
   editor shows rather than asks is an `<output>` in `readOnlyValueClasses` on a row; and a gate
   error the draft still saves with is the row's second line in `Field`'s `finding` tone —
@@ -440,8 +441,7 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   entry, a page's Discard included (ADR 0051, amended), so its Save never writes a discarded
   value back. Fields that only make sense together follow as one unit or not at all: a
   parameter's kind, requiredness and default; an attribute's type, value, unit and choices. The lists that open this way:
-  the tone-of-voice guidelines; a profile's addresses (the default chip and *Make default*
-  on the row), background and hidden facts; an identity's guidance notes; a product's options,
+  the tone-of-voice guidelines; a product's options,
   variants, media, attributes and reviews; a template's parameters (the ↑/↓
   on the row, because the order is authored); a scenario's composed objectives and mutations
   (the ↑/↓ on the row too). A set of values entered one at a time is a `ChipListField`, and a
@@ -463,7 +463,10 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   form, both handing focus back to the Edit; the entry's removal empties the form too. The form
   is unsaved work the prompt cannot save. The lists on it: Shop details' two method lists, whose
   ID is fixed, and an order's line items, whose variant is fixed and whose quantity is asked in
-  the form rather than typed in place, and its events. The last enabled payment method stays on
+  the form rather than typed in place, and its events; a profile's addresses — the *Default* pill
+  beside the name and *Make default* on the item, before the pencil, the default never the
+  form's answer — its background and its hidden facts; and an identity's guidance notes. A
+  list's control of its own stays on the item and free while the form edits another entry. The last enabled payment method stays on
   and on the list, a workspace rule stricter than the lab, which only refuses it at publication.
   Four of the handoff's hints on the method cards claim behaviour the lab does not have and are
   written as what it does instead (ADR 0072, *The hints say what the lab does*).
@@ -496,17 +499,20 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   surfaces), Publish everywhere (`PublishButton`, described by `PublishReasons`), Start, the
   connection's Save and Test, the bench's *Send as the customer*, *Attach to this shop*, *Fork
   this run*, *Save and leave*, *Add tag*, *Add note*, *Add to thread*, every form below a list
-  (*Add payment method*, *Add fulfilment method*, *Add line*, *Add event* and their *Save
-  changes*: the first rule broken, in the order the form asks — *Add line* when nothing is left to
-  add, no variant chosen, a quantity outside 1 to 999; *Add event* at the order's cap, a time
-  missing, a summary empty or only spaces — in one line after the buttons, a blank form refused
-  and marking nothing, a `required` field left empty included, ADR 0072, ADR 0074), and every
+  (*Add payment method*, *Add fulfilment method*, *Add line*, *Add event*, *Add address*, *Add
+  entry*, *Add fact*, *Add guidance* and their *Save changes*: the first rule broken, in the
+  order the form asks — *Add line* when nothing is left to add, no variant chosen, a quantity
+  outside 1 to 999; *Add event* at the order's cap, a time missing, a summary empty or only
+  spaces; *Add address* for the first of its label, recipient, street, postal code and city
+  empty or only spaces, then a country that is not two letters; *Add entry* for a day missing,
+  then a note empty; *Add fact* for the fact empty; *Add guidance* for a title empty, then the
+  guidance — in one line after the buttons, a blank form refused and marking nothing, a
+  `required` field left empty included, ADR 0072, ADR 0074), and every
   add form's submit, which is `PrimaryAction`
   with the create glyph wherever it is refused or not, and says its reason in a `RefusalLine`
   under it where it is — the scenario editor's *Add* at the objective and mutation caps (the
-  lab's sentence), *Add parameter* at the template's cap, *Add
-  address* while a field it needs is only spaces, *Add media* on the line the reference field
-  says its collision in. Outside a form below a list, a refusal a field already states natively — a `required` field left
+  lab's sentence), *Add parameter* at the template's cap, *Add media* on the line the reference
+  field says its collision in. Outside a form below a list, a refusal a field already states natively — a `required` field left
   empty (in an add form or an open row alike); an identifier `DerivedIdField` refuses — is left
   to the field, so a submit whose only fault is a `required` field left empty is not dashed. Start is refused until it can work, and says every cause
   it waits for at once. A press in flight is not a refusal: it says nothing, and is `aria-disabled`

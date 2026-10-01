@@ -12,11 +12,14 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { GUIDANCE_BODY_RULE, GUIDANCE_TITLE_RULE } from "./lib/fieldRules";
+import { itemFormReason } from "./lib/unsavedWork";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
 import { expectPublicationPill } from "./test/indexes";
+import { expectRulesInFieldOrder } from "./test/itemForm";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
-import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
+import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { expectCardOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -454,43 +457,159 @@ describe("support identity workspace", () => {
  * already corrected in place — but they asked their two questions through `aria-label` alone,
  * and assembled the note at the call site rather than through the add form's builder.
  */
-describe("editing a saved guidance note in place", () => {
-  it("corrects the body, keeps the id, and asks in visible words", async () => {
+/**
+ * An identity's guidance is items under *Notes* and one form below them (ADR 0074): Edit loads a
+ * note, *Save changes* writes it where it stands through the builder the form's Add uses.
+ */
+describe("a guidance note, edited in the form below the list", () => {
+  const REFUNDS = { id: "refunds", title: "Refunds", body: "Offer a refund above 200 EUR." };
+  const TONE = { id: "tone", title: "Tone", body: "Lead with the fact." };
+
+  async function openGuidance(guidance = [REFUNDS, TONE]) {
+    currentIdentity = { ...IDENTITY_CONTENT, guidance };
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
+    return within(await screen.findByRole("region", { name: "Guidance" }));
+  }
+
+  it("corrects the body, keeps the id, and reads the note back as an item", async () => {
     const user = userEvent.setup();
-    currentIdentity = {
-      ...IDENTITY_CONTENT,
-      guidance: [
-        { id: "refunds", title: "Refunds", body: "Offer a refund above 200 EUR." },
-        { id: "tone", title: "Tone", body: "Lead with the fact." },
-      ],
-    };
     // Captured before the save, because the PUT handler reassigns `currentIdentity` to the
     // payload: reading the baseline afterwards would compare the save to itself and the
     // assertion could not fail.
+    const card = await openGuidance();
     const before = structuredClone(currentIdentity);
-    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 
-    const card = within(await screen.findByRole("region", { name: "Guidance" }));
-    await user.click(card.getByRole("button", { name: "Edit Refunds" }));
+    const item = card.getByText("Refunds", { selector: "span" }).closest("li") as HTMLElement;
+    expect(within(item).getByText("refunds", { selector: "code" })).toBeVisible();
+    expect(within(item).getByText("Offer a refund above 200 EUR.")).toBeVisible();
+    const pencil = within(item).getByRole("button", { name: "Edit Refunds" });
+    await user.click(pencil);
 
-    const open = within(card.getByRole("form", { name: "Edit Refunds" }));
-    expect(open.getByLabelText("Guidance")).toHaveValue("Offer a refund above 200 EUR.");
-    await user.clear(open.getByLabelText("Guidance"));
-    await user.type(open.getByLabelText("Guidance"), "Escalate a refund above 200 EUR.");
-    await user.click(open.getByRole("button", { name: "Save Refunds" }));
+    const form = within(card.getByRole("group", { name: "Edit Refunds" }));
+    expect(item).toHaveAttribute("aria-current", "true");
+    expect(form.getByLabelText("Title")).toHaveFocus();
+    expect(form.getByLabelText("Guidance")).toHaveValue("Offer a refund above 200 EUR.");
+    await user.clear(form.getByLabelText("Guidance"));
+    await user.type(form.getByLabelText("Guidance"), "Escalate a refund above 200 EUR. ");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    expect(pencil).toHaveFocus();
+    expect(card.getByRole("group", { name: "Add a note" })).toBeVisible();
+    expect(within(item).getByText("Escalate a refund above 200 EUR.")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
 
     // Against the whole payload: a support identity carries no derived evidence, so the
-    // content *is* the payload and every other field must come back byte-identical.
+    // content *is* the payload and every other field must come back byte-identical. The body
+    // is stored stripped, as `require_text` asks.
     expect(savedPayloads[0]).toStrictEqual({
       ...before,
-      guidance: [
-        { id: "refunds", title: "Refunds", body: "Escalate a refund above 200 EUR." },
-        { id: "tone", title: "Tone", body: "Lead with the fact." },
-      ],
+      guidance: [{ ...REFUNDS, body: "Escalate a refund above 200 EUR." }, TONE],
     });
+  });
+
+  it("leaves the draft clean when an untouched note is saved", async () => {
+    const user = userEvent.setup();
+    const card = await openGuidance();
+
+    const pencil = card.getByRole("button", { name: "Edit Refunds" });
+    await user.click(pencil);
+    await user.click(card.getByRole("button", { name: "Save changes" }));
+
+    expect(pencil).toHaveFocus();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+  });
+
+  it("keeps a body's line breaks on its item", async () => {
+    const card = await openGuidance([{ ...REFUNDS, body: "Offer a refund.\nAbove 200 EUR, ask." }]);
+
+    const body = card.getByText(/Offer a refund\./);
+    expect(body).toHaveClass("whitespace-pre-line");
+    expect(body.textContent).toBe("Offer a refund.\nAbove 200 EUR, ask.");
+  });
+
+  it("adds a note with the id its title derives, stripped as the lab strips it", async () => {
+    const user = userEvent.setup();
+    const card = await openGuidance([]);
+    expect(card.getByText("No guidance authored yet.")).toBeVisible();
+
+    const add = within(card.getByRole("group", { name: "Add a note" }));
+    await user.type(add.getByLabelText("Title"), " Refunds ");
+    await user.type(add.getByLabelText("Guidance"), "Offer a refund above 200 EUR.");
+    await user.click(add.getByRole("button", { name: "Add guidance" }));
+    expect(add.getByLabelText("Title")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect(savedPayloads[0].guidance).toEqual([REFUNDS]);
+  });
+
+  it("refuses the form with its first rule after Add guidance, in the order it asks", async () => {
+    const user = userEvent.setup();
+    const card = await openGuidance();
+
+    // Blank, it is refused and says why, and marks nothing until something is typed.
+    const add = card.getByRole("group", { name: "Add a note" });
+    const button = within(add).getByRole("button", { name: "Add guidance" });
+    expectRefused(button, GUIDANCE_TITLE_RULE);
+    expect(within(add).getByLabelText("Title")).not.toHaveAttribute("aria-invalid");
+    expect(within(add).getByLabelText("Title")).not.toBeRequired();
+    // Only spaces is empty, as the lab strips it.
+    await user.type(within(add).getByLabelText("Title"), "   ");
+    expectRefused(button, GUIDANCE_TITLE_RULE);
+    await user.click(button);
+    await submitWithoutPressing(button);
+    expect(card.getAllByRole("listitem")).toHaveLength(2);
+    await user.clear(within(add).getByLabelText("Title"));
+
+    await user.click(card.getByRole("button", { name: "Edit Tone" }));
+    const form = card.getByRole("group", { name: "Edit Tone" });
+    await expectRulesInFieldOrder(
+      user,
+      form,
+      within(form).getByRole("button", { name: "Save changes" }),
+      {
+        Title: { rule: GUIDANCE_TITLE_RULE, answer: "Tone" },
+        Guidance: { rule: GUIDANCE_BODY_RULE, answer: "Lead with the fact." },
+      },
+    );
+  });
+
+  it("removes a note only on the second press, the confirm standing in the item's place", async () => {
+    const user = userEvent.setup();
+    const card = await openGuidance();
+
+    await user.click(card.getByRole("button", { name: "Edit Tone" }));
+    await user.click(card.getByRole("button", { name: "Remove Tone" }));
+    const confirm = card.getByRole("group", { name: "Remove the guidance “Tone”?" });
+    expect(confirm).toHaveFocus();
+    expect(confirm.closest("li")?.parentElement).toBe(
+      within(card.getByRole("group", { name: "Notes" })).getByRole("list"),
+    );
+    await user.click(within(confirm).getByRole("button", { name: "Remove it" }));
+
+    expect(card.getByText("Removed the guidance “Tone” from the draft.")).toHaveFocus();
+    // The form that edited it is empty again.
+    const add = within(card.getByRole("group", { name: "Add a note" }));
+    expect(add.getByLabelText("Title")).toHaveValue("");
+    expect(add.getByLabelText("Guidance")).toHaveValue("");
+  });
+
+  it("asks before leaving a note typed in its form, with the form's own reason", async () => {
+    const user = userEvent.setup();
+    const card = await openGuidance();
+
+    await user.type(
+      within(card.getByRole("group", { name: "Add a note" })).getByLabelText("Title"),
+      "Returns",
+    );
+    await user.click(railEntry("Support identities", "Experiment lab workspace"));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      "The Guidance form holds “Returns”, which has not been added to the draft.",
+    );
+    expect(prompt).toHaveTextContent(itemFormReason("a note", "draft"));
   });
 });
 
@@ -683,9 +802,9 @@ describe("the support identity editor's side panel", () => {
 });
 
 /**
- * The identity editor's sections on the reference pages' rows. The guidance add form keeps its
- * stacked labels, and the escalation conditions keep `ChipListField`'s own legend beneath the
- * row, as a ticket's tags do.
+ * The identity editor's sections on the reference pages' rows. The guidance form below its list
+ * keeps its stacked labels, and the escalation conditions keep `ChipListField`'s own legend
+ * beneath the row, as a ticket's tags do.
  */
 describe("the support identity editor's rows", () => {
   it("draws the role on rows, with the tone-of-voice note as the remit's rule", async () => {

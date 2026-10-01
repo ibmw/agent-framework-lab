@@ -2,6 +2,12 @@
 
 Status: accepted — 2026-09-30
 
+Amendment: 2026-10-01 — A profile's addresses, background and hidden facts and an identity's
+guidance notes are on the pattern (*A profile's lists and an identity's guidance*, below). The
+item gains a `tag` beside its name, a detail line it may go without and one that keeps its line
+breaks (`multiline`), and the trash a name of its list's own; `ItemFormRow`'s hint becomes
+optional; `useEntryEdit` and `EntryEditNotice` leave the customer and support identity editors.
+
 On 29 September 2026 the operator asked that the lists an editor edits with a form meet the
 pattern Shop details' *Payment methods* draws (ADR 0072), so that editing an entry is learned
 once. This records that pattern as the workspace's, what stays on `EntryCard`, and how the
@@ -101,6 +107,48 @@ and stays on the item.
   cap (adding only), the time, the summary. A time left alone keeps the instant it opened on to
   the second — the event's own when editing, the placement when adding (`orderEventEntry`).
 
+### A profile's lists and an identity's guidance
+
+- **Addresses.** Each entry is an item under *Entries* — the label as the name, the ID, the
+  address on one line as the detail — with the *Default* pill beside the name (`ListItem`'s
+  `tag`) and *Make default* ("Make {label} the default address") on the item before the pencil,
+  as `Workspace.dc.html` :2888–2891 draws them; the default carries none. Which entry is the
+  default is the list's answer and never the form's: *Save changes* keeps the entry's flag, the
+  first entry added becomes the default, and *Make default* stays free while the form edits
+  another entry. The one form, "Add an address" / "Edit {label}", asks every field the entry
+  stores while editing and, while adding, what a new entry cannot do without — the recipient is
+  the customer and the country follows the profile's locale until one is typed
+  (`ADDRESS_FORM_FIELDS`, `resolvedAddress` in `lib/customerEntries.ts`). Refused in order: the
+  first of the label, recipient, street, postal code and city empty or only spaces
+  (`ADDRESS_FIELDS_RULE`), then a country that is not two uppercase letters (`COUNTRY_RULE`); an
+  address being added for a profile with no name yet is refused with the same sentence and no
+  field marked, because the recipient is not asked there.
+- **Background.** The date · kind as the name, the ID, the note as the detail. "Edit {date ·
+  kind}" and "Remove the {date} background entry" keep the names they had (`RemoveButton`'s
+  `label`): the trash names the entry by its date, as its confirm and its notice do. The form,
+  "Add a background entry" / "Edit {date · kind}", asks Kind, Date and Note and opens on a
+  purchase today; refused in order: a day missing (`BACKGROUND_DATE_RULE`), a note empty
+  (`BACKGROUND_NOTE_RULE`).
+- **Hidden facts.** The fact as the name, the ID, "Revealed when …" as the detail where it has
+  one and no detail line where it has none. The form, "Add a hidden fact" / "Edit {fact}", asks
+  *Hidden fact* and *Revealed when (optional)*, without the placeholder that repeated the
+  label; refused when the fact is empty (`HIDDEN_FACT_RULE`).
+- **Guidance.** The title as the name, the ID, the body as the detail, its line breaks kept
+  (`ListItem`'s `multiline`, which Shop details' and an order's items do not take). The form,
+  "Add a note" / "Edit {title}", asks Title and Guidance — a text area now, where the add form
+  and the open row asked the body on one line — submitted by *Add guidance*; refused in order: a
+  title empty (`GUIDANCE_TITLE_RULE`), then the guidance (`GUIDANCE_BODY_RULE`).
+- **The form row's hint is optional.** `ItemFormRow` takes no hint where the form has no rule
+  of its own to state (*Guidance lives under the field*): the background, hidden-fact and
+  guidance forms draw none, and the address form draws its own only while adding.
+- **A rule is heard once.** The Country field's hint is `COUNTRY_RULE`, which is also the
+  refusal it can be marked with; while marked, `FieldHint`'s `hintDescribes` leaves the hint out
+  of its description, so the field is described by the refusal's line and the rule is heard
+  once rather than twice in a row. The hint stays drawn.
+- Every text is stored stripped as the lab strips it (`pythonStrip`), where the background and
+  the hidden facts sent the note as typed and met a 422 over surrounding whitespace; an edit that
+  changed nothing writes nothing.
+
 ## Departures
 
 - `form-decisions.md` 8.2's open row is superseded for the converted lists, as above.
@@ -120,6 +168,28 @@ and stays on the item.
   events' stays muted, because an order with no event is a warning.
 - Both order forms' submits wear the accent weight the methods handoff draws, where the add
   forms they replace were outline.
+
+- The prototype draws an address with neither Edit nor Remove (`Workspace.dc.html` :2884–2893)
+  and a guidance note with a one-press × and no Edit (:1858–1866); their items carry the pencil
+  and a trash that asks twice (ADR 0060).
+- The prototype's *Entries* hint, "Exactly one is the default. Removing an entry never touches
+  an order already authored against it.", is written as the lab holds it — "Exactly one is the
+  default before the profile can publish; the first entry added becomes it." — because the gate,
+  not the list, requires the default, and the card's line already says what a removal leaves.
+- The prototype's address item carries no ID (:2884–2893); it shows the ID in monospace as every
+  item does, and the pill stands between the name and the ID.
+- The prototype's validation-weight line under the address book, "No default set, so no order in
+  this shop can ship to this customer yet." (:2894–2896), is not drawn, as it was not on `main`:
+  the publish gate says a book without a default.
+- The prototype puts *Add note* in the guidance card's header; the note is added by the form
+  below the list, as every converted list is.
+- The prototype's customer frame draws only Identity, Persona and Address book, so no
+  background or hidden-fact list (its hidden facts are a scenario's); their row labels *History*
+  and *Facts*, the guidance row's *Notes*, and the address form's hint while adding are the
+  slice's own.
+- The address book's empty line drops "with one default", which the *Entries* hint now says.
+- The four forms' submits wear the accent weight the methods handoff draws, where the add forms
+  they replace were ink.
 
 ## Consequences
 
@@ -141,6 +211,17 @@ and stays on the item.
   {label}", "Remove {SKU}" and "Remove {label}" kept their names.
 - No backend, contract or payload moved.
 
+- The accessible names that moved with the profile's lists and the guidance: the open rows'
+  forms "Edit {label}" (now groups of the same name), their "Save {label}" and "Cancel editing
+  {label}" (now *Save changes* and *Cancel*), the add forms' unnamed fieldsets (now the groups
+  "Add a background entry", "Add a hidden fact" and "Add a note"; "Add an address" kept its
+  name), and the hidden fact's "Revealed when" (now "Revealed when (optional)"). The Country
+  field's description while refused loses its hint's copy of the refusal. Every item's
+  Edit, Remove and *Make default*, and *Add address*, *Add entry*, *Add fact* and *Add guidance*,
+  kept their names. Specs touched: `order-fixture` (`editRow` became `editItem`, the helper
+  `tests/e2e/support/authoring.ts` gained) and `customer-publication` (the pill read on its item,
+  since the *Entries* hint names the default too).
+
 ## Verification
 
 - `ItemList.test.tsx`: the item's name, key, detail and `aria-current`; the pencil's and trash's
@@ -161,3 +242,18 @@ and stays on the item.
   `lib/ui.test.ts`'s width sweep that `OrderEditorPage` no longer composes `w-20`.
 - `App.test.tsx`: *payment and fulfilment methods, as the handoff draws them*, the two method
   edits of *editing a saved entry in place* and the prompt's method labels, unchanged.
+- `lib/customerEntries.test.ts` and `lib/guidanceNotes.test.ts`: every combination of each
+  form's broken fields refused with the first in the order it asks, and every text stored
+  stripped as Python strips it. `ItemList.test.tsx`: the tag beside the name, the item without
+  a detail line, the trash's own name.
+- `Customers.test.tsx` and `SupportIdentities.test.tsx`: each form's rules walked in the order
+  its controls stand in the document (`expectRulesInFieldOrder`, `test/itemForm.ts`), each said
+  after its submit with that control alone marked; a blank form refused and unmarked; an edit
+  loaded, focused and saved where it stands; the default untouched by an edit of either entry;
+  *Make default* on the item moving the pill while the form edits another; the confirm in the
+  item's place; the form emptied when its entry is removed; a clean form following the draft
+  through a Discard and a dirty one keeping its work; the country following the locale while
+  adding; the prompt for a typed address, an edited fact and a typed note; an untouched entry
+  of each list saved leaving the draft clean; Home's typed city saved after *Make default* moved
+  the default to Office, the payload holding both; a marked field described by the refusal's
+  own line and told the rule once; a guidance body's line breaks kept on its item.

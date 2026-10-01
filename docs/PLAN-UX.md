@@ -76,18 +76,17 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Milestones 8 and 9 are delivered. Their record is the commits and ADR 0052–0073; their goals and
 acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md` and
-`docs/history/PLAN-UX-2026-09-28.md`. Milestone 10's first slice, 36, is delivered: it shared the
+`docs/history/PLAN-UX-2026-09-28.md`. Milestone 10's first two slices are delivered: 36 shared the
 method list (`components/ItemList.tsx`, `lib/itemForm.ts`), put an order's lines and events on it
-and wrote ADR 0074, which the rest cite. Its three remaining slices run in order, 37 to 39, one
-editor or pair of editors to a branch:
+and wrote ADR 0074, which the rest cite; 37 put a profile's lists and an identity's guidance on
+it and added `editItem`, the Playwright helper that edits an item. Its two remaining slices run
+in order, 38 then 39, one editor or pair of editors to a branch:
 
-- **37** takes the customer editor and an identity's guidance: prose lists whose items carry no
-  control of their own beyond *Make default*, and it adds the Playwright helper that edits an item.
 - **38** takes the product editor's four lists: one route file, one test file and one scope
   (ADR 0061), and none of them reached by a spec that edits.
 - **39** takes the two lists that keep a control on the item — the default guideline's radio and a
-  parameter's ↑/↓ — for which the item gains its `lead` slot and the actions their arrows. It
-  follows 37, whose helper its block journeys use.
+  parameter's ↑/↓ — for which the item gains its `lead` slot and the actions their arrows. Its
+  block journeys edit through `editItem`.
 
 ## Milestone 10 — A list is edited in the form below it
 
@@ -131,70 +130,6 @@ hidden facts; an identity's guidance; a product's options, media, attributes and
 tone-of-voice guidelines; a template's parameters. Not converted, as the operator scoped it: the
 product's variants table, a scenario's composed objectives and mutations, the create pages' rows
 and a ticket's thread.
-
-### Slice 37 — A profile's lists and an identity's guidance
-
-The customer editor's three lists and the support identity's guidance are edited in the form below
-them.
-
-- [ ] **Addresses** (`CustomerEditorPage.tsx:651`): items — the label as the name, the entry's ID,
-  `addressLine` (:1184) as the detail — with the *Default* pill beside the name (:695–699) and
-  *Make default* ("Make {label} the default address", :740–749) in the item's actions before the
-  pencil, as the prototype draws it (:2888–2891); the default carries none. `AddressForm` (:1245)
-  and `AddressFieldset` (:1203) become the one form, "Add an address" — the name its group already
-  has — / "Edit {label}", with `ADDRESS_FIELDS_RULE` (`lib/fieldRules.ts:587`) after the buttons.
-  The default is never the form's answer (:713–716), and the country still follows the profile's
-  locale while adding.
-- [ ] **Background** (:822): the date · kind as the name, its controls' names unchanged (:880), the
-  ID, the note as the detail; `BackgroundForm` (:1321) and `BackgroundFieldset` (:136) the one
-  form, "Add a background entry" / "Edit {date · kind}", submitted by *Add entry*.
-- [ ] **Hidden simulator facts** (:920): the fact as the name, its controls' names unchanged (:968),
-  the ID, "Revealed when …" as the detail where it has one; `HiddenFactForm` (:1351) and
-  `HiddenFactFieldset` (:182) the one form, "Add a hidden fact" / "Edit {fact}", submitted by *Add
-  fact*.
-- [ ] **Guidance** (`SupportIdentityEditorPage.tsx:284`): the title as the name, the ID, the body as
-  the detail; `GuidanceForm` (:517) and `GuidanceFieldset` (:486) the one form, "Add a note" /
-  "Edit {title}", submitted by *Add guidance*.
-- [ ] Each form's rules, today a native `required` on each field it needs (`CustomerEditorPage.tsx`
-  :173, :196; `SupportIdentityEditorPage.tsx` :500, :509), are said after the buttons in field
-  order, in the lab's words where `lib/fieldRules.ts` holds them. The editors' `useEntryEdit`
-  (:242–250; `SupportIdentityEditorPage.tsx:99`) and `EntryEditNotice`s (:774, :899, :989;
-  `SupportIdentityEditorPage.tsx:349`) go.
-- [ ] `tests/e2e/support/authoring.ts` gains `editItem`: press "Edit {name}", answer inside the
-  group "Edit {name}", press its *Save changes*, and see the group go. `editRow` (:29) stays for a
-  scenario's composed blocks, and its comment says so.
-- [ ] `docs/design-direction.md`: the list rule names these four lists, and *A saved row opens
-  where it stands* loses them; *A blocked primary action says why* rewrites *Add address*'s reason
-  (:488–489); *Every editor section is on rows* (:380–382) stops citing "the guidance form" as an
-  add form that stacks.
-
-Frames: `Workspace.dc.html` :2877–2899 (the address book: the *Entries* row :2880, an item :2884,
-the pill :2888, *Make default* :2891), :1853–1866 (guidance); methods handoff
-`shop-details.template.html` :160–186.
-
-Authority: ADR 0051, ADR 0060 (the address removal's findings), ADR 0063, ADR 0074.
-
-Departures to record: the prototype draws an address with neither Edit nor Remove (:2884–2893)
-and a guidance note with a one-press × and no Edit (:1858–1866); the items carry the pencil and a
-trash that asks twice.
-
-Branch: `feat/profile-and-guidance-lists`. Checks: `Customers.test.tsx` *editing a saved customer
-entry in place* (:1087), which becomes loading into the form, *removing is deliberate* (:1285) and
-*the address book* (:1879) — the confirm in the item's place, *Make default* on the item, the
-default untouched by an edit, each form's first rule after its button, the prompt for a typed
-address and an edited fact; `SupportIdentities.test.tsx` *editing a saved guidance note in place*
-(:457) and *support identity workspace* (:189). Playwright `order-fixture` (:27 the group "Add an
-address"; :132 `editRow` becomes `editItem`, with "Street" in the form), `customer-publication`
-(:55 the group, :66 *Add address*, and :67 `getByText("Default")`, which the *Entries* row's hint
-must not make ambiguous — keep "default" out of it or make the read exact, and say which),
-`experiment-start` (:134–152, *Make Home the default address*), `scenario-authoring` (:103–117)
-and `ticket-authoring` (:109). The names that move — the open rows' forms "Edit {label}", "Save
-{label}", "Cancel editing {label}" — are reached only by `order-fixture.spec.ts:132`, through
-`editRow`.
-
-Slice evidence: on a profile, the operator presses the pencil on "Bordeaux previous flat", the form
-reads "Edit Bordeaux previous flat", a new street saves into the item, and *Make default* on
-another entry moves the pill; an identity's guidance note is corrected the same way.
 
 ### Slice 38 — The product editor's four lists
 

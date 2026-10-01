@@ -261,6 +261,65 @@ describe("the list item", () => {
   });
 });
 
+describe("what an item carries beyond its name, key and line", () => {
+  function Single({ label }: { label?: string }) {
+    const removal = useRemoval("single");
+    return (
+      <ul>
+        <ListItem name="Home" id="home" detail={null} tag={<span>Default</span>} editing={false}>
+          <RemoveButton
+            name="Home"
+            label={label}
+            entryKey="home"
+            removal={removal}
+            notice="Removed Home."
+            onRemove={() => undefined}
+          />
+        </ListItem>
+      </ul>
+    );
+  }
+
+  it("stands a tag beside the name, ahead of the key, and draws no detail line for none", () => {
+    render(<Single />);
+
+    const home = item("Home");
+    const name = within(home).getByText("Home", { selector: "span" });
+    const tag = within(home).getByText("Default");
+    const key = within(home).getByText("home", { selector: "code" });
+    expect(name.compareDocumentPosition(tag) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tag.compareDocumentPosition(key) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tag.parentElement).toBe(name.parentElement);
+    // The name's line is the item's only line.
+    expect(name.parentElement?.parentElement?.children).toHaveLength(1);
+  });
+
+  it("keeps a detail's line breaks only where the list asks", () => {
+    render(
+      <ul>
+        <ListItem name="Plain" id="plain" detail={"One.\nTwo."} editing={false}>
+          {null}
+        </ListItem>
+        <ListItem name="Kept" id="kept" detail={"One.\nTwo."} multiline editing={false}>
+          {null}
+        </ListItem>
+      </ul>,
+    );
+
+    const [plain, kept] = screen.getAllByText(/One\./);
+    expect(plain).not.toHaveClass("whitespace-pre-line");
+    expect(kept).toHaveClass("whitespace-pre-line");
+  });
+
+  it("names a trash by the list's own words where it gives them", () => {
+    render(<Single label="Remove the home entry" />);
+
+    const remove = within(item("Home")).getByRole("button", { name: "Remove the home entry" });
+    expect(remove).toHaveAttribute("title", "Remove the home entry");
+    expect(within(item("Home")).queryByRole("button", { name: "Remove Home" })).toBeNull();
+  });
+});
+
 describe("the form row", () => {
   it("is a group named Add a … with its hint, whose submit adds", () => {
     render(<Harness />);

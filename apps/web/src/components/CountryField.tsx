@@ -26,19 +26,34 @@ import { FieldHint } from "./FieldHint";
 export function CountryField({
   value,
   required = false,
+  refused,
   onChange,
 }: {
   value: string;
   required?: boolean;
+  /**
+   * A form that says its refusals after its buttons marks the field through this (ADR 0074):
+   * `refusedProps` from `lib/itemForm.ts`, invalid and described by that line. The only rule
+   * the field breaks is its own hint's, so while refused the hint is not read a second time.
+   */
+  refused?: { "aria-invalid"?: true; "aria-describedby"?: string };
   onChange: (value: string) => void;
 }) {
   const listId = useId();
   const named = countryName(value);
   return (
     <div>
-      <FieldHint label="Country" hint={COUNTRY_RULE} extra={named}>
+      {/* Refused, the field is described by the refusal's line, which says this same rule:
+          the hint stays drawn and is not read twice. */}
+      <FieldHint
+        label="Country"
+        hint={COUNTRY_RULE}
+        hintDescribes={refused?.["aria-describedby"] === undefined}
+        extra={named}
+      >
         <input
           className={`${fieldControlClasses} w-full`}
+          {...refused}
           list={listId}
           value={value}
           required={required}

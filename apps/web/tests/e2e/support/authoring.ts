@@ -22,9 +22,11 @@ export async function saveDraft(page: Page) {
 /**
  * A saved row of a list, opened where it stands, answered, and saved back into the draft.
  *
- * Every list a page edits is an `EntryCard` (PLAN-UX Slice 33): its fields are read back until
- * Edit opens them, and nothing typed there is in the draft until the row's own Save — so a
- * journey correcting a parameter, a binding or an address says both presses.
+ * The lists that still open in place (`EntryCard` edit mode, ADR 0074's *What stays on
+ * `EntryCard`*) — a scenario's composed objectives and mutations, among them — read their
+ * fields back until Edit opens them, and nothing typed there is in the draft until the row's
+ * own Save, so a journey correcting a binding says both presses. A list edited in the form
+ * below it is `editItem`.
  */
 export async function editRow(
   scope: Locator,
@@ -36,6 +38,25 @@ export async function editRow(
   await answer(row);
   await row.getByRole("button", { name: `Save ${name}`, exact: true }).click();
   await expect(row).toHaveCount(0);
+}
+
+/**
+ * A saved item of a list edited in the form below it (ADR 0074), loaded into that form,
+ * answered, and saved back where it stands.
+ *
+ * The pencil is "Edit {name}"; the form it loads is the group of the same name, whose *Save
+ * changes* writes the entry into the draft and empties the form, so the group goes.
+ */
+export async function editItem(
+  scope: Locator,
+  name: string,
+  answer: (form: Locator) => Promise<void>,
+) {
+  await scope.getByRole("button", { name: `Edit ${name}`, exact: true }).click();
+  const form = scope.getByRole("group", { name: `Edit ${name}`, exact: true });
+  await answer(form);
+  await form.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(form).toHaveCount(0);
 }
 
 /**
