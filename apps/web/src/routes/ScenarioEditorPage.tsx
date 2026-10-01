@@ -32,6 +32,7 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { CappedTitle } from "../components/CappedTitle";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
+import { MoveButton, RemoveButton } from "../components/ItemList";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import {
   Card,
@@ -94,7 +95,6 @@ import {
 import { onlyChoiceNote, soleCandidate, useSingleChoice } from "../lib/singleChoice";
 import {
   addFormClasses,
-  destructiveSubtleButtonClasses,
   editorColumnsClasses,
   editorMainClasses,
   editorPanelClasses,
@@ -948,34 +948,25 @@ function BoundBlockRow({
         // The order is authored — priority for objectives, the run timeline for mutations —
         // so the arrows stay on the row beside its Remove.
         <>
-          <button
-            className={subtleButtonClasses}
-            type="button"
-            aria-label={`Move ${instance.id} up`}
+          <MoveButton
+            name={instance.id}
+            direction="up"
             disabled={isFirst}
-            onClick={() => onMove(-1)}
-          >
-            ↑
-          </button>
-          <button
-            className={subtleButtonClasses}
-            type="button"
-            aria-label={`Move ${instance.id} down`}
+            onMove={() => onMove(-1)}
+          />
+          <MoveButton
+            name={instance.id}
+            direction="down"
             disabled={isLast}
-            onClick={() => onMove(1)}
-          >
-            ↓
-          </button>
-          <button
-            className={destructiveSubtleButtonClasses}
-            type="button"
-            aria-label={`Remove ${instance.id}`}
-            ref={removal.trigger(instance.id)}
-            onClick={removal.ask(instance.id, onRemove, notice)}
-          >
-            <ButtonIcon verb="delete" />
-            Remove
-          </button>
+            onMove={() => onMove(1)}
+          />
+          <RemoveButton
+            name={instance.id}
+            entryKey={instance.id}
+            removal={removal}
+            notice={notice}
+            onRemove={onRemove}
+          />
         </>
       }
     >

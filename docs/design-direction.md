@@ -151,7 +151,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | The option's confirm | drawn under the option's chips in place of its *Remove this option* button, the rest of the option still on screen (:971) | the whole option row replaced by the confirm | `form-decisions.md` 9.2, "the confirm takes the row's place", which this document's rule states and every other removal follows; the prototype's option is the one row it draws a confirm on, and one list whose confirm left the row standing would be the exception every other list had to be read against |
 | "Removed Colour from the draft. Undo" after the second press | drawn (:982) | the notice without its Undo, a line that takes focus once the row has gone | a draft removal is already reverted by *Discard changes*, the order's delete is the one removal that cannot be, and an Undo per removal would be a second history to keep in agreement with the draft's (ADR 0060) |
 | A header's Delete | a confirm in place of the row | on the order editor, the confirm under the header, full width, while the Delete is withdrawn | a header has no row for the confirm to take the place of, and a panel stating a whole consequence does not fit between the header's other actions |
-| Delete and Duplicate on the product editor | frame 2c draws both on the header, Duplicate with a copy mark | both, on the header and as a catalog row action, Duplicate without the mark; Delete's confirm under the header, naming the orders whose lines name one of the product's variants | the product key holds a confirm to its product across renames and discards (ADR 0061). The orders are read once, when the confirm opens — never per render or per row, which is what *Required by a scenario* is refused for — because it is paid by the operator who asked, at the moment the answer changes what they do; the mark is outside the verb vocabulary (ADR 0062) |
+| Delete and Duplicate on the product editor | frame 2c draws both on the header, Duplicate with a copy mark | both, on the header and as a catalog row action, Duplicate without the mark and the row's Delete the trash named "Delete {title}" (ADR 0075); Delete's confirm under the header, naming the orders whose lines name one of the product's variants | the product key holds a confirm to its product across renames and discards (ADR 0061). The orders are read once, when the confirm opens — never per render or per row, which is what *Required by a scenario* is refused for — because it is paid by the operator who asked, at the moment the answer changes what they do; the mark is outside the verb vocabulary (ADR 0062) |
 | A guideline's delete | *Delete guideline* (:1969) | the item's trash, named "Remove {name}", and a confirm asking to remove it in the item's place | every entry list in this workspace removes under one verb and the specs reach the control by that name; rule 5 |
 | The queue under the composer | a coloured letter badge per arm and the configuration beside it; the queue drawn only for the bench's send | the arm's name and what it runs, in words, and the same queue for a Run on an arm's card, a scoring pass, a replay, a fork and — without arms — a freeze | the workspace has no per-arm colour to paint a badge with, and the arm's name is what its card is titled; `form-decisions.md` 10.2 is the rule for every long action, and the prototype draws the one it had room for (ADR 0065) |
 | A line beside Replay and Fork | "Same seed, same starting snapshot. Replay reproduces this exactly." in the finding's card | "Replay runs this incident again as it was recorded; Fork runs it again with the arms you choose." under the header, describing both buttons | a replay runs its arms against their models again, and a model arm does not reproduce its answer exactly; the line says what each derivation is, beside the reach line that says why one cannot run (ADR 0053, ADR 0065) |
@@ -165,7 +165,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | New experiment's arms and scenario | one select per row naming configuration, version, framework and model together ("cfg-atlas v4 — Pydantic AI · gpt-5-mini"), and the scenario with its version | two selects per row — the record, then its published version — with the framework and model as the row's second line; Arm B's hint adds "Leave it empty to run arm A alone." | a configuration's versions are a read of their own, so one list of every version of every configuration is one read per configuration before the select can open; and the lab runs one arm or two, which a row that could not be emptied would not say (ADR 0064) |
 | The agent-configuration index's name | "Agent configurations" on the lab rail (:4827), the page title (:3229), the links back to the index (:390, :3291), the tour surface (:4637) and the setup-chain step (:4506) | "Agent configs" on the rail entry, the page title, the links back to the index and its tour; the setup-chain step "Agent configuration", with "Open agent configs" as its link | "Agent configurations" wraps onto two lines beside its count in the 216px rail; *Agent configs* is the same word shortened, where *Agent setup* would take the word the shop's setup pages already hold (*Names*). The step names the record kind, as its neighbours Support identity and Judge do, and its link names the index |
 | A template's parameters | read-only items of name, kind and *same-shop* (:607–616), with no way to author one on the editor | items under *Typed parameters* — the name in monospace, the kind and *bound same-shop* beside it, the description, default and binding as the detail — with ↑/↓, the pencil and a trash that asks twice, and one form below, "Add a parameter" / "Edit {name}", that asks the label, kind, description, default and whether it is required — which binds a scenario only while there is no default (ADR 0074) | the parameters are authored on this editor and nowhere else once the block exists — the prototype's editor has no other place to write a description or a default — and ADR 0060 asks twice before one leaves; the order is what a binding follows, so it stays authored and its arrows stay on the item. The row's hint is the slice's own: the prototype's, that the editor refuses a binding outside the scenario's shop, is the card's line already |
-| A scenario's composed blocks | a row of name, binding line and kind with a one-press ×, and the picker beside a free-text binding input (:3091–3120) | `EntryCard` rows that read each binding back as the object it names, open in place on field rows for the bindings and an objective's severity, with ↑/↓ and a Remove that asks twice, and the picker below a rule | a binding is picked from this shop's own objects and never typed (*Where a set comes from decides the control*); ADR 0060 names composed objectives and mutations among the removals that ask twice; objective order is priority and mutation order the run timeline, both authored |
+| A scenario's composed blocks | a row of name, binding line and kind with a one-press ×, and the picker beside a free-text binding input (:3091–3120) | `EntryCard` rows that read each binding back as the object it names, open in place on field rows for the bindings and an objective's severity, with the item's ↑/↓, pencil and a trash that asks twice (ADR 0075), and the picker below a rule | a binding is picked from this shop's own objects and never typed (*Where a set comes from decides the control*); ADR 0060 names composed objectives and mutations among the removals that ask twice; objective order is priority and mutation order the run timeline, both authored |
 
 Georgia on the results' stat numerals landed with the surface that first draws it, the arm cards
 under the results header (ADR 0068) — as the `open` button verb landed with the overview's
@@ -277,7 +277,16 @@ their metrics are `apps/web/src/lib/ui.ts`. Rules:
 
 - **Pine is the primary action; the warm red is destructive and nothing else.** Every button
   variant carries a hover and a `focus-visible` ring. A destructive control keeps its glyph and
-  its verb; red is a second signal.
+  its verb; red is a second signal. A row's is the grey trash, red only under the pointer, and
+  the confirm it asks for is the solid red — `lab-paper` on `lab-error`, 7.16:1 — beside a
+  neutral *Keep it*; a chip's ✕ is grey and warms to the red too, and a confirm that destroys
+  nothing is not red (ADR 0075).
+- **A row's Edit and Remove are icons named by the row** (ADR 0075): the 30px pencil and trash
+  (`EditButton`, `TrashButton`, `RemoveButton`), the verb in the accessible name and the
+  `title` — "Edit {name}", "Remove {name}", the catalog's "Delete {title}" — and never drawn. A
+  page's or a card's own action keeps its written verb (a header's *Delete*, the document
+  editor's *Remove*), as do an open row's *Save* and *Cancel*, a verb that is neither (*Duplicate*,
+  *Detach*, *Unlink*) and a chip's ×.
 - **Georgia for display** (page and card titles, the thread subject, the bar's title); sans for
   UI; monospace for slugs, ids, model names and env vars. Entry-row titles, the per-arm run
   label and dialog titles stay sans.
@@ -287,7 +296,8 @@ their metrics are `apps/web/src/lib/ui.ts`. Rules:
   results — is a link, and draws the link's underline and the focus ring.
 - **A button names a verb and a chip names a kind, never an icon.** `buttonIcon` and
   `filterChipIcon` are two closed tables that stay apart: a chip's check means "the published
-  ones", a button's means "save". Every glyph is `aria-hidden`; the word carries the meaning.
+  ones", a button's means "save". Every glyph is `aria-hidden`; the word carries the meaning —
+  written, or, on a row's pencil and trash, in the name and the `title`.
 - **A colour one file uses is a literal, not a token.** A token is minted with its first
   consumer and named for its role.
 
@@ -438,8 +448,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   operator scoped Milestone 10: a product's variants, the one of its lists that does, and a
   scenario's composed objectives and mutations (the ↑/↓ on the row, because the order is
   authored). Every other list of records is edited in its card's form, below. One payload
-  builder per entry for the add form and the open row; one row open per list, siblings' Edit
-  disabled with a line saying why and that an open row is not in the draft until Save; Cancel
+  builder per entry for the add form and the open row; the closed row's Edit the item's pencil and
+  its Remove the trash, the open row's *Save* and *Cancel* in words (ADR 0075); one row open per
+  list, siblings' pencils disabled with a line saying why and that an open row is not in the draft until Save; Cancel
   writes nothing; the row is a named form; a refusal one path makes the other makes too. An
   open row keeps what was typed in it, and every field not typed in — and the row's name —
   follows any change to its entry, a page's Discard included (ADR 0051, amended), so its Save
@@ -483,7 +494,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **Removing is deliberate** (ADR 0060): two presses on every removal that is not one value
   re-typed in the field beside it. `ConfirmRemove` replaces the row with the question, the whole
   consequence — the finding the removal will raise, that nothing is written until the draft is
-  saved, what a published version keeps — *Remove it* and *Keep it*; it takes focus as a group
+  saved, what a published version keeps — *Remove it* in the solid warm red and *Keep it* in the
+  neutral outline, and a second press that destroys nothing (*Detach*) on a grey panel, its
+  question in ink and its press the `ink` weight, with no red at all (ADR 0075); it takes focus as a group
   named by the question and described by the consequence, and Escape or *Keep it* returns focus
   to the control that asked. After the removal focus is on the list's notice line, which says
   "Removed … from the draft." — on the list the page navigates to, where the removal leaves the

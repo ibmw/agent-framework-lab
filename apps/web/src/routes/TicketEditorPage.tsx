@@ -21,6 +21,7 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { Field, FieldRows } from "../components/FieldHint";
+import { RemoveButton, TrashButton } from "../components/ItemList";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { TicketStatusBadge } from "../components/TicketStatusBadge";
 import {
@@ -682,17 +683,18 @@ function Bubble({
               {badge}
             </span>
           ) : null}
-          <button
-            className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-lab-error"
-            type="button"
-            aria-label={`Remove message from ${name} at ${messageTime(sentAt)}`}
-            ref={removal.trigger(id)}
-            onClick={removal.ask(id, onRemove, removedMessage(author, customerName, sentAt))}
-          >
-            <ButtonIcon verb="delete" />
-            Remove
-          </button>
         </div>
+      </div>
+      {/* The message's trash stands at the end of its row, as an item's does (ADR 0075). */}
+      <div className="ml-auto flex-none">
+        <RemoveButton
+          name={name}
+          label={`Remove message from ${name} at ${messageTime(sentAt)}`}
+          entryKey={id}
+          removal={removal}
+          notice={removedMessage(author, customerName, sentAt)}
+          onRemove={onRemove}
+        />
       </div>
     </article>
   );
@@ -882,14 +884,12 @@ function SuggestedDocuments({
               <code className="truncate text-admin-muted">
                 {documentKindLabel(entry.kind)} · {entry.document_id}
               </code>
-              <button
-                className={`${subtleButtonClasses} ml-auto`}
-                type="button"
-                aria-label={`Remove suggested ${documentKindLabel(entry.kind)} ${entry.document_id}`}
-                onClick={() => toggleDocument(entry.kind, entry.document_id)}
-              >
-                Remove
-              </button>
+              <span className="ml-auto flex-none">
+                <TrashButton
+                  label={`Remove suggested ${documentKindLabel(entry.kind)} ${entry.document_id}`}
+                  onClick={() => toggleDocument(entry.kind, entry.document_id)}
+                />
+              </span>
             </li>
           ))}
         </ul>

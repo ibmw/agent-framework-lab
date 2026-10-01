@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { RemovalNotice } from "../components/ConfirmRemove";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
+import { RemoveButton } from "../components/ItemList";
 import { ProductDeleteConfirm } from "../components/ProductDeleteConfirm";
 import { SearchField, SearchRow } from "../components/SearchField";
 import {
@@ -26,7 +27,6 @@ import {
 } from "../lib/shop";
 import {
   accentButtonClasses,
-  destructiveSubtleButtonClasses,
   subtleButtonClasses,
   surfaceClasses,
   tableCellClasses,
@@ -286,7 +286,7 @@ export function ProductsPage() {
                       )}
                     </td>
                     <td className={tableCellClasses}>
-                      <span className="flex items-center justify-end gap-1.5">
+                      <span className="flex items-center justify-end gap-[11px]">
                         <button
                           className={subtleButtonClasses}
                           type="button"
@@ -295,20 +295,14 @@ export function ProductsPage() {
                         >
                           Duplicate
                         </button>
-                        <button
-                          className={destructiveSubtleButtonClasses}
-                          type="button"
-                          aria-label={`Delete ${productTitle(product)}`}
-                          ref={removal.trigger(product.key)}
-                          onClick={removal.ask(
-                            product.key,
-                            () => edit(removeProduct(content, product.key)),
-                            deletedNotice,
-                          )}
-                        >
-                          <ButtonIcon verb="delete" />
-                          Delete
-                        </button>
+                        <RemoveButton
+                          name={productTitle(product)}
+                          label={`Delete ${productTitle(product)}`}
+                          entryKey={product.key}
+                          removal={removal}
+                          notice={deletedNotice}
+                          onRemove={() => edit(removeProduct(content, product.key))}
+                        />
                       </span>
                     </td>
                   </tr>

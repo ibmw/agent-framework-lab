@@ -185,7 +185,7 @@ export function ChipListField({
               <span className={`${pillClasses} gap-1 pr-1 pl-2.5`}>
                 <span className="[overflow-wrap:anywhere]">{value}</span>
                 <button
-                  className="rounded-full px-1.5 text-admin-muted transition hover:bg-admin-canvas hover:text-admin-ink"
+                  className="rounded-full px-1.5 text-admin-muted transition hover:bg-admin-canvas hover:text-lab-error"
                   type="button"
                   aria-label={`Remove ${value}`}
                   ref={confirmRemoval ? removal.trigger(value) : undefined}

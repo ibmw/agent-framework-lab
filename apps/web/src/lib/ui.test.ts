@@ -8,6 +8,7 @@ import {
   buttonIcon,
   buttonVariantClasses,
   chipClasses,
+  destructiveButtonClasses,
   type FilterChipKind,
   fieldControlClasses,
   fieldRowClasses,
@@ -237,12 +238,19 @@ describe("the list item", () => {
   });
 
   it("warms the trash to the error ink on hover, and never while it is held", () => {
-    expect(itemEditButtonClasses).toContain("hover:bg-[#f6f7f8] hover:text-admin-ink");
+    expect(itemEditButtonClasses).toContain(
+      "enabled:hover:bg-[#f6f7f8] enabled:hover:text-admin-ink",
+    );
     expect(itemRemoveButtonClasses).toContain(
       "enabled:hover:border-[#c98676] enabled:hover:text-lab-error",
     );
     expect(itemRemoveButtonClasses).not.toMatch(/(^|\s)hover:/);
     expect(itemRemoveButtonClasses).toContain("disabled:cursor-not-allowed disabled:opacity-55");
+  });
+
+  it("fades a pencil whose row cannot open as the held trash fades, with no hover promising a press", () => {
+    expect(itemEditButtonClasses).toContain("disabled:cursor-not-allowed disabled:opacity-55");
+    expect(itemEditButtonClasses).not.toMatch(/(^|\s)hover:/);
   });
 
   it("fades an arrow at the end of the list as the held trash fades, with no hover promising a press", () => {
@@ -915,5 +923,262 @@ describe("the add form", () => {
     // (ADR 0074): the new-block page's parameters, a scenario's picker, a ticket's thread, the
     // results' tag form and the product's variants.
     expect(drawing).toHaveLength(5);
+  });
+});
+
+/**
+ * Every control the workspace writes a word on — each `<button>`, `<PrimaryAction>`, `<Link>`
+ * and `<a>` element — as its file and the runs of words it shows.
+ *
+ * Read off the source the way the field sweep above is: the opening tag is scanned past any `>`
+ * inside an attribute's braces or quotes, and its children, up to the first closing tag of the
+ * same name, are read for what a sighted reader may see written: the text between tags, and
+ * every string and template literal inside a `{…}` expression, a `${…}` slot taken out — so
+ * `{"Remove"}`, ``{`Remove ${name}`}`` and `{open ? "Save" : "Edit"}` all count. Nested tags'
+ * attributes, an identifier (`{confirmLabel}`) and words written inside JSX nested in an
+ * expression are not read.
+ */
+function buttonWordsOf(files: Record<string, string>): { path: string; runs: string[] }[] {
+  const found: { path: string; runs: string[] }[] = [];
+  for (const [path, source] of Object.entries(files)) {
+    const code = codeOf(source);
+    for (const match of code.matchAll(/<(button|PrimaryAction|Link|a)\b/g)) {
+      const tag = match[1];
+      const end = endOfTag(code, match.index ?? 0);
+      if (code[end - 2] === "/") {
+        continue;
+      }
+      const close = code.indexOf(`</${tag}>`, end);
+      found.push({ path, runs: runsOf(code.slice(end, close)) });
+    }
+  }
+  return found;
+}
+
+/** The index just past the `>` closing the tag that opens at `start`. */
+function endOfTag(code: string, start: number): number {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = start + 1; index < code.length; index += 1) {
+    const character = code[index];
+    if (quote !== null) {
+      if (character === quote) {
+        quote = null;
+      }
+    } else if (depth === 0 && (character === '"' || character === "'")) {
+      quote = character;
+    } else if (character === "{") {
+      depth += 1;
+    } else if (character === "}") {
+      depth -= 1;
+    } else if (character === ">" && depth === 0) {
+      return index + 1;
+    }
+  }
+  return code.length;
+}
+
+/** The text between tags, and the literals of every expression, each run's spaces collapsed. */
+function runsOf(children: string): string[] {
+  const runs: string[] = [];
+  let text = "";
+  const flush = (run: string) => {
+    const words = run.replaceAll(/\s+/g, " ").trim();
+    if (words !== "") {
+      runs.push(words);
+    }
+  };
+  let index = 0;
+  while (index < children.length) {
+    const character = children[index];
+    if (character === "<") {
+      flush(text);
+      text = "";
+      index = endOfTag(children, index);
+    } else if (character === "{") {
+      flush(text);
+      text = "";
+      index = literalsOf(children, index, flush);
+    } else {
+      text += character;
+      index += 1;
+    }
+  }
+  flush(text);
+  return runs;
+}
+
+/** Hands every string and template literal of the expression at `start` to `take`; its end. */
+function literalsOf(code: string, start: number, take: (literal: string) => void): number {
+  let depth = 0;
+  let index = start;
+  while (index < code.length) {
+    const character = code[index];
+    if (character === "{") {
+      depth += 1;
+    } else if (character === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index + 1;
+      }
+    } else if (character === '"' || character === "'" || character === "`") {
+      let literal = "";
+      index += 1;
+      while (index < code.length && code[index] !== character) {
+        if (code[index] === "\\") {
+          literal += code[index + 1] ?? "";
+          index += 2;
+        } else if (character === "`" && code.startsWith("${", index)) {
+          let slot = 0;
+          index += 1;
+          do {
+            if (code[index] === "{") {
+              slot += 1;
+            } else if (code[index] === "}") {
+              slot -= 1;
+            }
+            index += 1;
+          } while (index < code.length && slot > 0);
+        } else {
+          literal += code[index];
+          index += 1;
+        }
+      }
+      take(literal);
+    }
+    index += 1;
+  }
+  return code.length;
+}
+
+/** A run of words that begins with a row action's verb. */
+const ROW_VERB = /^(Edit|Remove|Delete)\b/;
+
+/** Every run, across the controls found, that writes a row action's verb, as `file: run`. */
+function writtenVerbs(controls: { path: string; runs: string[] }[]): string[] {
+  return controls.flatMap(({ path, runs }) =>
+    runs.filter((run) => ROW_VERB.test(run)).map((run) => `${path}: ${run}`),
+  );
+}
+
+/** A `ButtonIcon` drawn with the pencil, however the verb is quoted. */
+const PENCIL = /\bverb=\{?\s*["'`]edit["'`]/;
+
+/**
+ * The controls that keep their verb written, because they act on a whole page or card rather
+ * than on a row of it (ADR 0075): the order's and the product's header Delete, and the
+ * document editor's Remove in its card's footer.
+ */
+const PAGE_ACTIONS = [
+  "../routes/DocumentEditorPage.tsx: Remove",
+  "../routes/OrderEditorPage.tsx: Delete",
+  "../routes/ProductEditorPage.tsx: Delete",
+];
+
+describe("a row's Edit and Remove", () => {
+  const consumers = Object.fromEntries(
+    Object.entries(sources).filter(([path]) => path.endsWith(".tsx") && !path.includes(".test.")),
+  );
+  const controls = buttonWordsOf(consumers);
+
+  it("found the workspace's controls to sweep", () => {
+    // Asserted first: a glob or a pattern that matched nothing would make the case below pass.
+    expect(Object.keys(consumers).length).toBeGreaterThan(50);
+    expect(controls.length).toBeGreaterThan(100);
+    expect(controls.some(({ runs }) => runs.includes("Delete"))).toBe(true);
+    expect(controls.some(({ runs }) => runs.includes("Save"))).toBe(true);
+  });
+
+  it("writes its verb on no control but a page's own, the row's being an icon named by it", () => {
+    expect(writtenVerbs(controls).sort()).toEqual(PAGE_ACTIONS);
+  });
+
+  it("is drawn by the item's pencil and trash, and the red-bordered small weight by none", () => {
+    // The pencil glyph is `EditButton`'s alone; the bordered red at the small size is left to
+    // the one card-level Remove, so no row reaches for it again.
+    const pencil = Object.entries(consumers)
+      .filter(([, source]) => PENCIL.test(codeOf(source)))
+      .map(([path]) => path);
+    expect(pencil).toEqual(["../components/ItemList.tsx"]);
+    const smallRed = Object.entries(consumers)
+      .filter(([, source]) => /\bdestructiveSubtleButtonClasses\b/.test(codeOf(source)))
+      .map(([path]) => path);
+    expect(smallRed).toEqual(["../routes/DocumentEditorPage.tsx"]);
+  });
+
+  it("reads a written verb wherever a control can carry one, and a glyph as nothing", () => {
+    // Synthetic: the sweep has to be shown catching the ways a written verb comes back before
+    // its silence means anything. A template literal's slot is built rather than written.
+    const slot = (name: string) => ["$", "{", name, "}"].join("");
+    const controls = buttonWordsOf({
+      "a.tsx": [
+        '<button type="button" title="a > b" onClick={() => go(a > b)}>',
+        '  <ButtonIcon verb="delete" />',
+        "  Remove {variant.sku}",
+        "</button>",
+        '<button aria-label={label} onClick={() => edit(a)}><ButtonIcon verb="edit" /></button>',
+        '<PrimaryAction variant="accent">',
+        "  Edit",
+        "</PrimaryAction>",
+        "<button {...props} />",
+        '<button type="button">{confirmLabel}</button>',
+        '<button type="button">{"Remove"}</button>',
+        `<button type="button">{\`Delete ${slot("name")}\`}</button>`,
+        '<button type="button">{open ? "Save" : "Edit"}</button>',
+        '<Link to="/blocks/a">Edit</Link>',
+        '<a href="/x">Remove this</a>',
+        '<Link to="/blocks">All blocks</Link>',
+      ].join("\n"),
+    });
+    expect(controls.map(({ runs }) => runs)).toEqual([
+      ["Remove"],
+      [],
+      ["Edit"],
+      [],
+      ["Remove"],
+      ["Delete"],
+      ["Save", "Edit"],
+      ["Edit"],
+      ["Remove this"],
+      ["All blocks"],
+    ]);
+    expect(writtenVerbs(controls)).toEqual([
+      "a.tsx: Remove",
+      "a.tsx: Edit",
+      "a.tsx: Remove",
+      "a.tsx: Delete",
+      "a.tsx: Edit",
+      "a.tsx: Edit",
+      "a.tsx: Remove this",
+    ]);
+    for (const glyph of ['verb="edit"', "verb={'edit'}", 'verb={"edit"}', "verb={`edit`}"]) {
+      expect(PENCIL.test(`<ButtonIcon ${glyph} />`), glyph).toBe(true);
+    }
+    expect(PENCIL.test('<ButtonIcon verb="editor" />')).toBe(false);
+  });
+});
+
+/** WCAG's relative luminance of a `#rrggbb` colour. */
+function luminance(hex: string): number {
+  const [red, green, blue] = [1, 3, 5].map((start) => {
+    const channel = Number.parseInt(hex.slice(start, start + 2), 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+describe("the confirm's press", () => {
+  const token = (name: string) =>
+    new RegExp(`--color-${name}:\\s*(#[0-9a-f]{6})`).exec(themeSource)?.[1] ?? "";
+
+  it("is the solid warm red, its paper words readable at AA on it and on its hover", () => {
+    expect(destructiveButtonClasses).toContain("bg-lab-error text-lab-paper");
+    expect(destructiveButtonClasses).toContain("hover:bg-lab-error-hover");
+    const paper = luminance(token("lab-paper"));
+    for (const ground of ["lab-error", "lab-error-hover"]) {
+      const ratio = (paper + 0.05) / (luminance(token(ground)) + 0.05);
+      // 4.5:1 is AA for the press's 14px words, which are not large text.
+      expect(ratio, ground).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

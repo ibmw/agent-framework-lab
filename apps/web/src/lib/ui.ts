@@ -370,12 +370,10 @@ const smallButtonBaseClasses = `inline-flex min-h-8 items-center justify-center 
  * - **destructive**, **destructiveOutline** — the warm red, now reserved for what destroys
  *   something. Solid is the confirmation and the bordered weight is the control that asks for
  *   it, which is the pair the prototype draws.
- * - **destructiveSubtle** — an extension, not something the prototype draws: it removes an
- *   entry from a list, and the prototype draws those as a quiet `×` in `#6d7175` with a
- *   `title`. It is the same red-bordered weight at the small size, taken so that an entry-list
- *   Remove reads as destructive without growing to `min-h-10` and loosening list density.
- *   Whoever revisits that density is departing from the prototype either way, and should know
- *   which way this went.
+ * - **destructiveSubtle** — an extension, not something the prototype draws: the same
+ *   red-bordered weight at the small size, for a Remove that acts on a whole card rather than on
+ *   a row — the document editor's. A row's Remove is never this: it is the 30px trash below,
+ *   grey until hovered (ADR 0075).
  */
 const buttonVariants = {
   accent: `${buttonBaseClasses} bg-lab-primary text-lab-paper hover:bg-lab-primary-hover`,
@@ -445,9 +443,14 @@ export function itemClasses(editing: boolean): string {
   }`;
 }
 
-/** An item's 30px icon button: the pencil and the trash, bordered, muted until hovered. */
+/**
+ * An item's 30px icon button: the pencil and the trash, bordered, muted until hovered. Every
+ * row's Edit and Remove in the workspace is one of these, its verb in its accessible name and
+ * never drawn (ADR 0075).
+ */
 export const itemIconButtonClasses = `flex h-[30px] w-[30px] flex-none items-center justify-center rounded-lg border border-admin-quiet-border bg-admin-surface text-admin-muted transition ${focusRingClasses}`;
-export const itemEditButtonClasses = `${itemIconButtonClasses} hover:bg-[#f6f7f8] hover:text-admin-ink`;
+// A pencil whose row cannot open while another row is open fades as the held trash does.
+export const itemEditButtonClasses = `${itemIconButtonClasses} enabled:hover:bg-[#f6f7f8] enabled:hover:text-admin-ink disabled:cursor-not-allowed disabled:opacity-55`;
 // An arrow at the end of the list it cannot pass fades as the held trash does.
 export const itemMoveButtonClasses = `${itemIconButtonClasses} text-[14px] enabled:hover:bg-[#f6f7f8] enabled:hover:text-admin-ink disabled:cursor-not-allowed disabled:opacity-55`;
 // A held Remove fades as a secondary control refused for a reason does (ADR 0063), and loses

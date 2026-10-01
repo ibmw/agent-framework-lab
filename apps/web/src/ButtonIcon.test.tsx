@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ButtonIcon } from "./components/ButtonIcon";
 import { EditorSaveActions, EntryEditButtons } from "./components/WorkspaceChrome";
-import { type ButtonVerb, buttonIcon } from "./lib/ui";
+import { type ButtonVerb, buttonIcon, itemEditButtonClasses } from "./lib/ui";
 
 const VERBS = Object.keys(buttonIcon) as ButtonVerb[];
 
@@ -63,7 +63,7 @@ describe("the shared editor controls keep their names", () => {
     }
   });
 
-  it("keeps a row's Edit and Save named after the entry they act on", () => {
+  it("keeps a row's Edit and Save named after the entry they act on, the Edit a pencil", () => {
     const { rerender } = render(
       <EntryEditButtons
         label="the returns policy"
@@ -74,8 +74,12 @@ describe("the shared editor controls keep their names", () => {
       />,
     );
 
+    // The pencil an item draws: the verb is the name and the title, and nothing is written
+    // (ADR 0075).
     const edit = screen.getByRole("button", { name: "Edit the returns policy" });
-    expect(edit).toHaveTextContent("Edit");
+    expect(edit).toHaveTextContent(/^$/);
+    expect(edit).toHaveAttribute("title", "Edit the returns policy");
+    expect(edit.className).toBe(itemEditButtonClasses);
     expect(edit.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
 
     rerender(

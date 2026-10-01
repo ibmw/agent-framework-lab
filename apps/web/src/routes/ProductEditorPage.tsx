@@ -135,7 +135,6 @@ import {
 import {
   addFormClasses,
   destructiveOutlineButtonClasses,
-  destructiveSubtleButtonClasses,
   editorColumnsClasses,
   editorMainClasses,
   editorPanelClasses,
@@ -1248,7 +1247,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                     </GateFindingLine>
                   </td>
                   <td className={tableCellClasses}>
-                    <span className="flex items-center gap-1.5">
+                    <span className="flex items-center gap-[11px]">
                       <EntryEditButtons
                         label={variant.sku}
                         open={rowEdit !== null}
@@ -1266,19 +1265,13 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                         onCancel={() => editor.close()}
                       />
                       {rowEdit ? null : (
-                        <button
-                          className={destructiveSubtleButtonClasses}
-                          type="button"
-                          ref={removal.trigger(variant.sku)}
-                          onClick={removal.ask(
-                            variant.sku,
-                            drop,
-                            `Removed the variant ${variant.sku} from the draft.`,
-                          )}
-                        >
-                          <ButtonIcon verb="delete" />
-                          Remove {variant.sku}
-                        </button>
+                        <RemoveButton
+                          name={variant.sku}
+                          entryKey={variant.sku}
+                          removal={removal}
+                          notice={`Removed the variant ${variant.sku} from the draft.`}
+                          onRemove={drop}
+                        />
                       )}
                     </span>
                   </td>

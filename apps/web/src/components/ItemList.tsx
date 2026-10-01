@@ -89,14 +89,25 @@ export function ListItem({
   );
 }
 
-/** The 30px pencil, named "Edit {name}". */
+/**
+ * The 30px pencil, named "Edit {name}": every row's Edit in the workspace, on an item and on a
+ * saved row that opens where it stands (`EntryEditButtons`). The word is its accessible name and
+ * its `title`, never drawn (ADR 0075).
+ *
+ * `disabled` is the open row's sibling, which cannot open while another row is open; the line
+ * saying why is `describedBy`.
+ */
 export function EditButton({
   name,
   buttonRef,
+  disabled = false,
+  describedBy,
   onEdit,
 }: {
   name: string;
-  buttonRef: (element: HTMLButtonElement | null) => void;
+  buttonRef?: (element: HTMLButtonElement | null) => void;
+  disabled?: boolean;
+  describedBy?: string;
   onEdit: () => void;
 }) {
   return (
@@ -106,6 +117,8 @@ export function EditButton({
       className={itemEditButtonClasses}
       aria-label={`Edit ${name}`}
       title={`Edit ${name}`}
+      aria-describedby={describedBy}
+      disabled={disabled}
       onClick={onEdit}
     >
       <ButtonIcon verb="edit" />
@@ -145,6 +158,46 @@ export function MoveButton({
 }
 
 /**
+ * The 30px trash: every row's Remove in the workspace, and a catalog row's Delete. `label` is its
+ * accessible name and its `title`, never drawn (ADR 0075); grey until hovered, when the warm red
+ * says what it does — the confirm it asks for is the solid red.
+ *
+ * A held trash is natively disabled and says why in its `title` and in the line `describedBy`
+ * names (ADR 0063). `RemoveButton` is this asking twice; a row whose removal is one press draws
+ * it bare — a create page's row before Create (ADR 0060), and a ticket's unresolved suggested
+ * document, which unchecks a suggestion the shop no longer holds.
+ */
+export function TrashButton({
+  label,
+  held,
+  describedBy,
+  buttonRef,
+  onClick,
+}: {
+  label: string;
+  /** Why this entry cannot be removed, or nothing. */
+  held?: string;
+  describedBy?: string;
+  buttonRef?: (element: HTMLButtonElement | null) => void;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      className={itemRemoveButtonClasses}
+      aria-label={label}
+      title={held ?? label}
+      disabled={held !== undefined}
+      aria-describedby={held !== undefined ? describedBy : undefined}
+      onClick={onClick}
+    >
+      <ButtonIcon verb="delete" />
+    </button>
+  );
+}
+
+/**
  * The 30px trash, named "Remove {name}", asking twice where the preference says to (ADR 0060).
  * `label` replaces that name where a list names its entries otherwise: a background entry's
  * trash is "Remove the 2026-05-02 background entry", as its confirm and its notice name it.
@@ -163,25 +216,20 @@ export function RemoveButton({
   label?: string;
   entryKey: string;
   removal: Removal;
-  notice: string;
+  notice: string | null;
   /** Why this entry cannot be removed, or nothing. */
   held?: string;
   describedBy?: string;
   onRemove: () => void;
 }) {
   return (
-    <button
-      ref={removal.trigger(entryKey)}
-      type="button"
-      className={itemRemoveButtonClasses}
-      aria-label={label}
-      title={held ?? label}
-      disabled={held !== undefined}
-      aria-describedby={held !== undefined ? describedBy : undefined}
+    <TrashButton
+      label={label}
+      held={held}
+      describedBy={describedBy}
+      buttonRef={removal.trigger(entryKey)}
       onClick={removal.ask(entryKey, onRemove, notice)}
-    >
-      <ButtonIcon verb="delete" />
-    </button>
+    />
   );
 }
 

@@ -27,6 +27,7 @@ import {
 } from "../lib/ui";
 import { type PublicationRecord, publicationLabel } from "../lib/versions";
 import { ButtonIcon } from "./ButtonIcon";
+import { EditButton } from "./ItemList";
 import { PrimaryAction, type Refusal } from "./PrimaryAction";
 
 /**
@@ -476,9 +477,10 @@ export function GateCard({
  *
  * Shared by `EntryCard` and the variants table, so a row that is not a card is still opened,
  * saved and cancelled by the same three controls under the same three names. Each is named
- * after the row it acts on the way `RemoveButton` already is: the visible word stays short
- * and the accessible name says which entry, because a card holding six rows otherwise offers
- * six buttons called "Edit".
+ * after the row it acts on the way `RemoveButton` already is, because a card holding six rows
+ * otherwise offers six buttons called "Edit". The closed row's Edit is the item's 30px pencil,
+ * its verb in its name and never drawn (ADR 0075); the open row's Save and Cancel keep their
+ * words, because they are the row's form's answer and not an action on the row.
  */
 export function EntryEditButtons({
   label,
@@ -507,17 +509,12 @@ export function EntryEditButtons({
 }) {
   if (!open) {
     return (
-      <button
-        className={subtleButtonClasses}
-        type="button"
-        aria-label={`Edit ${label}`}
-        aria-describedby={blockedBy}
+      <EditButton
+        name={label}
         disabled={Boolean(blockedBy)}
-        onClick={onOpen}
-      >
-        <ButtonIcon verb="edit" />
-        Edit
-      </button>
+        describedBy={blockedBy}
+        onEdit={onOpen}
+      />
     );
   }
   return (
@@ -614,13 +611,14 @@ export function EntryCard({
         {chips}
         {/* While the row is open its Remove is gone: removing the entry being corrected is
             not one of the two answers the open row is asking for. */}
+        {/* The row's icons stand 11px apart, as an item's do (`ListItem`). */}
         {edit && !open ? (
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex items-center gap-[11px]">
             <EntryEditButtons {...edit} />
             {actions}
           </div>
         ) : actions && !open ? (
-          <div className="ml-auto flex items-center gap-1.5">{actions}</div>
+          <div className="ml-auto flex items-center gap-[11px]">{actions}</div>
         ) : null}
       </div>
       {open && edit ? (

@@ -22,6 +22,10 @@ field is shared (`FixedKeyField`). `useEntryEdit` leaves both, and its `units` g
 last consumer: what stays on `EntryCard` edit mode is the product's variants and a scenario's
 composed blocks.
 
+Amendment: 2026-10-01 — What stays on `EntryCard` draws the item's pencil and trash: the closed
+row's Edit is `EditButton`, its Remove `RemoveButton` or, one press, `TrashButton`, and a
+composed block's arrows `MoveButton`; the open row's Save and Cancel keep their words (ADR 0075).
+
 On 29 September 2026 the operator asked that the lists an editor edits with a form meet the
 pattern Shop details' *Payment methods* draws (ADR 0072), so that editing an entry is learned
 once. This records that pattern as the workspace's, what stays on `EntryCard`, and how the

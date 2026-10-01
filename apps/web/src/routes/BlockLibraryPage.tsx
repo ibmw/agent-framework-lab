@@ -12,6 +12,7 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
+import { TrashButton } from "../components/ItemList";
 import { ParameterForm } from "../components/ParameterForm";
 import { SearchField, SearchRow } from "../components/SearchField";
 import {
@@ -39,7 +40,6 @@ import { savedAsPreview } from "../lib/fieldPreviews";
 import { filterList } from "../lib/filters";
 import {
   accentButtonClasses,
-  destructiveSubtleButtonClasses,
   fieldControlClasses,
   formatTimestamp,
   neutralPillClasses,
@@ -435,17 +435,12 @@ function NewBlockPage<PayloadT extends BlockPayload>({
                   </>
                 }
                 actions={
-                  <button
-                    className={destructiveSubtleButtonClasses}
-                    type="button"
-                    aria-label={`Remove ${parameter.name}`}
+                  <TrashButton
+                    label={`Remove ${parameter.name}`}
                     onClick={() =>
                       setParameters((current) => withoutParameter(current, parameter.name))
                     }
-                  >
-                    <ButtonIcon verb="delete" />
-                    Remove
-                  </button>
+                  />
                 }
               />
             ))}

@@ -4,7 +4,14 @@ import { type ReactNode, useId, useRef, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { ConfirmRemove, RemovalNotice } from "./components/ConfirmRemove";
 import { FieldHint } from "./components/FieldHint";
-import { EditButton, ItemFormRow, ListItem, MoveButton, RemoveButton } from "./components/ItemList";
+import {
+  EditButton,
+  ItemFormRow,
+  ListItem,
+  MoveButton,
+  RemoveButton,
+  TrashButton,
+} from "./components/ItemList";
 import {
   formTitle,
   type ItemRefusal,
@@ -14,7 +21,13 @@ import {
   useItemForm,
 } from "./lib/itemForm";
 import { useRemoval } from "./lib/removal";
-import { fieldControlClasses } from "./lib/ui";
+import {
+  destructiveButtonClasses,
+  fieldControlClasses,
+  inkButtonClasses,
+  itemRemoveButtonClasses,
+  outlineButtonClasses,
+} from "./lib/ui";
 import {
   itemFormReason,
   METHOD_FORM_REASON,
@@ -258,6 +271,82 @@ describe("the list item", () => {
     await user.click(within(confirm).getByRole("button", { name: "Remove it" }));
     expect(screen.queryByText("Thirty days.")).toBeNull();
     expect(screen.getByText("Removed Returns.")).toHaveFocus();
+  });
+});
+
+describe("the trash and the confirm it asks for", () => {
+  it("is grey until hovered and writes no verb, the confirm's press the solid warm red", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const remove = screen.getByRole("button", { name: "Remove Returns" });
+    expect(remove).toHaveTextContent(/^$/);
+    expect(remove.className).toBe(itemRemoveButtonClasses);
+
+    await user.click(remove);
+    const confirm = screen.getByRole("group", { name: "Remove Returns?" });
+    // The warm red is destructive and nothing else: the press that removes, and not the way back.
+    expect(within(confirm).getByRole("button", { name: "Remove it" }).className).toBe(
+      destructiveButtonClasses,
+    );
+    expect(within(confirm).getByRole("button", { name: "Keep it" }).className).toBe(
+      outlineButtonClasses,
+    );
+  });
+
+  it("spends no red on a second press that destroys nothing", () => {
+    render(
+      <ConfirmRemove
+        title="Detach Ada from Northstar?"
+        consequence="The profile stays in the lab."
+        confirmLabel="Detach"
+        destroys={false}
+        onConfirm={() => {}}
+        onKeep={() => {}}
+      />,
+    );
+
+    const confirm = screen.getByRole("group", { name: "Detach Ada from Northstar?" });
+    const press = within(confirm).getByRole("button", { name: "Detach" });
+    expect(press.className).toBe(inkButtonClasses);
+    expect(press.querySelector("svg")).toBeNull();
+    expect(within(confirm).getByRole("button", { name: "Keep it" }).className).toBe(
+      outlineButtonClasses,
+    );
+    // Neither the ground nor the question reads as a removal.
+    expect(confirm.className).not.toMatch(/lab-error|#eab4ae/);
+    expect(screen.getByText("Detach Ada from Northstar?").className).not.toContain("lab-error");
+  });
+
+  it("removes in one press where the row asks once, and says why where it is held", async () => {
+    const user = userEvent.setup();
+    const pressed: string[] = [];
+    const { rerender } = render(
+      <TrashButton label="Remove severity" onClick={() => pressed.push("severity")} />,
+    );
+
+    const trash = screen.getByRole("button", { name: "Remove severity" });
+    expect(trash).toHaveAttribute("title", "Remove severity");
+    expect(trash).toHaveTextContent(/^$/);
+    await user.click(trash);
+    expect(pressed).toEqual(["severity"]);
+
+    rerender(
+      <>
+        <TrashButton
+          label="Remove severity"
+          held="A binding names it."
+          describedBy="why"
+          onClick={() => pressed.push("again")}
+        />
+        <p id="why">A binding names it.</p>
+      </>,
+    );
+    const held = screen.getByRole("button", { name: "Remove severity" });
+    expect(held).toBeDisabled();
+    expect(held).toHaveAttribute("title", "A binding names it.");
+    expect(held).toHaveAccessibleDescription("A binding names it.");
+    expect(pressed).toEqual(["severity"]);
   });
 });
 

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { RefusalLine } from "./components/PrimaryAction";
 import { EntryCard, EntryEditNotice, EntryId } from "./components/WorkspaceChrome";
 import { useEntryEdit } from "./lib/entryEdit";
+import { itemEditButtonClasses } from "./lib/ui";
 import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 
 interface Note {
@@ -215,6 +216,23 @@ describe("EntryCard edit mode", () => {
     // And the row opens on the saved entry again, not on what Cancel threw away.
     await user.click(screen.getByRole("button", { name: "Edit Returns" }));
     expect(screen.getByLabelText("Body")).toHaveValue("Thirty days.");
+  });
+
+  it("draws its Edit as the item's pencil, and the open row's Save and Cancel in words", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    // The row's action is an icon named by the row (ADR 0075)...
+    const edit = screen.getByRole("button", { name: "Edit Returns" });
+    expect(edit).toHaveTextContent(/^$/);
+    expect(edit.className).toBe(itemEditButtonClasses);
+
+    // ...and the open row's answer keeps its words: it is the row's form, not an action on it.
+    await user.click(edit);
+    expect(screen.getByRole("button", { name: "Save Returns" })).toHaveTextContent("Save");
+    expect(screen.getByRole("button", { name: "Cancel editing Returns" })).toHaveTextContent(
+      "Cancel",
+    );
   });
 
   it("holds one open row per list, and says why the others cannot be opened", async () => {

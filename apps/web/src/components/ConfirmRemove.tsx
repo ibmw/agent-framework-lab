@@ -3,6 +3,7 @@ import type { Removal } from "../lib/removal";
 import {
   destructiveButtonClasses,
   focusRingClasses,
+  inkButtonClasses,
   labNoteClasses,
   outlineButtonClasses,
 } from "../lib/ui";
@@ -45,7 +46,10 @@ export function ConfirmRemove({
   confirmRefusal?: string;
   /**
    * False where the second press takes nothing out of the lab — a detach leaves the profile
-   * whole — so it carries no trash glyph, which means *delete* on every button that has one.
+   * whole — so it carries no trash glyph, which means *delete* on every button that has one,
+   * and no warm red either, which is destructive and nothing else (ADR 0075): the panel is
+   * grey, the question in ink, and the press the forest `ink` weight, apart from *Keep it*'s
+   * outline without claiming the pine of the expected action.
    */
   destroys?: boolean;
   onConfirm: () => void;
@@ -76,9 +80,14 @@ export function ConfirmRemove({
       aria-labelledby={titleId}
       aria-describedby={consequenceId}
       onKeyDown={keyDown}
-      className={`m-0 grid min-w-0 gap-2.5 rounded-[10px] border border-[#eab4ae] bg-lab-error-soft px-[15px] py-[13px] ${focusRingClasses}`}
+      className={`m-0 grid min-w-0 gap-2.5 rounded-[10px] border px-[15px] py-[13px] ${
+        destroys ? "border-[#eab4ae] bg-lab-error-soft" : "border-admin-border bg-admin-canvas"
+      } ${focusRingClasses}`}
     >
-      <p id={titleId} className="text-[13px] font-bold text-lab-error [overflow-wrap:anywhere]">
+      <p
+        id={titleId}
+        className={`text-[13px] font-bold [overflow-wrap:anywhere] ${destroys ? "text-lab-error" : "text-admin-ink"}`}
+      >
         {title}
       </p>
       <div id={consequenceId} className="text-[12.5px] leading-[1.55] text-admin-ink-soft">
@@ -86,7 +95,7 @@ export function ConfirmRemove({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <button
-          className={destructiveButtonClasses}
+          className={destroys ? destructiveButtonClasses : inkButtonClasses}
           type="button"
           disabled={confirmRefusal !== undefined}
           title={confirmRefusal}

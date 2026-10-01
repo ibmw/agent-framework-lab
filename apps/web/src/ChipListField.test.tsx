@@ -106,6 +106,16 @@ describe("ChipListField", () => {
     expect(written.at(-1)).toEqual(["Charcoal"]);
   });
 
+  it("keeps its ✕ grey until hovered, then in the warm red a removal reads in (ADR 0075)", () => {
+    render(<Harness initial={["Charcoal"]} />);
+
+    const remove = group().getByRole("button", { name: "Remove Charcoal" });
+    expect(remove.className.split(" ")).toEqual(
+      expect.arrayContaining(["text-admin-muted", "hover:text-lab-error"]),
+    );
+    expect(remove.className).not.toContain("hover:text-admin-ink");
+  });
+
   it("says when it holds nothing", () => {
     render(<Harness />);
 
