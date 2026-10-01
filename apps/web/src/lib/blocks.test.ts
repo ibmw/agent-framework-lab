@@ -23,6 +23,9 @@ import {
   uniqueParameterName,
   withParameter,
 } from "./blocks";
+import blocksDomain from "../../../api/src/capability_lab/domain/blocks.py?raw";
+import contentDomain from "../../../api/src/capability_lab/domain/content.py?raw";
+import { SLUG_MAX_LENGTH } from "./entryIds";
 import { PARAMETER_LABEL_RULE } from "./fieldRules";
 
 function payload(
@@ -108,6 +111,30 @@ describe("identifiers", () => {
   it("keeps two parameters from sharing a name", () => {
     expect(uniqueParameterName("doc_ref", ["doc_ref"])).toBe("doc_ref_2");
     expect(uniqueParameterName("doc_ref", ["doc_ref", "doc_ref_2"])).toBe("doc_ref_3");
+  });
+
+  it("makes room for the suffix inside the identifier cap rather than running past it", () => {
+    // `require_identifier` keeps at most `MAX_SLUG_LENGTH` (64) characters.
+    expect(blocksDomain).toMatch(/_require_identifier\(self\.name, "block parameter name"\)/);
+    expect(contentDomain).toMatch(new RegExp(`^MAX_SLUG_LENGTH = ${SLUG_MAX_LENGTH}$`, "m"));
+    const atCap = `a${"b".repeat(SLUG_MAX_LENGTH - 1)}`;
+    const twin = uniqueParameterName(atCap, [atCap]);
+    expect(twin).toBe(`${atCap.slice(0, SLUG_MAX_LENGTH - 2)}_2`);
+    const taken = [atCap];
+    for (let count = 0; count < 9; count += 1) {
+      taken.push(uniqueParameterName(atCap, taken));
+    }
+    expect(taken.at(-1)).toBe(`${atCap.slice(0, SLUG_MAX_LENGTH - 3)}_10`);
+    const tenth = uniqueParameterName(atCap, taken);
+    expect(tenth).toBe(`${atCap.slice(0, SLUG_MAX_LENGTH - 3)}_11`);
+    for (const name of [twin, ...taken, tenth]) {
+      expect(name.length, name).toBeLessThanOrEqual(SLUG_MAX_LENGTH);
+    }
+    // A cut that would end on the separator drops it, so the name stays snake_case.
+    const underscored = `${"a".repeat(SLUG_MAX_LENGTH - 3)}_bc`;
+    expect(uniqueParameterName(underscored, [underscored])).toBe(
+      `${"a".repeat(SLUG_MAX_LENGTH - 3)}_2`,
+    );
   });
 });
 

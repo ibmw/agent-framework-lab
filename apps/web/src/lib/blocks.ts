@@ -7,6 +7,7 @@ import type {
   ObjectiveBlockPayloadSchema,
   ObjectiveEvidence,
 } from "@agent-lab/contracts";
+import { SLUG_MAX_LENGTH } from "./entryIds";
 import { BLOCK_PARAMETER_KIND, optionsOf } from "./enumLabels";
 import { PARAMETER_LABEL_RULE } from "./fieldRules";
 import type { ItemRefusal } from "./itemForm";
@@ -163,11 +164,18 @@ export function toSlug(value: string, fallback = "block"): string {
   );
 }
 
+/**
+ * `base`, or `base_2`, `base_3`… — the first no other parameter holds, and never longer than
+ * `require_identifier`'s cap (`MAX_SLUG_LENGTH`): the suffix is made room for by cutting the
+ * base, so a name at the cap with a twin stays a name the lab keeps.
+ */
 export function uniqueParameterName(base: string, taken: readonly string[]): string {
-  let candidate = base;
+  const clamp = (value: string, room: number) => value.slice(0, room).replace(/_+$/g, "");
+  let candidate = clamp(base, SLUG_MAX_LENGTH);
   let suffix = 2;
   while (taken.includes(candidate)) {
-    candidate = `${base}_${suffix}`;
+    const tail = `_${suffix}`;
+    candidate = `${clamp(base, SLUG_MAX_LENGTH - tail.length)}${tail}`;
     suffix += 1;
   }
   return candidate;
