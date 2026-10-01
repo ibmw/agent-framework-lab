@@ -410,11 +410,15 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
           setPreview(null);
-          setPreviewError(describeApiError(cause, "This setup could not be judged."));
           // A refusal of the setup — a version this shop does not publish, an arm version that
-          // is gone — is what a start would answer too, so Start says it. A preview that could
-          // not be reached says nothing about the setup, and refuses nothing.
+          // is gone — is what a start would answer too, so Start says it, and says it alone:
+          // two refusals with one cause are one sentence. A preview that could not be reached,
+          // or that failed on the lab's side, says nothing about the setup and refuses nothing,
+          // so only that failure is said above the form.
           const refused = cause instanceof LabApiError && cause.status < 500;
+          setPreviewError(
+            refused ? null : describeApiError(cause, "This setup could not be judged."),
+          );
           setJudged({ setup, refusal: refused ? cause.message : null });
         }
       });

@@ -1518,6 +1518,60 @@ describe("experiment setup", () => {
     expect(started).toHaveLength(0);
   });
 
+  it("says a refused preview's reason once, at Start, and not again above the form", async () => {
+    const user = userEvent.setup();
+    const gone = "agent configuration 1a2b3c4d has no published version 1";
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, () =>
+        HttpResponse.json(
+          { code: "agent_configuration_version_not_found", message: gone, request_id: "r" },
+          { status: 404 },
+        ),
+      ),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await nameAs(user, "Gone");
+    await chooseArm(user, 0, "cfg-atlas");
+
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start)).toEqual([gone]));
+    expect(screen.getAllByText(gone)).toHaveLength(1);
+    expect(screen.queryAllByRole("alert").map((alert) => alert.textContent)).not.toContain(gone);
+  });
+
+  it("says above the form that a preview failed on the lab's side, until one answers", async () => {
+    const user = userEvent.setup();
+    const failed = "The lab could not complete it.";
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, async ({ request }) => {
+        const body = (await request.json()) as { arms: { version: number }[] };
+        if (body.arms[0].version === 1) {
+          return HttpResponse.json(
+            { code: "internal_error", message: failed, request_id: "r" },
+            { status: 500 },
+          );
+        }
+        return HttpResponse.json(PREVIEW);
+      }),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await nameAs(user, "Unjudged");
+    await chooseArm(user, 0, "cfg-atlas");
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toContain(failed),
+    );
+    expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
+
+    const arm = screen.getByRole("group", { name: "Arm A" });
+    await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
+    await waitFor(() => expect(screen.queryByText(failed)).not.toBeInTheDocument());
+  });
+
   it("refuses nothing for a preview it could not reach, and leaves the start to answer", async () => {
     const user = userEvent.setup();
     server.use(
@@ -1562,16 +1616,13 @@ describe("experiment setup", () => {
     await scenarioChosen();
     await nameAs(user, "Gone");
     await chooseArm(user, 0, "cfg-atlas");
-    await waitFor(() =>
-      expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toContain(gone),
-    );
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start)).toEqual([gone]));
 
     const arm = screen.getByRole("group", { name: "Arm A" });
     await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
     await waitFor(() => expect(answered).toBeGreaterThan(0));
-    await waitFor(() =>
-      expect(screen.queryAllByRole("alert").map((alert) => alert.textContent)).not.toContain(gone),
-    );
+    await waitFor(() => expect(screen.queryByText(gone)).not.toBeInTheDocument());
     expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
   });
 
