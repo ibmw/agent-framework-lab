@@ -2248,6 +2248,25 @@ describe("the address book", () => {
     ]);
   });
 
+  it("hands focus to the new default's pencil, described as the default, after Make default", async () => {
+    const user = userEvent.setup();
+    currentProfile = { ...PROFILE_CONTENT, addresses: [PROFILE_CONTENT.addresses[0], OFFICE] };
+    const book = await openBook();
+
+    await user.click(
+      within(itemOf(book, "Office")).getByRole("button", {
+        name: "Make Office the default address",
+      }),
+    );
+
+    const pencil = within(itemOf(book, "Office")).getByRole("button", { name: "Edit Office" });
+    expect(pencil).toHaveFocus();
+    expect(pencil).toHaveAccessibleDescription("Default");
+    expect(
+      within(itemOf(book, "Home")).getByRole("button", { name: "Edit Home" }),
+    ).not.toHaveAccessibleDescription("Default");
+  });
+
   it("writes nothing on Cancel, and nothing typed in the form reaches Save draft", async () => {
     const user = userEvent.setup();
     const book = await openBook();

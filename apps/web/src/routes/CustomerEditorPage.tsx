@@ -741,6 +741,7 @@ function AddressBook({
   const focusAfterCommit = useFocusAfterCommit();
   const firstField = useRef<HTMLInputElement>(null);
   const reasonId = useId();
+  const defaultPillId = useId();
   const mode = form.editing === null ? "adding" : "editing";
   const resolved = resolvedAddress(form.fields, {
     recipient: form.editing === null ? content.display_name : undefined,
@@ -749,11 +750,15 @@ function AddressBook({
   const refusal = addressRefusal(resolved, mode);
   const marked = form.dirty ? refusal : null;
 
+  // *Make default* is not drawn on the default, so the press removes the button that had
+  // focus. Focus goes to the new default's pencil, the control that stays on the item it
+  // pressed, which the pill describes — so a reader hears the entry is now the default.
   function makeDefault(id: string) {
     edit({
       ...content,
       addresses: addresses.map((entry) => ({ ...entry, is_default: entry.id === id })),
     });
+    focusAfterCommit(() => editButtons.get(id));
   }
 
   function drop(id: string) {
@@ -837,7 +842,9 @@ function AddressBook({
                     name={entry.label}
                     id={entry.id}
                     detail={addressLine(entry)}
-                    tag={entry.is_default ? <DefaultPill /> : null}
+                    tag={
+                      entry.is_default ? <DefaultPill id={`${defaultPillId}-${entry.id}`} /> : null
+                    }
                     editing={form.editing === entry.id}
                   >
                     {entry.is_default ? null : (
@@ -854,6 +861,7 @@ function AddressBook({
                     <EditButton
                       name={entry.label}
                       buttonRef={editButtons.ref(entry.id)}
+                      describedBy={entry.is_default ? `${defaultPillId}-${entry.id}` : undefined}
                       onEdit={() => {
                         form.begin(entry.id, addressFields(entry));
                         focusAfterCommit(() => firstField.current);
@@ -922,9 +930,12 @@ function AddressBook({
 const ADDRESS_ENTRIES_HINT =
   "Exactly one is the default before the profile can publish; the first entry added becomes it.";
 
-function DefaultPill() {
+function DefaultPill({ id }: { id: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 self-center rounded-full bg-admin-published px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-published-ink">
+    <span
+      id={id}
+      className="inline-flex items-center gap-1.5 self-center rounded-full bg-admin-published px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-published-ink"
+    >
       <span aria-hidden>●</span> Default
     </span>
   );
