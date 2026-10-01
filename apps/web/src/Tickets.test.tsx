@@ -15,6 +15,8 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { SLUG_MAX_LENGTH } from "./lib/entryIds";
+import { tooLongMessage } from "./lib/fieldRules";
 import { stickyHeaderClasses } from "./lib/stickyHeader";
 import { TOURS, tourAt } from "./lib/tours";
 import { renderApp } from "./test/app";
@@ -734,6 +736,36 @@ describe("the create page", () => {
     expectRefused(createButton(), "T-204 is already used by a ticket in this shop.");
     await user.click(createButton());
     expect(createdTickets).toHaveLength(0);
+  });
+
+  it("refuses a reference an uppercased ß lengthened past the cap, on the field and on Create", async () => {
+    const user = userEvent.setup();
+    server.use(twoCustomers());
+    renderAt(`/shops/${SHOP_ID}/tickets/new`);
+    await screen.findByRole("option", { name: "Jonas Berg" });
+    const field = screen.getByLabelText("Reference");
+    await waitFor(() => expect(field).toHaveValue("T-205"));
+    await user.type(screen.getByLabelText("Subject"), "Late delivery");
+    await user.selectOptions(screen.getByLabelText("Customer"), SECOND_PROFILE_ID);
+
+    // `maxLength` stops the next keystroke only, and "ß" is "SS": one typed into the last free
+    // place ends one past the 64 `require_business_reference` keeps.
+    await user.clear(field);
+    await user.type(field, `${"T".repeat(SLUG_MAX_LENGTH - 1)}ß`);
+    expect(field).toHaveValue(`${"T".repeat(SLUG_MAX_LENGTH - 1)}SS`);
+    const refusal = tooLongMessage(SLUG_MAX_LENGTH + 1, SLUG_MAX_LENGTH);
+    expect(field).toBeInvalid();
+    expect(field).toHaveAccessibleDescription(new RegExp(refusal));
+    expectRefused(createButton(), refusal);
+    await user.click(createButton());
+    await submitWithoutPressing(createButton());
+    expect(createdTickets).toHaveLength(0);
+
+    // Typed, the field stops at the cap, and the ticket can be made.
+    await user.clear(field);
+    await user.type(field, "X".repeat(SLUG_MAX_LENGTH + 3));
+    expect(field).toHaveValue("X".repeat(SLUG_MAX_LENGTH));
+    expectNotRefused(createButton());
   });
 
   it("takes no reference until it knows which references are free", async () => {

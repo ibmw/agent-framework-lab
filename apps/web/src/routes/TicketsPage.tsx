@@ -12,7 +12,12 @@ import { SearchField, SearchRow } from "../components/SearchField";
 import { TicketStatusBadge } from "../components/TicketStatusBadge";
 import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
 import { nextReference, SLUG_MAX_LENGTH } from "../lib/entryIds";
-import { alreadyTakenMessage, REFERENCE_PATTERN, TICKET_REFERENCE_RULE } from "../lib/fieldRules";
+import {
+  alreadyTakenMessage,
+  REFERENCE_PATTERN,
+  TICKET_REFERENCE_RULE,
+  tooLongMessage,
+} from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import { channelLabel, originLabel } from "../lib/tickets";
@@ -250,7 +255,10 @@ export function NewTicketPage() {
             ? "The ticket needs a reference before it can be created."
             : taken.includes(reference)
               ? alreadyTakenMessage(reference, TICKET_REFERENCE_TAKEN_PLACE)
-              : undefined;
+              : // Only a value the page wrote or normalized can be this long.
+                reference.length > SLUG_MAX_LENGTH
+                ? tooLongMessage(reference.length, SLUG_MAX_LENGTH)
+                : undefined;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
