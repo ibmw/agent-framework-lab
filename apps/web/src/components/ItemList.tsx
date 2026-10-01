@@ -4,11 +4,13 @@ import type { Removal } from "../lib/removal";
 import {
   itemClasses,
   itemEditButtonClasses,
+  itemMoveButtonClasses,
   itemRemoveButtonClasses,
   outlineButtonClasses,
+  readOnlyValueClasses,
 } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
-import { FieldGroup } from "./FieldHint";
+import { FieldGroup, FieldHint } from "./FieldHint";
 import { PrimaryAction, RefusalLine } from "./PrimaryAction";
 
 /**
@@ -29,14 +31,19 @@ import { PrimaryAction, RefusalLine } from "./PrimaryAction";
  * read run-on. A detail may be drawn rather than written — an option's values as the chips
  * frame 2c draws — and stays one line of the item.
  *
- * An entry whose name *is* its key — a media reference — draws the name in monospace
- * (`monospace`) and no second key beside it (`id` left out).
+ * An entry whose name *is* its key — a media reference, a template's parameter — draws the
+ * name in monospace (`monospace`) and no second key beside it (`id` left out).
+ *
+ * `lead` stands before the name, as `EntryCard`'s does, for a control the list keeps on each
+ * entry that is neither Edit nor Remove and reads first: the default guideline's radio. It is
+ * the list's control, never the form's (ADR 0072), so it stays free while the form edits.
  */
 export function ListItem({
   name,
   id,
   detail,
   tag,
+  lead,
   multiline = false,
   monospace = false,
   editing,
@@ -46,6 +53,7 @@ export function ListItem({
   id?: string;
   detail: ReactNode;
   tag?: ReactNode;
+  lead?: ReactNode;
   multiline?: boolean;
   monospace?: boolean;
   editing: boolean;
@@ -53,6 +61,7 @@ export function ListItem({
 }) {
   return (
     <li className={itemClasses(editing)} aria-current={editing || undefined}>
+      {lead === undefined ? null : <div className="flex flex-none items-center">{lead}</div>}
       <div className="min-w-0 flex-[1_1_180px]">
         <div className="flex flex-wrap items-baseline gap-2">
           <span
@@ -105,6 +114,37 @@ export function EditButton({
 }
 
 /**
+ * A 30px arrow, named "Move {name} up" or "Move {name} down", for a list whose order is authored
+ * — a template's parameters, which a binding follows. It stands before the pencil, and the end
+ * of the list it cannot pass is a native `disabled`, as a secondary control's is (ADR 0063).
+ */
+export function MoveButton({
+  name,
+  direction,
+  disabled,
+  onMove,
+}: {
+  name: string;
+  direction: "up" | "down";
+  disabled: boolean;
+  onMove: () => void;
+}) {
+  const label = `Move ${name} ${direction}`;
+  return (
+    <button
+      type="button"
+      className={itemMoveButtonClasses}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onMove}
+    >
+      <span aria-hidden>{direction === "up" ? "↑" : "↓"}</span>
+    </button>
+  );
+}
+
+/**
  * The 30px trash, named "Remove {name}", asking twice where the preference says to (ADR 0060).
  * `label` replaces that name where a list names its entries otherwise: a background entry's
  * trash is "Remove the 2026-05-02 background entry", as its confirm and its notice name it.
@@ -142,6 +182,27 @@ export function RemoveButton({
     >
       <ButtonIcon verb="delete" />
     </button>
+  );
+}
+
+/**
+ * A key shown and fixed while its entry is edited: something else already names the entry by
+ * it — a variant chooses an option by its key, a configuration a guideline by its ID, a scenario
+ * a parameter by its name. Read-only rather than disabled, so it is still read and focusable.
+ */
+export function FixedKeyField({
+  label,
+  hint,
+  value,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+}) {
+  return (
+    <FieldHint label={label} hint={hint}>
+      <input className={`${readOnlyValueClasses} font-mono`} value={value} readOnly />
+    </FieldHint>
   );
 }
 

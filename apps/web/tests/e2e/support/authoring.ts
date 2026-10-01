@@ -23,7 +23,7 @@ export async function saveDraft(page: Page) {
  * A saved row of a list, opened where it stands, answered, and saved back into the draft.
  *
  * The lists that still open in place (`EntryCard` edit mode, ADR 0074's *What stays on
- * `EntryCard`*) — a scenario's composed objectives and mutations, among them — read their
+ * `EntryCard`*) — a scenario's composed objectives and mutations — read their
  * fields back until Edit opens them, and nothing typed there is in the draft until the row's
  * own Save, so a journey correcting a binding says both presses. A list edited in the form
  * below it is `editItem`.

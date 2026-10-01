@@ -312,6 +312,13 @@ export function capCount(count: number, max: number): string {
 }
 
 /**
+ * A template parameter's label, refused after the buttons of the form below *Typed parameters*
+ * while adding (`parameterRefusal` in `lib/blocks.ts`, ADR 0074): the identifier a scenario binds
+ * by is derived from it, so a label of nothing leaves nothing to derive. The workspace's words.
+ */
+export const PARAMETER_LABEL_RULE = "A parameter needs a label: its identifier is derived from it.";
+
+/**
  * `optional_parameter_without_default` in `_parameter_issues` (`domain/blocks.py`): a gate
  * **error** on a parameter that is not required and carries no default. `BlockParameter` stores
  * it, so the draft saves and publication is refused. The remedy is the gate's own, chosen by the
@@ -568,6 +575,18 @@ export const TONE_NAME_RULE =
 
 export const TONE_DEFAULT_REMOVAL_RULE =
   "The shop default cannot be deleted — point the default elsewhere first.";
+
+/**
+ * The guideline form's two other refusals, said after its buttons with the name's (ADR 0074,
+ * `toneRefusal` in `lib/toneGuidelines.ts`). `_require_slug(self.id, "tone-of-voice ID")` refuses
+ * an ID that is not lowercase kebab-case, which is asked only while adding: once the guideline
+ * exists a configuration names it by that ID, so it is fixed. `_require_text(self.guidance,
+ * "tone-of-voice guidance")` refuses guidance left empty. The workspace's words, not the lab's:
+ * neither is a gate finding, both are a 422 the save would otherwise meet.
+ */
+export const TONE_ID_RULE = "The ID must be lowercase with hyphens.";
+
+export const TONE_GUIDANCE_RULE = "A guideline needs its guidance.";
 
 /**
  * An order event's two refusals, said after the buttons of the form below *Order events*, adding

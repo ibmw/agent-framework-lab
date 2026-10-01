@@ -15,6 +15,13 @@ chip lists can be the field a rule marks; a field the form holds as a list is cl
 holds the values it was filled with; `useEntryEdit` and `EntryEditNotice` leave the product's
 four cards.
 
+Amendment: 2026-10-01 — The tone-of-voice guidelines and a template's parameters are on the
+pattern (*The guidelines and a template's parameters*, below), the last lists Milestone 10 names.
+The item gains a `lead` before its name and the list its arrows (`MoveButton`); the fixed key's
+field is shared (`FixedKeyField`). `useEntryEdit` leaves both, and its `units` goes with its
+last consumer: what stays on `EntryCard` edit mode is the product's variants and a scenario's
+composed blocks.
+
 On 29 September 2026 the operator asked that the lists an editor edits with a form meet the
 pattern Shop details' *Payment methods* draws (ADR 0072), so that editing an entry is learned
 once. This records that pattern as the workspace's, what stays on `EntryCard`, and how the
@@ -220,6 +227,57 @@ and stays on the item.
   `ConfirmRemove`. *Cancel* returning to an empty add form, focus on the Edit, is proven on all
   four.
 
+### The guidelines and a template's parameters
+
+- **Guidelines.** Each guideline is an item under *Voices* — the name, the *shop default* pill
+  beside it (`ListItem`'s `tag`), the ID, the guidance as the detail with its line breaks — and
+  the default's radio, "Make {name} the shop default", as the item's `lead`: a control the list
+  keeps on each entry that is neither Edit nor Remove and reads first, as `EntryCard`'s `lead`
+  did. The radio is the list's, never the form's, as the payment switch is (ADR 0072): it reads
+  the draft, which always holds a guideline's saved name, so it is free while the form holds an
+  edit — a nameless one included, where the open row refused it — and *Save changes* writes the
+  entry's own `is_default`, so an edit never moves the default; the first guideline added becomes
+  it. The default carries no trash: `TONE_DEFAULT_REMOVAL_RULE` stands where it would (*A refusal
+  that has a way out*). The one form, "Add a guideline" / "Edit {name}", asks *Name*, *ID* —
+  derived while adding (`DerivedIdField`, keyed by the form's `session`), shown and fixed while
+  editing, because an agent configuration names a guideline by it — and *Guidance*, and is
+  submitted by *Add tone of voice*, which keeps its name. Refused in order: the name empty
+  (`TONE_NAME_RULE`), the ID not kebab-case (`TONE_ID_RULE`) or another guideline's while adding,
+  then the guidance empty (`TONE_GUIDANCE_RULE`), where the add form left the ID to native
+  `pattern` and `required`, and the add form and the open row both refused an empty guidance only
+  natively, and one of spaces not at all. The fields and the builder are `lib/toneGuidelines.ts`;
+  both texts are stored stripped.
+- **A template's parameters.** Each parameter is an item under *Typed parameters*
+  (`Workspace.dc.html` :607) — the name in monospace with no second key, the kind (`EntryKind`)
+  and *bound same-shop* as its tag, and as the detail the description, the default where the kind
+  carries one and how a scenario binds it as `check_bindings` holds it (`bindingSentence`):
+  `binding_missing` is raised for a required parameter with no default and nothing else, whatever
+  the kind, so such a parameter reads "A scenario must bind this." (a reference "Always bound by
+  the scenario…"), one with a default "A scenario may leave it to the default.", and any other "A
+  scenario may leave it unbound." — with `optional_parameter_without_default`'s `GateFindingLine`
+  under them. ↑ and ↓ ("Move {name} up/down", unchanged) stand before the pencil at the icon
+  buttons' 30px (`MoveButton`, `itemMoveButtonClasses`), natively disabled at the end they cannot
+  pass, because the order is authored; they are free while the form edits any parameter. The one
+  form, "Add a parameter" / "Edit {name}", asks what the add form and the open row asked between
+  them: *Label* — derived to an identifier with its "Saved as" line while adding, shown and fixed
+  while editing, because a scenario binds by it — *Kind*, *Description* and *Default* (both
+  optional) and the checkbox that writes `required`, now named "A scenario must bind this, unless
+  the template gives a default", which is what `required` holds a scenario to; the gate's finding
+  under it as before (ADR 0063's lab amendment), naming the parameter only once a label is typed
+  while adding. Edit moves focus to *Kind*, the first field the form asks while editing. Refused,
+  adding only: the template's cap (`PARAMETERS_FULL`, which marks no field), then an empty label
+  (`PARAMETER_LABEL_RULE`); an edit asks nothing the lab refuses. The labels "Kind of {name}",
+  "Description of {name}" and "Default of {name}" give way to the form's own. `ParameterForm`
+  stays the new-block page's; `withParameter` and `parameterRefusal` in `lib/blocks.ts` are the
+  editor's, and `parameterEntry` stores the description and the default stripped, a default of
+  only spaces as none.
+- **The parameter's kind, requiredness and default are one unit through a discard** without
+  `units`: the form follows the entry whole while clean and keeps all it holds while dirty, so a
+  kind never follows the record under a default typed for another, and no reference reaches the
+  draft with a default.
+- **`useEntryEdit` loses `units`.** Its one consumer left, so the hook follows field by field
+  again; the variants table and a scenario's composed blocks declared no unit.
+
 ## Departures
 
 - `form-decisions.md` 8.2's open row is superseded for the converted lists, as above.
@@ -279,6 +337,25 @@ and stays on the item.
   last rating chosen: the form's blank is the one place it starts.
 - A review's body stays one line, as the add form and the open row asked it.
 
+- The prototype's *Make default* button on a guideline (`Workspace.dc.html` :1926–1928) stays
+  the radio, the operator's decision of 29 September 2026.
+- The prototype draws a parameter as a read-only item of name, kind and *same-shop*
+  (:611–616); the item carries the description, the default, the binding, the arrows, the pencil
+  and the trash, and the form below authors it.
+- The guidelines' row label, *Voices*, and both forms' hints are the slice's own; the prototype
+  draws none. *Typed parameters* keeps the prototype's label, and its hint says what the arrows
+  do rather than the prototype's sentence about same-shop bindings, which the card's line says.
+- The guideline's guidance and the ID are refused before the press, in the line after the
+  buttons, where the add form left the ID to native validation, and the add form and the open
+  row refused an empty guidance only natively, and one of spaces not at all.
+- A required parameter with a default reads "A scenario may leave it to the default." on its
+  item, an optional one with none "A scenario may leave it unbound.", as does a reference that is
+  not required, and the checkbox says "unless the template gives a default", where the open row
+  said a scenario must bind it: `check_bindings` lets a scenario leave each of them unbound.
+- A guideline typed in the form is unsaved work the prompt names, where the add form was not
+  (ADR 0051's *a half-typed create form is not unsaved work*): the form below a list is one form
+  for adding and editing, and ADR 0074 decided it registers either way.
+
 ## Consequences
 
 - It amends ADR 0069's width for the order line's quantity: the quantity left the table's narrow
@@ -323,10 +400,40 @@ and stays on the item.
   the add form, and `sticky-header` adds a review through it, whose *Add review* stays in view
   at the foot of the page.
 - `useEntryEdit` leaves the product's options, media, attributes and reviews; the product's
-  variants, the tone-of-voice guidelines and a template's parameters (until Slice 39), and a
-  scenario's composed objectives and mutations keep it. Its `units` keeps a consumer in a
-  template's parameters, whose kind, requiredness and default follow as one unit
-  (`BlockEditorPage.tsx`, `Blocks.test.tsx`).
+  variants, the tone-of-voice guidelines and a template's parameters (until the third amendment,
+  above, and *The guidelines and a template's parameters*), and a scenario's composed objectives
+  and mutations keep it. Its `units` keeps a consumer in a template's parameters, whose kind,
+  requiredness and default follow as one unit (`BlockEditorPage.tsx`, `Blocks.test.tsx`), until
+  that same amendment.
+
+- The accessible names that moved with the guidelines and the parameters: the open rows' forms
+  "Edit {name}" (now groups of the same name), their "Save {name}" and "Cancel editing {name}"
+  (now *Save changes* and *Cancel*), "Kind of {name}", "Description of {name}" and "Default of
+  {name}" (now the form's *Kind*, *Description (optional)* and *Default (optional)*), the
+  checkbox "A scenario must bind this" (now "A scenario must bind this, unless the template gives
+  a default", which no spec reaches), the item's binding line for a required parameter with a
+  default (now "A scenario may leave it to the default.") and for an optional parameter with none
+  and a reference that is not required (now "A scenario may leave it unbound."), the editor's
+  form "Add a parameter" (now a group of that name; the new-block page's form keeps it), the
+  guideline add form's unnamed form (now the group "Add a guideline"), every guideline's and
+  parameter's visible *Remove* (now the trash, its name kept), the line "Editing {name}. Save or
+  Cancel before opening another row" (gone), and the paragraph under the guidelines (now
+  *Voices*' hint). "Make {name} the shop default", "Move {name} up/down", "Edit {name}", "Remove
+  {name}", *Name*, *ID*, *Guidance*, *Label*, *Kind*, *Add tone of voice*, *Add parameter* and
+  the card's "Guidelines" kept their names. Specs touched: `block-library` (the form a group,
+  `editRow` become `editItem`, *Description* and *Default* by their own labels, and a parameter
+  moved up before it is given a default), `scenario-authoring` and `experiment-start` (the
+  parameters through `editItem`, their composed blocks still on `editRow`), and `sticky-header`
+  (its tour step's pane, below). `agent-configuration`, `shop-publication`, `ticket-authoring`,
+  `tour-anchors` and the other journeys that fill a guideline's *ID*, *Name* and *Guidance* and
+  press *Add tone of voice* were not touched.
+- `sticky-header`'s tour step "taller than the room under the header" read its premise off the
+  Guidelines card's height, which compact items shrink. The card is now mostly its form, and at
+  1280×720 it outgrew the room by some 80px; the test sets a 1280×560 pane, so the premise is the
+  test's own rather than a margin the form's next field could take away.
+- `useEntryEdit` keeps two consumers, the variants table and a scenario's composed blocks, and
+  loses `units`, with its `EntryCard.test.tsx` case and the sentence ADR 0051's amendment gave
+  it.
 
 ## Verification
 
@@ -386,3 +493,29 @@ and stays on the item.
   the Edit; leaves nothing typed in *New value* behind a *Cancel*, a *Save changes* or another
   option's Edit; and asks nothing when an option is loaded and left untouched before leaving,
   as *Duplicate* does not either (*deleting and duplicating a product*).
+- `lib/toneGuidelines.test.ts`: every combination of the guideline form's broken fields refused
+  with the first in the order it asks, the ID only while adding, one another guideline holds
+  and one past the cap; both texts stored stripped. `lib/blocks.test.ts`: the cap before the
+  label while adding, nothing asked of an edit, and every field the form asks added under a
+  derived name, stored stripped. `ItemList.test.tsx`: a lead before the name, and arrows named
+  by the entry before the pencil, the end they cannot pass disabled. `lib/ui.test.ts`: the
+  arrows' class set.
+- `App.test.tsx`, *a tone-of-voice guideline's own rules*: a guideline loaded with its ID fixed
+  and focus on *Name*, its guidance reworded and saved where it stands, the radio still naming
+  the default; the edit form's rules walked in the order its controls stand
+  (`expectRulesInFieldOrder`); the ID refused after the name and before the guidance while
+  adding; the radio free while the form holds a nameless edit, moving the default, and an edit
+  never moving it back; *Cancel* emptying the form with focus on the Edit; an untouched guideline
+  saved leaving the draft clean; a typed guideline asked about before leaving. The open-row
+  cases of *editing a saved entry in place* and *unsaved work is protected* that read the
+  guidelines read a variant's row instead.
+- `Blocks.test.tsx`: each parameter's item read back, its controls in order; a parameter loaded
+  with its name fixed and focus on *Kind*, saved where it stands; an empty label refused in
+  field order (`expectRulesInFieldOrder`) and a blank form unmarked; the cap refusing an
+  addition, marking nothing, and leaving an edit free; ↑ on one item while the form edits
+  another, the edit kept and saved after the move; *Cancel* and an untouched *Save changes*
+  writing nothing; the prompt for a typed and an edited parameter; the removal emptying the
+  form. *Objective block editor* and *mutation block editor*: the finding on the item and in the
+  form; a description and a default given while adding; and the Discard pair — a dirty form
+  keeping its kind, requiredness and default, a clean one following the lab's reference whole —
+  each proving no reference reaches the draft with a default.

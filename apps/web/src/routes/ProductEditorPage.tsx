@@ -14,7 +14,13 @@ import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroup, FieldGroupHint, FieldHint, FieldRows } from "../components/FieldHint";
 import { GateFindingLine } from "../components/GateFindingLine";
-import { EditButton, ItemFormRow, ListItem, RemoveButton } from "../components/ItemList";
+import {
+  EditButton,
+  FixedKeyField,
+  ItemFormRow,
+  ListItem,
+  RemoveButton,
+} from "../components/ItemList";
 import { PrimaryAction } from "../components/PrimaryAction";
 import { ProductDeleteConfirm } from "../components/ProductDeleteConfirm";
 import {
@@ -136,7 +142,6 @@ import {
   fieldControlClasses,
   fieldLabelClasses,
   outlineButtonClasses,
-  readOnlyValueClasses,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -718,15 +723,6 @@ function OptionValuesField({
       refusedBy={refusedBy}
       onChange={onChange}
     />
-  );
-}
-
-/** A key shown and fixed while its entry is edited: something else already names the entry by it. */
-function FixedKeyField({ label, hint, value }: { label: string; hint: string; value: string }) {
-  return (
-    <FieldHint label={label} hint={hint}>
-      <input className={`${readOnlyValueClasses} font-mono`} value={value} readOnly />
-    </FieldHint>
   );
 }
 

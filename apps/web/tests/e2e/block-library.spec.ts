@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createBlock, createShop, editRow } from "./support/authoring";
+import { createBlock, createShop, editItem } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -56,22 +56,27 @@ test("an author publishes an objective block the whole lab can bind", async ({ p
     .fill("Passes when the arm reads the bound document through its tool before the run ends.");
 
   const parameters = card(page, "Parameters");
-  const addParameter = parameters.getByRole("form", { name: "Add a parameter" });
+  const addParameter = parameters.getByRole("group", { name: "Add a parameter" });
 
   // A document reference is bound by the scenario, so the template cannot default it.
   await expect(parameters.getByText("bound same-shop")).toBeVisible();
-  await editRow(parameters, "doc_ref", async (row) => {
-    await expect(row.getByLabel("Default of doc_ref")).toHaveCount(0);
-    await row.getByLabel("Description of doc_ref").fill("The document the arm must read.");
+  await editItem(parameters, "doc_ref", async (form) => {
+    await expect(form.getByLabel("Default (optional)", { exact: true })).toHaveCount(0);
+    await form
+      .getByLabel("Description (optional)", { exact: true })
+      .fill("The document the arm must read.");
   });
 
   await addParameter.getByLabel("Label", { exact: true }).fill("severity");
   await addParameter.getByLabel("Kind", { exact: true }).selectOption("severity");
   await addParameter.getByRole("button", { name: "Add parameter" }).click();
-  await editRow(parameters, "severity", async (row) => {
-    await row.getByLabel("Default of severity").selectOption("required");
-    await row
-      .getByLabel("Description of severity")
+  // The order is authored: moved up on its item, then loaded into the form and given a default.
+  await parameters.getByRole("button", { name: "Move severity up", exact: true }).click();
+  await expect(parameters.getByRole("listitem").first()).toContainText("severity");
+  await editItem(parameters, "severity", async (form) => {
+    await form.getByLabel("Default (optional)", { exact: true }).selectOption("required");
+    await form
+      .getByLabel("Description (optional)", { exact: true })
       .fill("Whether missing the read fails the objective or only warns.");
   });
 
@@ -115,12 +120,12 @@ test("a mutation block cannot be published until it says when it fires", async (
     .fill("Mutates the bound entity out of band so the arm's next write hits a conflict.");
 
   const parameters = card(page, "Parameters");
-  const addParameter = parameters.getByRole("form", { name: "Add a parameter" });
+  const addParameter = parameters.getByRole("group", { name: "Add a parameter" });
   await addParameter.getByLabel("Label", { exact: true }).fill("entity_ref");
   await addParameter.getByLabel("Kind", { exact: true }).selectOption("entity_reference");
   await addParameter.getByRole("button", { name: "Add parameter" }).click();
-  await editRow(parameters, "entity_ref", async (row) => {
-    await row.getByLabel("Description of entity_ref").fill("The order that moves.");
+  await editItem(parameters, "entity_ref", async (form) => {
+    await form.getByLabel("Description (optional)", { exact: true }).fill("The order that moves.");
   });
   await saveDraft(page);
 
@@ -132,9 +137,11 @@ test("a mutation block cannot be published until it says when it fires", async (
   await addParameter.getByLabel("Label", { exact: true }).fill("timing");
   await addParameter.getByLabel("Kind", { exact: true }).selectOption("timing");
   await addParameter.getByRole("button", { name: "Add parameter" }).click();
-  await editRow(parameters, "timing", async (row) => {
-    await row.getByLabel("Default of timing").fill("after_first_read");
-    await row.getByLabel("Description of timing").fill("When the runtime injects it.");
+  await editItem(parameters, "timing", async (form) => {
+    await form.getByLabel("Default (optional)", { exact: true }).fill("after_first_read");
+    await form
+      .getByLabel("Description (optional)", { exact: true })
+      .fill("When the runtime injects it.");
   });
   await saveDraft(page);
 

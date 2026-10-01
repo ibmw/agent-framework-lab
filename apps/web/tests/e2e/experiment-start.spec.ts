@@ -6,6 +6,7 @@ import {
   createJudge,
   createScenario,
   createShop,
+  editItem,
   editRow,
 } from "./support/authoring";
 import { expect as baseExpect, test } from "./support/e2e";
@@ -254,9 +255,9 @@ async function publishTemplates(page: Page, objective: string, judged: string, m
   await objectiveTemplate
     .getByLabel("Description", { exact: true })
     .fill("Passes when the arm reads the bound document through its tool before the run ends.");
-  await editRow(card(page, "Parameters"), "doc_ref", async (row) => {
-    await row
-      .getByLabel("Description of doc_ref", { exact: true })
+  await editItem(card(page, "Parameters"), "doc_ref", async (form) => {
+    await form
+      .getByLabel("Description (optional)", { exact: true })
       .fill("The shop document the arm has to read.");
   });
   await saveDraft(page);
@@ -293,16 +294,16 @@ async function publishTemplates(page: Page, objective: string, judged: string, m
     .getByLabel("Description", { exact: true })
     .fill("Mutates the bound entity out of band, bumping the version the arm holds.");
   const mutationParameters = card(page, "Parameters");
-  await editRow(mutationParameters, "entity_ref", async (row) => {
-    await row
-      .getByLabel("Description of entity_ref", { exact: true })
+  await editItem(mutationParameters, "entity_ref", async (form) => {
+    await form
+      .getByLabel("Description (optional)", { exact: true })
       .fill("The order that moves under the arm.");
   });
-  await editRow(mutationParameters, "timing", async (row) => {
-    await row
-      .getByLabel("Description of timing", { exact: true })
+  await editItem(mutationParameters, "timing", async (form) => {
+    await form
+      .getByLabel("Description (optional)", { exact: true })
       .fill("When the runtime injects the mutation.");
-    await row.getByLabel("Default of timing", { exact: true }).fill("after_first_read");
+    await form.getByLabel("Default (optional)", { exact: true }).fill("after_first_read");
   });
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();

@@ -102,28 +102,24 @@ export interface EntryEditor<FieldsT extends object> {
 }
 
 /**
- * The open fields moved onto what the list now holds, unit by unit: a unit the operator has not
- * touched since the row last followed takes the entry's values, and a unit they typed in keeps
- * all of its typing. A unit is one top-level key unless the list declares keys that only make
- * sense together (`EntryEditSource.units`) — a parameter's kind, requiredness and default, where
- * following the kind under a typed default would build a parameter the form cannot correct.
- * A variant's chosen values are one key, so one moved choice holds all of them.
+ * The open fields moved onto what the list now holds, key by key: a top-level key the operator
+ * has not touched since the row last followed takes the entry's value, and a key they typed in
+ * keeps its typing. A variant's chosen values are one key, so one moved choice holds all of them.
+ *
+ * A list whose fields only make sense together — a template parameter's kind, requiredness and
+ * default — is not edited here: it moved to the form below its list (ADR 0074), which follows
+ * the entry whole while clean and keeps all it holds while dirty.
  */
 function follow<FieldsT extends object>(
   fields: FieldsT,
   origin: FieldsT,
   current: FieldsT,
-  units: readonly (readonly string[])[],
 ): FieldsT {
   const typed = fields as Record<string, unknown>;
   const was = origin as Record<string, unknown>;
   const now = current as Record<string, unknown>;
-  const untouched = (key: string) =>
-    (units.find((unit) => unit.includes(key)) ?? [key]).every((member) =>
-      sameValue(typed[member], was[member]),
-    );
   return Object.fromEntries(
-    Object.keys(now).map((key) => [key, untouched(key) ? now[key] : typed[key]]),
+    Object.keys(now).map((key) => [key, sameValue(typed[key], was[key]) ? now[key] : typed[key]]),
   ) as FieldsT;
 }
 
@@ -135,11 +131,6 @@ export interface EntryEditSource<EntryT, FieldsT> {
   labelOf: (entry: EntryT) => string;
   /** The open form an entry fills, as the list holds that entry now. */
   fieldsOf: (entry: EntryT) => FieldsT;
-  /**
-   * Fields that follow the entry only together: a unit with any field typed in keeps what the
-   * row holds for every field of it. Absent, each field is its own unit.
-   */
-  units?: readonly (readonly (keyof FieldsT & string)[])[];
 }
 
 /**
@@ -158,8 +149,7 @@ export interface EntryEditSource<EntryT, FieldsT> {
  *   would render stale fields and disable every sibling's Edit behind a notice naming an entry
  *   that is gone.
  * - Every field the operator has not typed in — all of them, in a row opened and left alone, or
- *   typed back to what it opened on — takes the entry's value as the list now holds it, unless
- *   it shares a declared unit with a field that was typed in. A field
+ *   typed back to what it opened on — takes the entry's value as the list now holds it. A field
  *   left on its old value would show what the draft no longer says, and the row's Save would
  *   write it back over the discard.
  * - A field the operator typed in keeps the typing. The page's Discard undoes what the page's
@@ -175,7 +165,7 @@ export interface EntryEditSource<EntryT, FieldsT> {
  */
 export function useEntryEdit<EntryT, FieldsT extends object>(
   entries: readonly EntryT[],
-  { keyOf, labelOf, fieldsOf, units = [] }: EntryEditSource<EntryT, FieldsT>,
+  { keyOf, labelOf, fieldsOf }: EntryEditSource<EntryT, FieldsT>,
 ): EntryEditor<FieldsT> {
   const [state, setState] = useState<{ id: string; fields: FieldsT; origin: FieldsT } | null>(null);
 
@@ -189,7 +179,7 @@ export function useEntryEdit<EntryT, FieldsT extends object>(
   const moved = state !== null && current !== null && !sameValue(current, state.origin);
   const followed =
     state !== null && moved && current !== null
-      ? follow(state.fields, state.origin, current, units)
+      ? follow(state.fields, state.origin, current)
       : (state?.fields ?? null);
   const open: OpenRow<FieldsT> | null =
     state === null || held === undefined || followed === null
@@ -203,10 +193,10 @@ export function useEntryEdit<EntryT, FieldsT extends object>(
       setState((now) =>
         now === null
           ? now
-          : { ...now, fields: follow(now.fields, now.origin, current, units), origin: current },
+          : { ...now, fields: follow(now.fields, now.origin, current), origin: current },
       );
     }
-  }, [stale, moved, current, units]);
+  }, [stale, moved, current]);
 
   useRegisterUnsavedWork(
     open === null

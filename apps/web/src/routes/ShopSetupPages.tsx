@@ -1,12 +1,18 @@
 import type { ToneOfVoiceSchema } from "@agent-lab/contracts";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { ButtonIcon } from "../components/ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
-import { Field, FieldRows } from "../components/FieldHint";
+import { Field, FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
+import {
+  EditButton,
+  FixedKeyField,
+  ItemFormRow,
+  ListItem,
+  RemoveButton,
+} from "../components/ItemList";
 import { LocaleField } from "../components/LocaleField";
-import { PrimaryAction, type Refusal, RefusalLine } from "../components/PrimaryAction";
+import type { Refusal } from "../components/PrimaryAction";
 import { SetupChecklist } from "../components/SetupChecklist";
 import { ShopLogoCard } from "../components/ShopLogoCard";
 import { ToggleChipGroup } from "../components/ToggleChipGroup";
@@ -14,36 +20,43 @@ import {
   Card,
   DefaultToneChip,
   EditorSaveActions,
-  EntryCard,
-  EntryEditNotice,
-  EntryId,
-  EntryText,
   PageHeader,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { SLUG_MAX_LENGTH, slugify, uniqueSuggestion } from "../lib/entryIds";
 import { optionsOf, SUPPORT_CHANNEL } from "../lib/enumLabels";
 import {
   alreadyTakenMessage,
   DERIVED_KEBAB_RULE,
-  KEBAB_PATTERN,
   SHOP_NAME_RULE,
   SHOP_SLUG_DETAIL_RULE,
   SHOP_SLUG_TAKEN_PLACE,
   TONE_DEFAULT_REMOVAL_RULE,
-  TONE_NAME_RULE,
 } from "../lib/fieldRules";
-import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
+import {
+  formTitle,
+  type ItemFormWords,
+  refusedProps,
+  useEditButtons,
+  useFocusAfterCommit,
+  useItemForm,
+} from "../lib/itemForm";
+import { pythonStrip } from "../lib/pythonText";
+import { consequenceOf, findingClauses, useRemoval } from "../lib/removal";
 import { unsoldCurrencyFindings } from "../lib/setupChecklist";
 import {
-  addFormClasses,
-  destructiveSubtleButtonClasses,
+  BLANK_TONE,
+  TONE_TAKEN_PLACE,
+  type ToneFields,
+  toneEntry,
+  toneFields,
+  toneRefusal,
+} from "../lib/toneGuidelines";
+import {
   editorColumnsClasses,
   editorMainClasses,
   editorPanelClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   textAreaClasses,
 } from "../lib/ui";
 import { HELD_VALUE_REASON, useRegisterUnsavedWork } from "../lib/unsavedWork";
@@ -108,110 +121,6 @@ function SetupPage({
           />
         </div>
       </div>
-    </>
-  );
-}
-
-/**
- * The entry's name belongs in the accessible name, not in the visible label: a policy may be
- * titled a paragraph long, and a button that renders it stretches the row it sits on. Every
- * other editor in the workspace already names its Remove this way.
- */
-function RemoveButton({
-  label,
-  removal,
-  entryKey,
-  notice,
-  onRemove,
-}: {
-  label: string;
-  /** The list's second press (ADR 0060), and the key this row is armed under. */
-  removal: Removal;
-  entryKey: string;
-  /** What the list's notice line says once the entry has gone. */
-  notice: string;
-  onRemove: () => void;
-}) {
-  return (
-    <button
-      className={destructiveSubtleButtonClasses}
-      type="button"
-      aria-label={`Remove ${label}`}
-      ref={removal.trigger(entryKey)}
-      onClick={removal.ask(entryKey, onRemove, notice)}
-    >
-      <ButtonIcon verb="delete" />
-      Remove
-    </button>
-  );
-}
-
-/**
- * A tone of voice's authored fields, and the one function that turns them into the entry the
- * draft stores.
- *
- * The add form holds the fields, the edit mode holds the fields, and both hand them to the
- * same builder with the entry's identifier beside them — which is what keeps the two paths
- * from drifting into two shapes of the same payload. The identifier is the builder's first
- * argument rather than one of the fields because it is derived once, when the entry is
- * created, and an edit hands back the one the entry already has.
- */
-interface ProseFields {
-  name: string;
-  text: string;
-}
-
-function toneEntry(id: string, fields: ProseFields & { is_default: boolean }): ToneOfVoiceSchema {
-  return { id, name: fields.name, guidance: fields.text, is_default: fields.is_default };
-}
-
-/**
- * The name-and-prose pair that four of this page's six kinds are — a policy, an FAQ entry, a
- * support guideline, a tone of voice — under the four different pairs of words they wear.
- *
- * The add form and the edit mode render this same component, so the control that takes a
- * policy body is one control with one set of rules rather than two that happen to look alike.
- * `beside` is what shares the first row: the derived ID on an add form, which an edit mode
- * never shows because it never asks.
- */
-function ProseFieldset({
-  nameLabel,
-  textLabel,
-  columns = "sm:grid-cols-2",
-  value,
-  onChange,
-  beside,
-}: {
-  nameLabel: string;
-  textLabel: string;
-  columns?: string;
-  value: ProseFields;
-  onChange: (next: ProseFields) => void;
-  beside?: ReactNode;
-}) {
-  return (
-    <>
-      <div className={`grid gap-2 ${columns}`}>
-        <label className={fieldLabelClasses}>
-          {nameLabel}
-          <input
-            className={`${fieldControlClasses} w-full`}
-            value={value.name}
-            required
-            onChange={(event) => onChange({ ...value, name: event.target.value })}
-          />
-        </label>
-        {beside}
-      </div>
-      <label className={fieldLabelClasses}>
-        {textLabel}
-        <textarea
-          className={`${textAreaClasses} w-full`}
-          value={value.text}
-          required
-          onChange={(event) => onChange({ ...value, text: event.target.value })}
-        />
-      </label>
     </>
   );
 }
@@ -403,43 +312,54 @@ export function ShopIdentityPage() {
   );
 }
 
+const TONE_WORDS: ItemFormWords = { form: "Guidelines", entry: "a guideline", record: "draft" };
+
+const TONE_ID_FIXED_HINT =
+  "Set when the guideline was added. An agent configuration names it by this ID as an override.";
+
 /**
- * The muted line that stands where the shop default's Remove would: a refusal with a way out,
+ * The muted line that stands where the shop default's trash would: a refusal with a way out,
  * rather than a refused action, so not the validation weight (`docs/design-direction.md`, *A
  * refusal that has a way out names the way out*).
  */
-const wayOutLineClasses = "text-xs text-admin-muted";
+const wayOutLineClasses = "max-w-[26ch] text-xs text-admin-muted";
 
+/**
+ * The shop's guidelines, as items, and the one form that adds a guideline or edits the one
+ * chosen (ADR 0074). The default's radio is the item's lead and the list's control, never the
+ * form's (ADR 0072): it reads the draft, which always holds a guideline's saved name, so it is
+ * free while the form holds an edit — a nameless one included — and an edit never moves the
+ * default. The ID is fixed while editing, because a configuration names a guideline by it.
+ */
 export function ToneOfVoicePage() {
   const { shopId, content, edit } = useShopWorkspace();
-  const [tone, setTone] = useState<{ id: string } & ProseFields>({ id: "", name: "", text: "" });
-  const takenToneIds = content.tone_of_voice_guidelines.map((entry) => entry.id);
-  const toneEditor = useEntryEdit(content.tone_of_voice_guidelines, {
-    keyOf: (entry) => entry.id,
-    labelOf: (entry) => entry.name,
-    fieldsOf: (entry): ProseFields => ({ name: entry.name, text: entry.guidance }),
+  const guidelines = content.tone_of_voice_guidelines;
+  const ids = guidelines.map((entry) => entry.id);
+  const guidelineOf = (id: string) =>
+    guidelines.find((entry) => entry.id === id) as ToneOfVoiceSchema;
+  const nameOf = (id: string) => guidelines.find((entry) => entry.id === id)?.name ?? id;
+  const form = useItemForm<ToneFields>({
+    blank: BLANK_TONE,
+    ids,
+    words: TONE_WORDS,
+    nameOf,
+    formOf: (id) => toneFields(guidelineOf(id)),
+    typedOf: (fields) => fields.name,
   });
-  const toneNotice = useId();
-  const toneSuggested = uniqueSuggestion(slugify(tone.name, ""), takenToneIds);
-  const toneRemoval = useRemoval(shopId);
-
-  /**
-   * One cause, two refusals, one sentence each place it bites.
-   *
-   * A guideline with no name can neither be committed nor be made the shop default, and the
-   * open row is where both refusals meet: its Save and its default radio are described by the
-   * same line, because it is the same fact about the same row. The add form has a line of its
-   * own for the same reason it has a button of its own.
-   */
-  const openRefusalId = useId();
-  const addRefusalId = useId();
-  const addNameless = tone.name.trim() === "";
-  const openNameless = toneEditor.open !== null && toneEditor.open.fields.name.trim() === "";
+  const removal = useRemoval(shopId);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const nameInput = useRef<HTMLInputElement>(null);
+  const reasonId = useId();
+  const refusal = toneRefusal(form.fields, ids, form.editing);
+  // A blank form is refused and says why, but marks nothing until something is in it.
+  const marked = form.dirty ? refusal : null;
+  const suggested = uniqueSuggestion(slugify(pythonStrip(form.fields.name), ""), ids);
 
   function setDefault(id: string) {
     edit({
       ...content,
-      tone_of_voice_guidelines: content.tone_of_voice_guidelines.map((entry) => ({
+      tone_of_voice_guidelines: guidelines.map((entry) => ({
         ...entry,
         is_default: entry.id === id,
       })),
@@ -447,196 +367,195 @@ export function ToneOfVoicePage() {
     });
   }
 
+  function drop(id: string) {
+    edit({ ...content, tone_of_voice_guidelines: guidelines.filter((entry) => entry.id !== id) });
+  }
+
+  function submit() {
+    if (refusal !== null) {
+      return;
+    }
+    const editing = form.editing;
+    if (editing !== null) {
+      // An edit that changed nothing writes nothing, so the draft stays as clean as it was.
+      if (form.dirty) {
+        edit({
+          ...content,
+          tone_of_voice_guidelines: guidelines.map((entry) =>
+            entry.id === editing
+              ? // `is_default` is the radio's answer on the item, never the form's: an edit to
+                // the wording must not move the shop default.
+                toneEntry(entry.id, form.fields, entry.is_default)
+              : entry,
+          ),
+        });
+      }
+      focusAfterCommit(() => editButtons.get(editing));
+    } else {
+      edit({
+        ...content,
+        tone_of_voice_guidelines: [
+          ...guidelines,
+          // The first guideline is the default: a shop with one has no other to point at.
+          toneEntry(form.fields.id, form.fields, guidelines.length === 0),
+        ],
+      });
+    }
+    form.reset();
+  }
+
+  function cancel() {
+    const editing = form.editing;
+    form.reset();
+    if (editing !== null) {
+      focusAfterCommit(() => editButtons.get(editing));
+    }
+  }
+
   return (
     <SetupPage title="Tone of voice">
       <Card title="Guidelines">
-        <ul className="grid gap-2 text-[13px]">
-          {content.tone_of_voice_guidelines.map((entry) => {
-            // The radio answers for the row in front of the operator, so while that row is
-            // open it reads the *typed* name rather than the saved one: a guideline being
-            // renamed to nothing is a guideline that cannot be the default, and the radio
-            // that would make it one says so instead of writing it.
-            const namelessHere = toneEditor.isOpen(entry.id) && openNameless;
-            const drop = () =>
-              edit({
-                ...content,
-                tone_of_voice_guidelines: content.tone_of_voice_guidelines.filter(
-                  (item) => item.id !== entry.id,
-                ),
-              });
-            if (toneRemoval.isArmed(entry.id)) {
-              return (
-                <ConfirmRemove
-                  key={entry.id}
-                  as="li"
-                  title={`Remove the guideline “${entry.name}”?`}
-                  consequence={consequenceOf(
-                    "An agent configuration that names it as an override will be naming a guideline the shop's next published version does not have.",
-                    findingClauses([
-                      content.tone_of_voice_guidelines.length === 1
-                        ? "shop_without_tone_of_voice"
-                        : entry.is_default && "tone_of_voice_without_default",
-                    ]),
-                    "Nothing is written until you save the draft, and a published shop version keeps it.",
-                  )}
-                  onConfirm={toneRemoval.confirm(
-                    drop,
-                    `Removed the guideline “${entry.name}” from the draft.`,
-                  )}
-                  onKeep={toneRemoval.keep}
-                />
-              );
+        <FieldRows>
+          <FieldGroup
+            label="Voices"
+            hint={
+              <>
+                Agent configurations resolve the shop default through{" "}
+                <code>{"{{shop.tone_of_voice}}"}</code> or name another as an override. The radio is
+                the only control that moves the default; an edit never does.
+              </>
             }
-            return (
-              <EntryCard
-                key={entry.id}
-                lead={
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="default-tone"
-                      checked={entry.is_default}
-                      disabled={namelessHere}
-                      title={namelessHere ? TONE_NAME_RULE : undefined}
-                      aria-describedby={namelessHere ? openRefusalId : undefined}
-                      onChange={() => setDefault(entry.id)}
-                    />
-                    <span className="sr-only">Make {entry.name} the shop default</span>
-                  </label>
-                }
-                title={entry.name}
-                chips={
-                  <>
-                    <EntryId value={entry.id} />
-                    {entry.is_default ? <DefaultToneChip /> : null}
-                  </>
-                }
-                edit={entryEdit(
-                  toneEditor,
-                  toneNotice,
-                  entry.id,
-                  (fields) =>
-                    edit({
-                      ...content,
-                      tone_of_voice_guidelines: content.tone_of_voice_guidelines.map((item) =>
-                        item.id === entry.id
-                          ? // `is_default` is the radio's answer on the row above, never the
-                            // form's: an edit to the wording must not move the shop default.
-                            toneEntry(entry.id, { ...fields, is_default: entry.is_default })
-                          : item,
-                      ),
-                    }),
-                  (value, onChange) => (
-                    <>
-                      <ProseFieldset
-                        nameLabel="Name"
-                        textLabel="Guidance"
-                        columns="sm:grid-cols-1"
-                        value={value}
-                        onChange={onChange}
-                      />
-                      {value.name.trim() === "" ? (
-                        <RefusalLine id={openRefusalId}>{TONE_NAME_RULE}</RefusalLine>
-                      ) : null}
-                    </>
-                  ),
-                  (value) =>
-                    value.name.trim() === "" ? { id: openRefusalId, reason: TONE_NAME_RULE } : true,
-                )}
-                actions={
-                  // The shop default has no Remove at all: deleting it would leave the draft
-                  // owing `tone_of_voice_without_default` with no control on this page to pay
-                  // it, so where the button would stand the row says what to do instead. The
-                  // prototype writes the refusal in exactly that place (`Workspace.dc.html`
-                  // :1897) rather than as a Remove that argues with itself.
-                  entry.is_default ? (
-                    <p className={wayOutLineClasses}>{TONE_DEFAULT_REMOVAL_RULE}</p>
-                  ) : (
-                    <RemoveButton
-                      label={entry.name}
-                      removal={toneRemoval}
-                      entryKey={entry.id}
-                      notice={`Removed the guideline “${entry.name}” from the draft.`}
-                      onRemove={drop}
-                    />
-                  )
-                }
-              >
-                <EntryText label="Guidance" value={entry.guidance} />
-              </EntryCard>
-            );
-          })}
-          {content.tone_of_voice_guidelines.length === 0 ? (
-            <li className="text-admin-muted">No tone-of-voice guideline yet.</li>
-          ) : null}
-        </ul>
-        <EntryEditNotice id={toneNotice} label={toneEditor.open?.label ?? null} />
-        <RemovalNotice removal={toneRemoval} />
-        <form
-          className={addFormClasses}
-          onSubmit={(event) => {
-            event.preventDefault();
-            // `required` on the Name input already refuses an empty one — the browser and
-            // jsdom both run `reportValidity()` before the submit fires — so the door this
-            // closes is a name of nothing but spaces, which `required` is satisfied by and
-            // `require_label` then refuses with a 422 (`not value.strip()`). The button
-            // reports the same rule, and the handler holds it for a submit reached any
-            // other way.
-            if (!tone.id || addNameless || takenToneIds.includes(tone.id)) {
-              return;
-            }
-            edit({
-              ...content,
-              tone_of_voice_guidelines: [
-                ...content.tone_of_voice_guidelines,
-                toneEntry(tone.id, {
-                  ...tone,
-                  is_default: content.tone_of_voice_guidelines.length === 0,
-                }),
-              ],
-            });
-            setTone({ id: "", name: "", text: "" });
-          }}
-        >
-          <ProseFieldset
-            nameLabel="Name"
-            textLabel="Guidance"
-            value={tone}
-            onChange={(next) => setTone({ ...tone, ...next })}
-            beside={
+          >
+            <div className="grid gap-2">
+              {guidelines.length > 0 ? (
+                <ul className="flex flex-col gap-2">
+                  {guidelines.map((entry) => {
+                    const notice = `Removed the guideline “${entry.name}” from the draft.`;
+                    if (removal.isArmed(entry.id)) {
+                      return (
+                        <ConfirmRemove
+                          key={entry.id}
+                          as="li"
+                          title={`Remove the guideline “${entry.name}”?`}
+                          consequence={consequenceOf(
+                            "An agent configuration that names it as an override will be naming a guideline the shop's next published version does not have.",
+                            findingClauses([
+                              guidelines.length === 1
+                                ? "shop_without_tone_of_voice"
+                                : entry.is_default && "tone_of_voice_without_default",
+                            ]),
+                            "Nothing is written until you save the draft, and a published shop version keeps it.",
+                          )}
+                          onConfirm={removal.confirm(() => drop(entry.id), notice)}
+                          onKeep={removal.keep}
+                        />
+                      );
+                    }
+                    return (
+                      <ListItem
+                        key={entry.id}
+                        lead={
+                          <label className="flex items-center">
+                            <input
+                              type="radio"
+                              name="default-tone"
+                              checked={entry.is_default}
+                              onChange={() => setDefault(entry.id)}
+                            />
+                            <span className="sr-only">Make {entry.name} the shop default</span>
+                          </label>
+                        }
+                        name={entry.name}
+                        tag={entry.is_default ? <DefaultToneChip /> : undefined}
+                        id={entry.id}
+                        detail={entry.guidance}
+                        multiline
+                        editing={form.editing === entry.id}
+                      >
+                        <EditButton
+                          name={entry.name}
+                          buttonRef={editButtons.ref(entry.id)}
+                          onEdit={() => {
+                            form.begin(entry.id, toneFields(entry));
+                            focusAfterCommit(() => nameInput.current);
+                          }}
+                        />
+                        {/* The shop default has no trash at all: deleting it would leave the
+                            draft owing `tone_of_voice_without_default` with no control on this
+                            page to pay it, so where the trash would stand the item says what to
+                            do instead, as the prototype writes it (`Workspace.dc.html` :1897). */}
+                        {entry.is_default ? (
+                          <p className={wayOutLineClasses}>{TONE_DEFAULT_REMOVAL_RULE}</p>
+                        ) : (
+                          <RemoveButton
+                            name={entry.name}
+                            entryKey={entry.id}
+                            removal={removal}
+                            notice={notice}
+                            onRemove={() => drop(entry.id)}
+                          />
+                        )}
+                      </ListItem>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-[13px] text-admin-muted">No tone-of-voice guideline yet.</p>
+              )}
+              <RemovalNotice removal={removal} />
+            </div>
+          </FieldGroup>
+          <ItemFormRow
+            title={formTitle(form.editing, nameOf, TONE_WORDS.entry)}
+            hint="The name and guidance can change later; the ID is fixed once the guideline is added."
+            editing={form.editing !== null}
+            addLabel="Add tone of voice"
+            refusal={refusal}
+            reasonId={reasonId}
+            onSubmit={submit}
+            onCancel={cancel}
+          >
+            <FieldHint label="Name">
+              <input
+                ref={nameInput}
+                className={`${fieldControlClasses} w-full`}
+                value={form.fields.name}
+                placeholder="Warm and precise"
+                {...refusedProps(marked, "name", reasonId)}
+                onChange={(event) => form.update({ name: event.target.value })}
+              />
+            </FieldHint>
+            {form.editing !== null ? (
+              <FixedKeyField label="ID" hint={TONE_ID_FIXED_HINT} value={form.fields.id} />
+            ) : (
+              // Keyed by the form's session, so the field's own memory of having been edited
+              // never outlives the guideline it was typed for.
               <DerivedIdField
+                key={form.session}
                 label="ID"
                 hint={DERIVED_KEBAB_RULE}
-                value={tone.id}
-                suggested={toneSuggested.value}
-                taken={takenToneIds}
-                takenBase={toneSuggested.takenBase}
-                takenPlace="in the draft"
-                pattern={KEBAB_PATTERN}
+                value={form.fields.id}
+                suggested={suggested.value}
+                takenBase={suggested.takenBase}
+                takenPlace={TONE_TAKEN_PLACE}
+                monospace
                 maxLength={SLUG_MAX_LENGTH}
-                title={DERIVED_KEBAB_RULE}
-                required
-                onChange={(id) => setTone({ ...tone, id })}
+                refusedBy={marked?.field === "id" ? reasonId : undefined}
+                onChange={(id) => form.update({ id })}
               />
-            }
-          />
-          <PrimaryAction
-            variant="accent"
-            className="justify-self-start"
-            type="submit"
-            refusal={addNameless ? { id: addRefusalId, reason: TONE_NAME_RULE } : null}
-          >
-            <ButtonIcon verb="create" />
-            Add tone of voice
-          </PrimaryAction>
-          {addNameless ? <RefusalLine id={addRefusalId}>{TONE_NAME_RULE}</RefusalLine> : null}
-        </form>
-        <p className="text-xs text-admin-muted">
-          Agent configurations resolve the shop default through{" "}
-          <code>{"{{shop.tone_of_voice}}"}</code> or select a named override. Renaming a guideline
-          never moves the shop default: it is a pointer, and the radio on the row is the only
-          control that moves it.
-        </p>
+            )}
+            <div className="col-span-full">
+              <FieldHint label="Guidance">
+                <textarea
+                  className={`${textAreaClasses} w-full`}
+                  value={form.fields.guidance}
+                  {...refusedProps(marked, "guidance", reasonId)}
+                  onChange={(event) => form.update({ guidance: event.target.value })}
+                />
+              </FieldHint>
+            </div>
+          </ItemFormRow>
+        </FieldRows>
       </Card>
     </SetupPage>
   );

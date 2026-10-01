@@ -584,7 +584,7 @@ export function EntryCard({
   edit,
   children,
 }: {
-  /** A control that selects the entry, such as the default-tone radio. */
+  /** A control that selects the entry; a list edited in its card's form takes `ListItem`'s. */
   lead?: ReactNode;
   title: ReactNode;
   /**

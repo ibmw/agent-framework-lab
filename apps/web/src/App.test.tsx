@@ -33,6 +33,8 @@ import {
   SHOP_NAME_RULE,
   SHOP_SLUG_DETAIL_RULE,
   TONE_DEFAULT_REMOVAL_RULE,
+  TONE_GUIDANCE_RULE,
+  TONE_ID_RULE,
   TONE_NAME_RULE,
   TRANSIT_WINDOW_RULE,
   VARIANT_SKU_RENAME_RULE,
@@ -2663,21 +2665,21 @@ describe("editing a saved entry in place", () => {
 
   it("says nothing in the open row reaches the draft, and Cancel proves it", async () => {
     const user = userEvent.setup();
-    // Read on tone of voice since the three document collections left their rows for a page
-    // of their own (PLAN-UX Slice 16). Edit in place is the same component either way.
-    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    // Read on a product's variants since the tone-of-voice guidelines moved to the form below
+    // their list (ADR 0074, PLAN-UX Slice 39): the variants table is the shop's list that still
+    // opens in place.
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
 
-    const tone = within(await screen.findByRole("region", { name: "Guidelines" }));
-    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
-    const open = within(tone.getByRole("form", { name: "Edit Warm and precise" }));
-    await user.clear(open.getByLabelText("Name"));
-    await user.type(open.getByLabelText("Name"), "Not this");
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.selectOptions(variants.getByLabelText("Size for NS-ASJ-OB-M"), "L");
 
     // The draft is untouched, so the page still reports itself as saved.
     expect(screen.getByText("All changes saved")).toBeInTheDocument();
-    await user.click(open.getByRole("button", { name: "Cancel editing Warm and precise" }));
+    await user.click(variants.getByRole("button", { name: "Cancel editing NS-ASJ-OB-M" }));
 
-    expect(tone.getByText("Warm and precise")).toBeVisible();
+    expect(variants.queryByLabelText("Size for NS-ASJ-OB-M")).toBeNull();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
     expect(savedDrafts).toEqual([]);
   });
 });
@@ -3522,6 +3524,17 @@ describe("a tone-of-voice guideline's own rules", () => {
     return screen.findByRole("region", { name: "Guidelines" });
   }
 
+  /** A guideline's item, by the name it is drawn under. */
+  function itemNamed(tone: ReturnType<typeof within>, name: string): HTMLElement {
+    const item = tone
+      .getAllByRole("listitem")
+      .find((candidate: HTMLElement) => within(candidate).queryByText(name, { exact: true }));
+    if (item === undefined) {
+      throw new Error(`No item for ${name}`);
+    }
+    return item;
+  }
+
   function shopRail() {
     return within(screen.getByLabelText("Shop workspace"));
   }
@@ -3561,38 +3574,233 @@ describe("a tone-of-voice guideline's own rules", () => {
     expect(tone.getByText("brief", { selector: "code" })).toBeVisible();
   });
 
-  it("refuses to save or to default a guideline renamed to nothing, from one line", async () => {
+  it("leaves the default's radio free while the form holds a nameless edit, and an edit never moves the default", async () => {
     const user = userEvent.setup();
     currentContent = twoGuidelines();
     renderAt(`/shops/${SHOP_ID}/setup/tone`);
     const tone = within(await guidelines());
 
     await user.click(tone.getByRole("button", { name: "Edit Brief" }));
-    const open = within(tone.getByRole("form", { name: "Edit Brief" }));
-    await user.clear(open.getByLabelText("Name"));
+    const form = within(tone.getByRole("group", { name: "Edit Brief" }));
+    await user.clear(form.getByLabelText("Name"));
 
-    const save = tone.getByRole("button", { name: "Save Brief" });
+    const save = form.getByRole("button", { name: "Save changes" });
     expectRefused(save, TONE_NAME_RULE);
-    expect(save).toHaveAttribute("title", TONE_NAME_RULE);
-    expect(save).toHaveAccessibleDescription(TONE_NAME_RULE);
+    expect(form.getByLabelText("Name")).toHaveAttribute("aria-invalid", "true");
 
-    // The same fact refusing the other thing this row can do. The radio answers for the row
-    // in front of the operator, and that row is now called nothing — so it is refused here
-    // rather than moving the default onto the name still saved underneath the form.
+    // The radio is the list's, never the form's (ADR 0072): it reads the draft, which still
+    // holds "Brief", so the nameless edit refuses nothing on it.
     const radio = tone.getByRole("radio", { name: "Make Brief the shop default" });
-    expect(radio).toBeDisabled();
-    expect(radio).toHaveAccessibleDescription(TONE_NAME_RULE);
-    // Two refusals, one cause, one sentence: both controls point at the row's single line.
-    expect(open.getAllByText(TONE_NAME_RULE)).toHaveLength(1);
-    // The other row is not the one being renamed, so its own default radio still works.
+    expect(radio).toBeEnabled();
+    expect(radio).not.toHaveAccessibleDescription(TONE_NAME_RULE);
+    await user.click(radio);
+    expect(within(itemNamed(tone, "Brief")).getByText("shop default")).toBeVisible();
+    expect(within(itemNamed(tone, "Warm and precise")).queryByText("shop default")).toBeNull();
+    // The form kept the edit it was holding.
+    expect(
+      within(tone.getByRole("group", { name: "Edit Brief" })).getByLabelText("Name"),
+    ).toHaveValue("");
+
+    await user.type(form.getByLabelText("Name"), "Brief and plain");
+    expectNotRefused(form.getByRole("button", { name: "Save changes" }));
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    // And the edit never moved it back: `is_default` is the radio's answer, never the form's.
+    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
+    await user.type(
+      within(tone.getByRole("group", { name: "Edit Warm and precise" })).getByLabelText("Guidance"),
+      " Always.",
+    );
+    await user.click(tone.getByRole("button", { name: "Save changes" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().tone_of_voice_guidelines).toStrictEqual([
+      {
+        ...READY_CONTENT.tone_of_voice_guidelines[0],
+        is_default: false,
+        guidance: `${READY_CONTENT.tone_of_voice_guidelines[0].guidance} Always.`,
+      },
+      { ...BRIEF, name: "Brief and plain", is_default: true },
+    ]);
+  });
+
+  it("loads a guideline into the form with its ID fixed, and saves it where it stands", async () => {
+    const user = userEvent.setup();
+    currentContent = twoGuidelines();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+
+    const pencil = tone.getByRole("button", { name: "Edit Warm and precise" });
+    await user.click(pencil);
+    expect(itemNamed(tone, "Warm and precise")).toHaveAttribute("aria-current", "true");
+    const form = within(tone.getByRole("group", { name: "Edit Warm and precise" }));
+    expect(form.getByLabelText("Name")).toHaveFocus();
+    // A configuration names a guideline by its ID, so it is shown and fixed.
+    const id = form.getByLabelText("ID");
+    expect(id).toHaveValue("warm");
+    expect(id).toHaveAttribute("readonly");
+    await user.type(id, "er");
+    expect(id).toHaveValue("warm");
+
+    await user.clear(form.getByLabelText("Guidance"));
+    await user.type(form.getByLabelText("Guidance"), "  Lead with the outcome.  ");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+
+    expect(pencil).toHaveFocus();
+    expect(tone.getByRole("group", { name: "Add a guideline" })).toBeVisible();
+    expect(
+      within(itemNamed(tone, "Warm and precise")).getByText("Lead with the outcome."),
+    ).toBeVisible();
+    // The radio still names the shop default.
     expect(
       tone.getByRole("radio", { name: "Make Warm and precise the shop default" }),
-    ).toBeEnabled();
+    ).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().tone_of_voice_guidelines).toStrictEqual([
+      { ...READY_CONTENT.tone_of_voice_guidelines[0], guidance: "Lead with the outcome." },
+      BRIEF,
+    ]);
+  });
 
-    await user.type(open.getByLabelText("Name"), "Brief and plain");
-    expectNotRefused(tone.getByRole("button", { name: "Save Brief" }));
-    expect(tone.getByRole("radio", { name: "Make Brief the shop default" })).toBeEnabled();
-    expect(open.queryByText(TONE_NAME_RULE)).toBeNull();
+  it("keeps the default where the radio moved it off the guideline being edited, through Save changes", async () => {
+    const user = userEvent.setup();
+    currentContent = twoGuidelines();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+
+    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
+    const form = within(tone.getByRole("group", { name: "Edit Warm and precise" }));
+    await user.type(form.getByLabelText("Guidance"), " Always.");
+    // The default moves off the guideline the form holds, then that guideline is saved.
+    await user.click(tone.getByRole("radio", { name: "Make Brief the shop default" }));
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+
+    expect(tone.getByRole("radio", { name: "Make Brief the shop default" })).toBeChecked();
+    expect(
+      tone.getByRole("radio", { name: "Make Warm and precise the shop default" }),
+    ).not.toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().tone_of_voice_guidelines).toStrictEqual([
+      {
+        ...READY_CONTENT.tone_of_voice_guidelines[0],
+        guidance: `${READY_CONTENT.tone_of_voice_guidelines[0].guidance} Always.`,
+        is_default: false,
+      },
+      { ...BRIEF, is_default: true },
+    ]);
+  });
+
+  it("empties the form when the guideline it edits is removed", async () => {
+    const user = userEvent.setup();
+    currentContent = twoGuidelines();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+
+    await user.click(tone.getByRole("button", { name: "Edit Brief" }));
+    await user.type(
+      within(tone.getByRole("group", { name: "Edit Brief" })).getByLabelText("Guidance"),
+      " Typed.",
+    );
+    await user.click(tone.getByRole("button", { name: "Remove Brief" }));
+    await user.click(
+      within(tone.getByRole("group", { name: "Remove the guideline “Brief”?" })).getByRole(
+        "button",
+        { name: "Remove it" },
+      ),
+    );
+
+    expect(tone.queryByRole("group", { name: "Edit Brief" })).toBeNull();
+    const add = within(tone.getByRole("group", { name: "Add a guideline" }));
+    expect(add.getByLabelText("Name")).toHaveValue("");
+    expect(add.getByLabelText("Guidance")).toHaveValue("");
+  });
+
+  it("says the edit form's rules in the order it asks them, after its buttons", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+
+    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
+    const form = tone.getByRole("group", { name: "Edit Warm and precise" });
+    await expectRulesInFieldOrder(
+      user,
+      form,
+      within(form).getByRole("button", { name: "Save changes" }),
+      {
+        Name: { rule: TONE_NAME_RULE, answer: "Warm and precise" },
+        Guidance: { rule: TONE_GUIDANCE_RULE, answer: "Lead with the fact." },
+      },
+    );
+  });
+
+  it("refuses an ID that is not kebab-case or is another guideline's while adding, after the name and before the guidance", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+    const add = within(tone.getByRole("group", { name: "Add a guideline" }));
+    const button = add.getByRole("button", { name: "Add tone of voice" });
+
+    await user.type(add.getByLabelText("Name"), "Warm");
+    // Derived to the ID the shop default already holds.
+    expect(add.getByLabelText("ID")).toHaveValue("warm-2");
+    await user.clear(add.getByLabelText("ID"));
+    await user.type(add.getByLabelText("ID"), "warm");
+    expectRefused(button, "warm is already in the draft.");
+    expect(add.getByLabelText("ID")).toHaveAttribute("aria-invalid", "true");
+    expect(add.getByLabelText("Name")).not.toHaveAttribute("aria-invalid");
+
+    await user.clear(add.getByLabelText("ID"));
+    await user.type(add.getByLabelText("ID"), "Warm");
+    expectRefused(button, TONE_ID_RULE);
+
+    await user.clear(add.getByLabelText("ID"));
+    await user.type(add.getByLabelText("ID"), "warm-two");
+    expectRefused(button, TONE_GUIDANCE_RULE);
+    expect(add.getByLabelText("Guidance")).toHaveAttribute("aria-invalid", "true");
+    await user.type(add.getByLabelText("Guidance"), "Short.");
+    expectNotRefused(button);
+    await user.click(button);
+    expect(tone.getByText("warm-two", { selector: "code" })).toBeVisible();
+  });
+
+  it("cancels an edit to an empty add form, writing nothing and handing focus back to the Edit", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+
+    const pencil = tone.getByRole("button", { name: "Edit Warm and precise" });
+    await user.click(pencil);
+    const form = within(tone.getByRole("group", { name: "Edit Warm and precise" }));
+    await user.clear(form.getByLabelText("Name"));
+    await user.type(form.getByLabelText("Name"), "Not this");
+    // Nothing typed in the form has reached the draft.
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+
+    await user.click(form.getByRole("button", { name: "Cancel" }));
+
+    expect(pencil).toHaveFocus();
+    const add = within(tone.getByRole("group", { name: "Add a guideline" }));
+    expect(add.getByLabelText("Name")).toHaveValue("");
+    expect(add.getByLabelText("Guidance")).toHaveValue("");
+    expect(tone.getByText("Warm and precise")).toBeVisible();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    expect(savedDrafts).toEqual([]);
+  });
+
+  it("writes nothing when an untouched guideline is saved, so the draft stays clean", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+
+    const pencil = tone.getByRole("button", { name: "Edit Warm and precise" });
+    await user.click(pencil);
+    await user.click(tone.getByRole("button", { name: "Save changes" }));
+
+    expect(pencil).toHaveFocus();
+    expect(tone.queryByRole("group", { name: "Edit Warm and precise" })).toBeNull();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
   });
 
   it("refuses to delete the shop default, and points at the way out", async () => {
@@ -3642,13 +3850,12 @@ describe("a tone-of-voice guideline's own rules", () => {
     expect(within(rows[0]).getByText("shop default")).toBeVisible();
   });
 
-  it("never appends the guideline being typed, so abandoning one leaves no row to remove", async () => {
+  it("never appends the guideline being typed, and asks before it is left behind", async () => {
     // The prototype's *New guideline* appends an empty record to the list and marks the draft
     // unsaved on the press, so its Cancel has to take the row out again and put the save
-    // state back — a rollback of a write that was never asked for, and one that restores the
-    // save state wholesale over anything else the operator did meanwhile. Here the add form
-    // holds the new guideline outside the draft until Add is pressed, so there is no appended
-    // row for a cancel to remove and no save state to restore (ADR 0051).
+    // state back. Here the form below the list holds the new guideline outside the draft until
+    // Add is pressed, so there is no appended row for a cancel to remove — and, as every form
+    // below a list is (ADR 0074), what it holds is unsaved work the prompt names.
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/setup/tone`);
     const tone = within(await guidelines());
@@ -3660,11 +3867,14 @@ describe("a tone-of-voice guideline's own rules", () => {
     expect(within(railEntry("Tone of voice")).getByText("1")).toBeVisible();
     expect(screen.getByText("All changes saved")).toBeInTheDocument();
 
-    // Leaving is the whole of the cancel: a half-typed create form is not unsaved work, so
-    // nothing is asked and nothing is left behind.
     await user.click(shopRail().getByRole("link", { name: "Orders" }));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      "The Guidelines form holds “Brief”, which has not been added to the draft.",
+    );
+    expect(prompt).toHaveTextContent(itemFormReason("a guideline", "draft"));
+    await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
-    expect(screen.queryByRole("dialog")).toBeNull();
 
     await user.click(shopRail().getByRole("link", { name: "Tone of voice" }));
     const again = within(await guidelines());
@@ -4141,24 +4351,19 @@ describe("unsaved work is protected", () => {
 
   it("names both a dirty draft and an open row, and drops neither on Discard", async () => {
     const user = userEvent.setup();
-    // Tone of voice is where an add form and an edit-in-place row now stand side by side:
-    // the three document collections moved to a table and a page (PLAN-UX Slice 16), and
-    // this case is about the two kinds of unsaved work rather than about any one list.
-    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    // A product's variants are where a dirty draft and an open row stand side by side since the
+    // tone-of-voice guidelines moved to the form below their list (ADR 0074): this case is
+    // about the two kinds of unsaved work rather than about any one list.
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
 
     // Two unsaved things at once, of the two different kinds: one the draft's flag can see,
     // one it cannot. The prompt has to list both and act on both.
-    const tone = within(await screen.findByRole("region", { name: "Guidelines" }));
-    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
-    const open = within(tone.getByRole("form", { name: "Edit Warm and precise" }));
-    await user.clear(open.getByLabelText("Guidance"));
-    await user.type(open.getByLabelText("Guidance"), "Lead with the fact.");
-    await user.click(screen.getByRole("button", { name: "Save Warm and precise" }));
-    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
-    await user.type(
-      within(tone.getByRole("form", { name: "Edit Warm and precise" })).getByLabelText("Guidance"),
-      " Twice.",
-    );
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.selectOptions(variants.getByLabelText("Size for NS-ASJ-OB-M"), "L");
+    await user.click(variants.getByRole("button", { name: "Save NS-ASJ-OB-M" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.selectOptions(variants.getByLabelText("Size for NS-ASJ-OB-M"), "M");
 
     await user.click(rail().getByRole("link", { name: "Orders" }));
 
@@ -4168,7 +4373,7 @@ describe("unsaved work is protected", () => {
       .map((item) => item.textContent);
     expect(listed).toStrictEqual([
       "The shop draft has unsaved changes.",
-      "Warm and precise is open for editing, and nothing typed in it has reached the draft.",
+      "NS-ASJ-OB-M is open for editing, and nothing typed in it has reached the draft.",
     ]);
     // One of the two cannot be saved from here, so neither is saved from here.
     expectRefused(
@@ -4184,14 +4389,12 @@ describe("unsaved work is protected", () => {
 
   it("counts a row that is open for editing, which the draft's own flag cannot see", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
 
-    const tone = within(await screen.findByRole("region", { name: "Guidelines" }));
-    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
-    const open = within(tone.getByRole("form", { name: "Edit Warm and precise" }));
-    await user.clear(open.getByLabelText("Guidance"));
-    await user.type(open.getByLabelText("Guidance"), "Lead with the fact.");
-    // Nothing typed in the row has reached the draft, which is exactly why `dirty` is false.
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.selectOptions(variants.getByLabelText("Size for NS-ASJ-OB-M"), "L");
+    // Nothing chosen in the row has reached the draft, which is exactly why `dirty` is false.
     expect(screen.getByText("All changes saved")).toBeInTheDocument();
 
     // Out of the shop draft's reach, through the bar: Settings can save nothing of this shop's.
@@ -4199,7 +4402,7 @@ describe("unsaved work is protected", () => {
 
     const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
     expect(prompt).toHaveTextContent(
-      "Warm and precise is open for editing, and nothing typed in it has reached the draft.",
+      "NS-ASJ-OB-M is open for editing, and nothing typed in it has reached the draft.",
     );
     // The prompt cannot save it, and says where it can be saved rather than offering to.
     const save = within(prompt).getByRole("button", { name: "Save and leave" });
@@ -4212,13 +4415,11 @@ describe("unsaved work is protected", () => {
 
   it("does nothing when the refused Save and leave is pressed: the page stays, and so does the row", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
 
-    const tone = within(await screen.findByRole("region", { name: "Guidelines" }));
-    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
-    const open = within(tone.getByRole("form", { name: "Edit Warm and precise" }));
-    await user.clear(open.getByLabelText("Guidance"));
-    await user.type(open.getByLabelText("Guidance"), "Lead with the fact.");
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.selectOptions(variants.getByLabelText("Size for NS-ASJ-OB-M"), "L");
     await user.click(screen.getByRole("link", { name: "Settings" }));
 
     const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
@@ -4235,9 +4436,7 @@ describe("unsaved work is protected", () => {
     expect(screen.queryByRole("heading", { level: 1, name: "Lab settings" })).toBeNull();
 
     await user.click(within(prompt).getByRole("button", { name: "Stay on this page" }));
-    expect(
-      within(tone.getByRole("form", { name: "Edit Warm and precise" })).getByLabelText("Guidance"),
-    ).toHaveValue("Lead with the fact.");
+    expect(variants.getByLabelText("Size for NS-ASJ-OB-M")).toHaveValue("L");
   });
 
   /**
@@ -5163,8 +5362,9 @@ describe("the rail's figures that come from the draft", () => {
    * than the list items is what makes this read the entries and not the "No policy yet." line
    * an empty list puts in a `<li>` of its own.
    */
+  /** The guidelines the Tone of voice page lists, one item each (ADR 0074). */
   function entriesIn(region: HTMLElement): number {
-    return within(region).getAllByRole("heading", { level: 3 }).length;
+    return within(region).getAllByRole("listitem").length;
   }
 
   it("counts a shop's documents as the three lists the Documents table draws", async () => {

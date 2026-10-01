@@ -4,10 +4,16 @@ import {
   acceptsDefault,
   addedParameter,
   addParameter,
+  BLANK_PARAMETER,
+  bindingSentence,
   bindsShopObject,
+  MAX_PARAMETERS,
   moveParameter,
+  PARAMETERS_FULL,
   parameterEntry,
   parameterFields,
+  parameterFormFields,
+  parameterRefusal,
   removeParameter,
   replaceParameter,
   retypedFields,
@@ -15,7 +21,9 @@ import {
   toIdentifier,
   toSlug,
   uniqueParameterName,
+  withParameter,
 } from "./blocks";
+import { PARAMETER_LABEL_RULE } from "./fieldRules";
 
 function payload(
   overrides: Partial<ObjectiveBlockPayloadSchema> = {},
@@ -226,5 +234,83 @@ describe("editing parameters", () => {
     expect(moveParameter(first, "doc_ref", -1)).toEqual(first);
     expect(moveParameter(first, "severity", 1)).toEqual(first);
     expect(moveParameter(first, "missing", 1)).toEqual(first);
+  });
+});
+
+describe("the editor's parameter form", () => {
+  it("refuses at the cap before an empty label while adding, and the cap marks no field", () => {
+    const named = { ...BLANK_PARAMETER, label: "Policy" };
+    for (const [fields, count, expected] of [
+      [named, 0, null],
+      [named, MAX_PARAMETERS - 1, null],
+      [BLANK_PARAMETER, MAX_PARAMETERS - 1, { field: "label", reason: PARAMETER_LABEL_RULE }],
+      [{ ...named, label: " \x85" }, 2, { field: "label", reason: PARAMETER_LABEL_RULE }],
+      [named, MAX_PARAMETERS, { field: null, reason: PARAMETERS_FULL }],
+      [BLANK_PARAMETER, MAX_PARAMETERS, { field: null, reason: PARAMETERS_FULL }],
+    ] as const) {
+      expect(parameterRefusal(fields, count, null), `${count} with "${fields.label}"`).toEqual(
+        expected,
+      );
+    }
+  });
+
+  it("asks nothing of an edit, whose name is fixed and which the cap is not about", () => {
+    const editing = parameterFormFields(payload().parameters[0]);
+    expect(editing.label).toBe("doc_ref");
+    expect(parameterRefusal(editing, MAX_PARAMETERS, "doc_ref")).toBeNull();
+    expect(parameterRefusal({ ...editing, label: "" }, MAX_PARAMETERS, "doc_ref")).toBeNull();
+  });
+
+  it("adds every field the form asks, under a derived name, stored stripped", () => {
+    const [, , added] = withParameter(payload().parameters, "Doc ref", {
+      kind: "timing",
+      description: "  When it fires. ",
+      required: false,
+      default: " after_first_read\x85",
+    });
+
+    expect(added).toEqual({
+      name: "doc_ref_2",
+      kind: "timing",
+      description: "When it fires.",
+      required: false,
+      default: "after_first_read",
+      shop_bound: false,
+    });
+  });
+
+  it("stores a default of nothing but spaces as no default", () => {
+    const [, , added] = withParameter(payload().parameters, "note", {
+      kind: "text",
+      description: "",
+      required: true,
+      default: "   ",
+    });
+
+    expect(added.default).toBeNull();
+  });
+});
+
+describe("how a parameter is bound", () => {
+  it("says a scenario must bind only a required literal with no default, as `check_bindings` holds", () => {
+    expect(bindingSentence({ kind: "text", required: true, default: null })).toBe(
+      "A scenario must bind this.",
+    );
+    expect(bindingSentence({ kind: "text", required: true, default: "x" })).toBe(
+      "A scenario may leave it to the default.",
+    );
+    expect(bindingSentence({ kind: "text", required: false, default: "x" })).toBe(
+      "A scenario may leave it to the default.",
+    );
+    expect(bindingSentence({ kind: "entity_reference", required: true, default: null })).toBe(
+      "Always bound by the scenario — a template cannot default an object.",
+    );
+    expect(bindingSentence({ kind: "text", required: false, default: null })).toBe(
+      "A scenario may leave it unbound.",
+    );
+    // `binding_missing` ignores the kind: a reference that is not required may be left unbound.
+    expect(bindingSentence({ kind: "entity_reference", required: false, default: null })).toBe(
+      "A scenario may leave it unbound.",
+    );
   });
 });

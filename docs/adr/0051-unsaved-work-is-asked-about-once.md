@@ -14,6 +14,11 @@ coupled follow as one unit, and a unit with any field typed in keeps all of it: 
 parameter's kind under a typed default built a parameter the form could not correct, which is why
 the list, and not the hook, says what belongs together.
 
+Amendment: 2026-10-01 — The coupled fields of the amendment above are withdrawn with ADR 0074's
+Slice 39: their one consumer, a template's parameters, moved to the form below its list, which
+follows its entry whole while clean and keeps all it holds while dirty, so `useEntryEdit` no
+longer takes `units`.
+
 Moves the application from `BrowserRouter` to `createBrowserRouter` and `RouterProvider` with the
 route tree unchanged, and adds the guard that PLAN-UX Slice 8 asks for: a navigation that would
 strand unsaved work is blocked and offers Save, Discard and Stay, a reload is preceded by the

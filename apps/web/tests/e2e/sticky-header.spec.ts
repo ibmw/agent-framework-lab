@@ -472,6 +472,11 @@ test("a tour step taller than the room under the header is lit with its top clea
   lab,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
+  // The premise is the Guidelines card's height. Its guideline is a compact item since the list
+  // is edited in the form below it (ADR 0074), so the card's height is now mostly that form, and
+  // at the default 1280×720 it outgrows the room by some 80px. A shorter pane makes the premise
+  // the test's own rather than a margin the form's next field could take away.
+  await page.setViewportSize({ width: 1280, height: 560 });
   await page.goto(`/shops/${lab.shopId}/setup/tone`);
   const guidelines = page.locator('[aria-label="Guidelines"]');
   await expect(guidelines).toBeVisible();

@@ -1,22 +1,17 @@
 import type { BlockParameterKind } from "@agent-lab/contracts";
 import { type FormEvent, useId, useState } from "react";
-import { MAX_PARAMETERS, PARAMETER_KINDS, toIdentifier, uniqueParameterName } from "../lib/blocks";
+import { PARAMETER_KINDS, PARAMETERS_FULL, toIdentifier, uniqueParameterName } from "../lib/blocks";
 import { savedAsPreview } from "../lib/fieldPreviews";
 import { addFormClasses, fieldControlClasses, fieldLabelClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
 import { FieldHint } from "./FieldHint";
 import { PrimaryAction, RefusalLine } from "./PrimaryAction";
 
-/** Mirrors the contract's `MAX_BLOCK_PARAMETERS` refusal, in the workspace's words. */
-const PARAMETERS_FULL = `A template carries at most ${MAX_PARAMETERS} parameters.`;
-
 /**
- * The control that adds a typed parameter to a block template.
- *
- * It lived inside `BlockEditorPage` until the block libraries' create pages wanted it too
- * (PLAN-UX Slice 13): a template's parameters are what a scenario binds, so they are part of
- * what constrains the work that follows and they are asked for on the way in. Two consumers
- * is what moved it here; nothing about it changed.
+ * The control that adds a typed parameter to a block template on the block libraries' create
+ * pages (PLAN-UX Slice 13): a template's parameters are what a scenario binds, so they are part
+ * of what constrains the work that follows and they are asked for on the way in. The editor
+ * adds and edits its parameters in the one form below its list instead (ADR 0074).
  *
  * The label is typed and the identifier is derived — *identifiers are derived, never asked
  * first* — with the saved spelling previewed under the field, and a name another parameter
@@ -31,7 +26,7 @@ export function ParameterForm({
 }: {
   taken: readonly string[];
   onAdd: (name: string, kind: BlockParameterKind) => void;
-  /** The template already carries `MAX_PARAMETERS`. */
+  /** The template already carries the contract's cap. */
   full: boolean;
 }) {
   const reasonId = useId();

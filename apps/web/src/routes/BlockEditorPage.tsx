@@ -11,19 +11,23 @@ import type {
   ObjectiveEvidence,
   ObjectiveSeverity,
 } from "@agent-lab/contracts";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
-import { ButtonIcon } from "../components/ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
-import { Field, FieldRows } from "../components/FieldHint";
+import { Field, FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
 import { GateFindingLine } from "../components/GateFindingLine";
-import { ParameterForm } from "../components/ParameterForm";
+import {
+  EditButton,
+  FixedKeyField,
+  ItemFormRow,
+  ListItem,
+  MoveButton,
+  RemoveButton,
+} from "../components/ItemList";
 import {
   Card,
   EditorSaveActions,
-  EntryCard,
-  EntryEditNotice,
   EntryKind,
   Fingerprint,
   GateCard,
@@ -36,35 +40,45 @@ import {
 import {
   ASSESSMENTS,
   acceptsDefault,
-  addParameter,
+  BLANK_PARAMETER,
   type BlockPayload,
+  bindingSentence,
   bindsShopObject,
   DETERMINISTIC_EVIDENCE,
   EFFECTS,
   evidenceFor,
-  MAX_PARAMETERS,
   moveParameter,
   PARAMETER_KINDS,
-  type ParameterFields,
-  parameterFields,
+  type ParameterFormFields,
+  parameterFormFields,
+  parameterRefusal,
   removeParameter,
   replaceParameter,
   retypedFields,
   shopBoundCount,
+  toIdentifier,
+  uniqueParameterName,
+  withParameter,
 } from "../lib/blocks";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
-import { type EntryEdit, entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { BLOCK_PARAMETER_KIND, labelOf, OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
+import { savedAsPreview } from "../lib/fieldPreviews";
 import { optionalParameterWithoutDefaultRule } from "../lib/fieldRules";
-import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
-  destructiveSubtleButtonClasses,
+  formTitle,
+  type ItemFormWords,
+  refusedProps,
+  useEditButtons,
+  useFocusAfterCommit,
+  useItemForm,
+} from "../lib/itemForm";
+import { pythonStrip } from "../lib/pythonText";
+import { consequenceOf, findingClauses, useRemoval } from "../lib/removal";
+import {
   editorColumnsClasses,
   editorMainClasses,
   editorPanelClasses,
   fieldControlClasses,
-  fieldLabelClasses,
-  subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
 import type { Listing } from "../shell/listings";
@@ -128,18 +142,6 @@ function BlockEditor<
     afterSave: listing.refresh,
   });
   const { content, preview, edit } = editor;
-  const parameterRemoval = useRemoval(blockId);
-  // The parameters list's one open row: nothing typed in it is in the draft until its Save
-  // (ADR 0051), and the line that says so is what every other row's Edit points at.
-  const parameterEditor = useEntryEdit(content?.parameters ?? [], {
-    keyOf: (parameter) => parameter.name,
-    labelOf: (parameter) => parameter.name,
-    fieldsOf: parameterFields,
-    // A kind decides whether a default can exist and whether the parameter may be optional
-    // (`retypedFields`), so the three follow the entry together or not at all.
-    units: [["kind", "required", "default"]],
-  });
-  const parameterNotice = useId();
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
 
   if (editor.loading) {
@@ -270,53 +272,7 @@ function BlockEditor<
                 : `${bound} parameter(s) must be bound to objects in the scenario's own shop. A template never names one itself.`
             }
           >
-            {content.parameters.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">
-                No parameter yet. A template with none can only be bound one way, which is a
-                legitimate design for a rule that applies everywhere.
-              </p>
-            ) : (
-              <ul className="grid gap-2 text-[13px]">
-                {content.parameters.map((parameter, index) => (
-                  <ParameterRow
-                    key={parameter.name}
-                    parameter={parameter}
-                    isFirst={index === 0}
-                    isLast={index === content.parameters.length - 1}
-                    edit={entryEdit(
-                      parameterEditor,
-                      parameterNotice,
-                      parameter.name,
-                      (fields) => edit(replaceParameter(content, parameter.name, fields)),
-                      (value, onChange) => (
-                        <ParameterFieldset
-                          name={parameter.name}
-                          value={value}
-                          onChange={onChange}
-                        />
-                      ),
-                    )}
-                    onMove={(direction) => edit(moveParameter(content, parameter.name, direction))}
-                    removal={parameterRemoval}
-                    // A mutation is injected at a bound moment, so its only timing parameter
-                    // is one `validate_mutation_block` refuses to lose.
-                    lastTiming={
-                      "effect" in content &&
-                      parameter.kind === "timing" &&
-                      content.parameters.filter((entry) => entry.kind === "timing").length === 1
-                    }
-                    onRemove={() => edit(removeParameter(content, parameter.name))}
-                  />
-                ))}
-              </ul>
-            )}
-            <EntryEditNotice id={parameterNotice} label={parameterEditor.open?.label ?? null} />
-            <RemovalNotice removal={parameterRemoval} />
-            <ParameterForm
-              taken={content.parameters.map((parameter) => parameter.name)}
-              onAdd={(name, kind) => edit(addParameter(content, name, kind))}
-              full={content.parameters.length >= MAX_PARAMETERS}
-            />
+            <TemplateParameters blockId={blockId} content={content} edit={edit} />
           </Card>
         </div>
 
@@ -350,252 +306,349 @@ function BlockEditor<
   );
 }
 
-function ParameterRow({
-  parameter,
-  isFirst,
-  isLast,
-  edit,
-  onMove,
-  removal,
-  lastTiming,
-  onRemove,
-}: {
-  parameter: BlockParameterSchema;
-  isFirst: boolean;
-  isLast: boolean;
-  /** The row's open-in-place edit: kind, description, default and whether a scenario must bind it. */
-  edit: EntryEdit;
-  onMove: (direction: -1 | 1) => void;
-  /** The list's second press (ADR 0060). */
-  removal: Removal;
-  lastTiming: boolean;
-  onRemove: () => void;
-}) {
-  const literal = acceptsDefault(parameter.kind);
-  // The gate's `optional_parameter_without_default`, said on the row that holds it. A finding
-  // and not a refusal — `BlockParameter` stores it and publication refuses it — so it is said
-  // on the closed row, and on the checkbox and the default of an open one.
-  const findingId = useId();
-  const optionalWithoutDefault = !parameter.required && parameter.default === null;
+const PARAMETER_WORDS: ItemFormWords = {
+  form: "Parameters",
+  entry: "a parameter",
+  record: "draft",
+};
 
-  if (removal.isArmed(parameter.name)) {
-    return (
-      <ConfirmRemove
-        as="li"
-        title={`Remove the parameter ${parameter.name}?`}
-        consequence={consequenceOf(
-          "Its description, its default and whether it is required go with it, and a scenario composing the next published version has nothing to bind under this name.",
-          findingClauses([lastTiming && "mutation_without_timing"]),
-          "Nothing is written until you save the draft, and a published version — and every scenario that pinned one — keeps it.",
-        )}
-        onConfirm={removal.confirm(
-          onRemove,
-          `Removed the parameter ${parameter.name} from the draft.`,
-        )}
-        onKeep={removal.keep}
-      />
-    );
-  }
+/**
+ * The checkbox writes `required`, which `check_bindings` (`domain/blocks.py`) holds a scenario to
+ * only while the template gives no default: a required parameter with one may be left unbound.
+ */
+const REQUIRED_LABEL = "A scenario must bind this, unless the template gives a default";
 
+const PARAMETER_LABEL_HINT = "The name a scenario binds. Saved as a snake_case identifier.";
+
+const PARAMETER_FIXED_HINT =
+  "Saved as this identifier when the parameter was added. A scenario binds by it, so it is fixed.";
+
+/** The pill beside a parameter whose binding must resolve inside the scenario's own shop. */
+function BoundSameShop() {
   return (
-    <EntryCard
-      title={<code className="font-mono text-lab-ink">{parameter.name}</code>}
-      chips={
-        <>
-          <EntryKind value={labelOf(BLOCK_PARAMETER_KIND, parameter.kind)} />
-          {bindsShopObject(parameter.kind) ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
-              <span aria-hidden>⌖</span> bound same-shop
-            </span>
-          ) : null}
-        </>
-      }
-      edit={edit}
-      actions={
-        // The order is authored — it is the order the editor and a binding follow — so the
-        // arrows stay on the row beside its Remove.
-        <>
-          <button
-            className={subtleButtonClasses}
-            type="button"
-            aria-label={`Move ${parameter.name} up`}
-            disabled={isFirst}
-            onClick={() => onMove(-1)}
-          >
-            ↑
-          </button>
-          <button
-            className={subtleButtonClasses}
-            type="button"
-            aria-label={`Move ${parameter.name} down`}
-            disabled={isLast}
-            onClick={() => onMove(1)}
-          >
-            ↓
-          </button>
-          <button
-            className={destructiveSubtleButtonClasses}
-            type="button"
-            aria-label={`Remove ${parameter.name}`}
-            ref={removal.trigger(parameter.name)}
-            onClick={removal.ask(
-              parameter.name,
-              onRemove,
-              `Removed the parameter ${parameter.name} from the draft.`,
-            )}
-          >
-            <ButtonIcon verb="delete" />
-            Remove
-          </button>
-        </>
-      }
-    >
-      <dl className="grid gap-x-3 gap-y-1 text-[13px] sm:grid-cols-[max-content_minmax(0,1fr)]">
-        <dt className="text-xs font-semibold text-admin-muted">Description</dt>
-        <dd className="text-admin-ink-soft">
-          {parameter.description || (
-            <span className="text-admin-muted">
-              None yet — a scenario binding it is told nothing.
-            </span>
-          )}
-        </dd>
-        {literal ? (
-          <>
-            <dt className="text-xs font-semibold text-admin-muted">Default</dt>
-            <dd className="text-admin-ink-soft">
-              {parameter.default === null ? (
-                <span className="text-admin-muted">None</span>
-              ) : parameter.kind === "severity" ? (
-                labelOf(OBJECTIVE_SEVERITY, parameter.default as ObjectiveSeverity)
-              ) : (
-                <code className="font-mono text-[12px]">{parameter.default}</code>
-              )}
-            </dd>
-          </>
-        ) : null}
-        <dt className="text-xs font-semibold text-admin-muted">Binding</dt>
-        <dd className="text-admin-ink-soft">
-          {!literal
-            ? "Always bound by the scenario — a template cannot default an object."
-            : parameter.required
-              ? "A scenario must bind this."
-              : "A scenario may leave it to the default."}
-        </dd>
-      </dl>
-      <GateFindingLine id={findingId}>
-        {optionalWithoutDefault
-          ? optionalParameterWithoutDefaultRule(parameter.name, literal)
-          : null}
-      </GateFindingLine>
-    </EntryCard>
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
+      <span aria-hidden>⌖</span> bound same-shop
+    </span>
   );
 }
 
 /**
- * The questions an open parameter row asks. Each control keeps the name it had when the rows
- * were always open — "Kind of doc_ref", "Description of doc_ref", "Default of doc_ref" — so the
- * visible word leads it and a reader, a test and a journey reach the same control as before.
+ * What a parameter's item says under its name: the description, the default where its kind
+ * carries one, and how a scenario binds it — each its own phrase on the one detail line.
  */
-function ParameterFieldset({
-  name,
-  value,
-  onChange,
-}: {
-  name: string;
-  value: ParameterFields;
-  onChange: (next: ParameterFields) => void;
-}) {
-  const literal = acceptsDefault(value.kind);
-  const findingId = useId();
-  const optionalWithoutDefault = !value.required && value.default === null;
-
+function ParameterDetail({ parameter }: { parameter: BlockParameterSchema }) {
+  const literal = acceptsDefault(parameter.kind);
   return (
-    <div className="grid gap-2">
-      <label className={fieldLabelClasses}>
-        Kind
-        <select
-          aria-label={`Kind of ${name}`}
-          className={`${fieldControlClasses} w-full`}
-          value={value.kind}
-          onChange={(event) =>
-            onChange(retypedFields(value, event.target.value as BlockParameterKind))
-          }
-        >
-          {PARAMETER_KINDS.map((entry) => (
-            <option key={entry.kind} value={entry.kind}>
-              {entry.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className={fieldLabelClasses}>
-        Description
-        <input
-          aria-label={`Description of ${name}`}
-          className={`${fieldControlClasses} w-full`}
-          value={value.description}
-          onChange={(event) => onChange({ ...value, description: event.target.value })}
-        />
-      </label>
-
+    <>
+      {parameter.description ? (
+        <span>{parameter.description}</span>
+      ) : (
+        <span>No description yet — a scenario binding it is told nothing.</span>
+      )}
       {literal ? (
         <>
-          {/* A div, not a label: the control is chosen in a branch, so a wrapping label has
-              no resolvable control. Each branch names itself instead. */}
-          <div className={fieldLabelClasses}>
-            <span>Default</span>
-            {value.kind === "severity" ? (
-              <select
-                aria-label={`Default of ${name}`}
-                aria-describedby={optionalWithoutDefault ? findingId : undefined}
-                className={`${fieldControlClasses} w-full`}
-                value={value.default ?? ""}
-                onChange={(event) => onChange({ ...value, default: event.target.value || null })}
-              >
-                <option value="">No default</option>
-                {SEVERITIES.map((severity) => (
-                  <option key={severity.value} value={severity.value}>
-                    {severity.option}
-                  </option>
-                ))}
-              </select>
+          {" · "}
+          <span>
+            Default:{" "}
+            {parameter.default === null ? (
+              "none"
+            ) : parameter.kind === "severity" ? (
+              labelOf(OBJECTIVE_SEVERITY, parameter.default as ObjectiveSeverity)
             ) : (
-              <input
-                aria-label={`Default of ${name}`}
-                aria-describedby={optionalWithoutDefault ? findingId : undefined}
-                className={`${fieldControlClasses} w-full`}
-                value={value.default ?? ""}
-                placeholder={value.kind === "timing" ? "after_first_read" : "PT30S"}
-                onChange={(event) => onChange({ ...value, default: event.target.value || null })}
-              />
+              <code className="font-mono text-[12px]">{parameter.default}</code>
             )}
-          </div>
-          <div className="grid gap-1">
-            <label className="flex items-center gap-2 text-[13px]">
-              <input
-                type="checkbox"
-                checked={value.required}
-                aria-describedby={optionalWithoutDefault ? findingId : undefined}
-                aria-invalid={optionalWithoutDefault || undefined}
-                onChange={(event) => onChange({ ...value, required: event.target.checked })}
-              />
-              A scenario must bind this
-            </label>
-            <GateFindingLine id={findingId}>
-              {optionalWithoutDefault ? optionalParameterWithoutDefaultRule(name, literal) : null}
-            </GateFindingLine>
-          </div>
+          </span>
         </>
-      ) : (
-        // A template that defaulted a reference would hand one shop's object to every other
-        // shop, so the field is absent rather than present and refused.
-        <p className="text-xs text-admin-muted">
-          A parameter that names an object is always bound by the scenario, and a template cannot
-          default it.
-        </p>
-      )}
-    </div>
+      ) : null}
+      {" · "}
+      <span>{bindingSentence(parameter)}</span>
+    </>
+  );
+}
+
+/**
+ * A template's parameters, as items, and the one form that adds a parameter or edits the one
+ * chosen (ADR 0074). The order is authored — it is the order a scenario binds in — so ↑ and ↓
+ * stay on the item, before the pencil, and stay free while the form edits another parameter.
+ * The name is fixed while editing, because a scenario binds by it.
+ */
+function TemplateParameters<PayloadT extends BlockPayload>({
+  blockId,
+  content,
+  edit,
+}: {
+  blockId: string;
+  content: PayloadT;
+  edit: (next: PayloadT) => void;
+}) {
+  const parameters = content.parameters;
+  const names = parameters.map((parameter) => parameter.name);
+  const parameterOf = (name: string) =>
+    parameters.find((parameter) => parameter.name === name) as BlockParameterSchema;
+  const form = useItemForm<ParameterFormFields>({
+    blank: BLANK_PARAMETER,
+    ids: names,
+    words: PARAMETER_WORDS,
+    nameOf: (name) => name,
+    formOf: (name) => parameterFormFields(parameterOf(name)),
+    typedOf: (fields) => fields.label,
+  });
+  const removal = useRemoval(blockId);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const kindSelect = useRef<HTMLSelectElement>(null);
+  const reasonId = useId();
+  const findingId = useId();
+  const refusal = parameterRefusal(form.fields, parameters.length, form.editing);
+  // A blank form is refused and says why, but marks nothing until something is in it.
+  const marked = form.dirty ? refusal : null;
+  const identifier = uniqueParameterName(toIdentifier(form.fields.label), names);
+  const literal = acceptsDefault(form.fields.kind);
+  // The gate's `optional_parameter_without_default`, said under the checkbox while the form holds
+  // it: a finding and not a refusal, so *Save changes* and *Add parameter* still write it.
+  // A parameter being added has no name until a label is typed, so the finding, which names it,
+  // waits for one rather than naming the fallback identifier.
+  const findingName = form.editing ?? (pythonStrip(form.fields.label) === "" ? null : identifier);
+  const finding: string | null =
+    findingName !== null && !form.fields.required && form.fields.default === null
+      ? optionalParameterWithoutDefaultRule(findingName, literal)
+      : null;
+  const optionalWithoutDefault = finding !== null;
+
+  function submit() {
+    if (refusal !== null) {
+      return;
+    }
+    const editing = form.editing;
+    if (editing !== null) {
+      // An edit that changed nothing writes nothing, so the draft stays as clean as it was.
+      if (form.dirty) {
+        edit(replaceParameter(content, editing, form.fields));
+      }
+      focusAfterCommit(() => editButtons.get(editing));
+    } else {
+      edit({ ...content, parameters: withParameter(parameters, form.fields.label, form.fields) });
+    }
+    form.reset();
+  }
+
+  function cancel() {
+    const editing = form.editing;
+    form.reset();
+    if (editing !== null) {
+      focusAfterCommit(() => editButtons.get(editing));
+    }
+  }
+
+  return (
+    <FieldRows>
+      <FieldGroup
+        label="Typed parameters"
+        hint="A scenario binds them in this order; ↑ and ↓ move one."
+      >
+        <div className="grid gap-2">
+          {parameters.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {parameters.map((parameter, index) => {
+                const notice = `Removed the parameter ${parameter.name} from the draft.`;
+                // A mutation is injected at a bound moment, so its only timing parameter is
+                // one `validate_mutation_block` refuses to lose.
+                const lastTiming =
+                  "effect" in content &&
+                  parameter.kind === "timing" &&
+                  parameters.filter((entry) => entry.kind === "timing").length === 1;
+                const drop = () => edit(removeParameter(content, parameter.name));
+                if (removal.isArmed(parameter.name)) {
+                  return (
+                    <ConfirmRemove
+                      key={parameter.name}
+                      as="li"
+                      title={`Remove the parameter ${parameter.name}?`}
+                      consequence={consequenceOf(
+                        "Its description, its default and whether it is required go with it, and a scenario composing the next published version has nothing to bind under this name.",
+                        findingClauses([lastTiming && "mutation_without_timing"]),
+                        "Nothing is written until you save the draft, and a published version — and every scenario that pinned one — keeps it.",
+                      )}
+                      onConfirm={removal.confirm(drop, notice)}
+                      onKeep={removal.keep}
+                    />
+                  );
+                }
+                const itemFinding = !parameter.required && parameter.default === null;
+                return (
+                  <ListItem
+                    key={parameter.name}
+                    name={parameter.name}
+                    monospace
+                    tag={
+                      <>
+                        <EntryKind value={labelOf(BLOCK_PARAMETER_KIND, parameter.kind)} />
+                        {bindsShopObject(parameter.kind) ? <BoundSameShop /> : null}
+                      </>
+                    }
+                    detail={
+                      <>
+                        <ParameterDetail parameter={parameter} />
+                        {/* The gate's finding, said on the item that holds it, as it was on the
+                            closed row (ADR 0063's lab amendment). */}
+                        {itemFinding ? (
+                          <div className="mt-1">
+                            <GateFindingLine id={`${findingId}-${index}`}>
+                              {optionalParameterWithoutDefaultRule(
+                                parameter.name,
+                                acceptsDefault(parameter.kind),
+                              )}
+                            </GateFindingLine>
+                          </div>
+                        ) : null}
+                      </>
+                    }
+                    editing={form.editing === parameter.name}
+                  >
+                    <MoveButton
+                      name={parameter.name}
+                      direction="up"
+                      disabled={index === 0}
+                      onMove={() => edit(moveParameter(content, parameter.name, -1))}
+                    />
+                    <MoveButton
+                      name={parameter.name}
+                      direction="down"
+                      disabled={index === parameters.length - 1}
+                      onMove={() => edit(moveParameter(content, parameter.name, 1))}
+                    />
+                    <EditButton
+                      name={parameter.name}
+                      buttonRef={editButtons.ref(parameter.name)}
+                      onEdit={() => {
+                        form.begin(parameter.name, parameterFormFields(parameter));
+                        // The name is fixed while editing, so the first field asked is the kind.
+                        focusAfterCommit(() => kindSelect.current);
+                      }}
+                    />
+                    <RemoveButton
+                      name={parameter.name}
+                      entryKey={parameter.name}
+                      removal={removal}
+                      notice={notice}
+                      onRemove={drop}
+                    />
+                  </ListItem>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-admin-muted">
+              No parameter yet. A template with none can only be bound one way, which is a
+              legitimate design for a rule that applies everywhere.
+            </p>
+          )}
+          <RemovalNotice removal={removal} />
+        </div>
+      </FieldGroup>
+      <ItemFormRow
+        title={formTitle(form.editing, (name) => name, PARAMETER_WORDS.entry)}
+        hint="The kind, description, default and binding can change later; the identifier is fixed once the parameter is added."
+        editing={form.editing !== null}
+        addLabel="Add parameter"
+        refusal={refusal}
+        reasonId={reasonId}
+        onSubmit={submit}
+        onCancel={cancel}
+      >
+        {form.editing !== null ? (
+          <FixedKeyField label="Label" hint={PARAMETER_FIXED_HINT} value={form.fields.label} />
+        ) : (
+          <FieldHint
+            label="Label"
+            hint={PARAMETER_LABEL_HINT}
+            extra={pythonStrip(form.fields.label) ? savedAsPreview(identifier) : undefined}
+          >
+            <input
+              className={`${fieldControlClasses} w-full`}
+              value={form.fields.label}
+              placeholder="Document"
+              {...refusedProps(marked, "label", reasonId)}
+              onChange={(event) => form.update({ label: event.target.value })}
+            />
+          </FieldHint>
+        )}
+        <FieldHint label="Kind">
+          <select
+            ref={kindSelect}
+            className={`${fieldControlClasses} w-full`}
+            value={form.fields.kind}
+            onChange={(event) =>
+              form.update(retypedFields(form.fields, event.target.value as BlockParameterKind))
+            }
+          >
+            {PARAMETER_KINDS.map((entry) => (
+              <option key={entry.kind} value={entry.kind}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </FieldHint>
+        <div className="col-span-full">
+          <FieldHint label="Description" optional>
+            <input
+              className={`${fieldControlClasses} w-full`}
+              value={form.fields.description}
+              onChange={(event) => form.update({ description: event.target.value })}
+            />
+          </FieldHint>
+        </div>
+        {literal ? (
+          <>
+            <FieldHint label="Default" optional>
+              {form.fields.kind === "severity" ? (
+                <select
+                  className={`${fieldControlClasses} w-full`}
+                  value={form.fields.default ?? ""}
+                  aria-describedby={optionalWithoutDefault ? findingId : undefined}
+                  onChange={(event) => form.update({ default: event.target.value || null })}
+                >
+                  <option value="">No default</option>
+                  {SEVERITIES.map((severity) => (
+                    <option key={severity.value} value={severity.value}>
+                      {severity.option}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className={`${fieldControlClasses} w-full`}
+                  value={form.fields.default ?? ""}
+                  placeholder={form.fields.kind === "timing" ? "after_first_read" : "PT30S"}
+                  aria-describedby={optionalWithoutDefault ? findingId : undefined}
+                  onChange={(event) => form.update({ default: event.target.value || null })}
+                />
+              )}
+            </FieldHint>
+            <div className="col-span-full grid gap-1">
+              <label className="flex items-center gap-2 text-[13px]">
+                <input
+                  type="checkbox"
+                  checked={form.fields.required}
+                  aria-describedby={optionalWithoutDefault ? findingId : undefined}
+                  aria-invalid={optionalWithoutDefault || undefined}
+                  onChange={(event) => form.update({ required: event.target.checked })}
+                />
+                {REQUIRED_LABEL}
+              </label>
+              <GateFindingLine id={findingId}>{finding}</GateFindingLine>
+            </div>
+          </>
+        ) : (
+          // A template that defaulted a reference would hand one shop's object to every other
+          // shop, so the field is absent rather than present and refused.
+          <p className="col-span-full text-xs text-admin-muted">
+            A parameter that names an object is always bound by the scenario, and a template cannot
+            default it.
+          </p>
+        )}
+      </ItemFormRow>
+    </FieldRows>
   );
 }
 

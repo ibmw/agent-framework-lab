@@ -143,15 +143,16 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | An editor's gate card | context first on every editor frame's 312px panel (:467, :552, :626, :700, :1874, :2786, :2905, :3142, :3211) but the product's, whose 300px panel opens on *Findings on this product* (:1022, :1024), then *Where this product is used*; the setup pages' panel opens on the *Setup checklist* (:2156) | "Publish gate" first in every editor's 312px panel, the product's included, in the setup checklist's place and with its behaviour — busy while the gate has not answered for the saved draft, "Read off the saved draft. Save to check what is on screen." under its title while the editor is dirty — over the findings `IssueList` draws, with no checklist line; and "What publishing freezes" last on every panel, where the scenario frame draws it first (:3144) | the operator's decision of 28 September 2026: the findings every editor already showed get one frame and one place, the one the setup pages give theirs (ADR 0071), and `IssueList` stays the only way a finding is drawn; with the gate first and the context read beside it next, what publishing freezes closes the panel on every editor rather than on some |
 | The order editor's two panel titles | the order frame's panel draws *Used by* and *Sandboxed at run time* (:2786) and no findings card; the departure is from *The form language*'s panel rule, which titles the gate card "Publish gate" and the freeze card "What publishing freezes" | "Findings", with its fingerprint line, and "Freezing"; its saved-draft line says "the saved order", and the card is busy while the order's save is in flight | an order fixture is never published: its findings are `validate_order_fixture`'s, read off the saved order and returned by its save, and gate no publish, so there is no gate to title the card after and none to wait on |
 | The rows of *What this shop holds* | the whole row is a click target, with a link inside it | the row, with the link as its one control | a nested link inside a clickable row is two controls a keyboard reaches as one; *Principles*, every workflow keyboard-reachable |
-| A guideline's `slug · version` line | drawn | the slug alone, as the row's `EntryId` | `ToneOfVoiceSchema` carries no version: the shop carries the version, the page header's `VersionChips` is where it is read, and a per-row copy of it would be the same figure written once per guideline. A figure the payload lacks is not faked (*Lists and counts*) |
+| A guideline's `slug · version` line | drawn | the slug alone, as the item's ID in monospace | `ToneOfVoiceSchema` carries no version: the shop carries the version, the page header's `VersionChips` is where it is read, and a per-row copy of it would be the same figure written once per guideline. A figure the payload lacks is not faked (*Lists and counts*) |
 | *Used by* under a guideline | "Resolved by 3 agent configurations" / "Named as an override by 1 configuration" | not drawn | `AgentConfigurationSummarySchema` carries no tone selection at all, and the configurations listing is the lab shell's rather than the shop's (ADR 0056), so the figure would cost one configuration draft read per row — and even then an override is a free-typed `guideline_id` on a shop-independent configuration, which may name a guideline of a shop this page is not. The one use this page does know is drawn: the *shop default* chip is which guideline a configuration with no override resolves to |
-| *New guideline* on the Guidelines card | a header button appending an empty row, opened for editing | the add form below the list, as on every other list in this workspace | the prototype's row is keyed by its position in an array; a guideline is keyed by its ID, which `DerivedIdField` derives from the name, so an appended row has no key until it has a name. The prototype pays for that by writing the row into the list and marking the draft unsaved on the press, then rolling both back on Cancel — restoring the save state wholesale over anything else done meanwhile. The add form holds the new guideline outside the draft instead, which is ADR 0051's *a half-typed create form is not unsaved work* |
-| The guideline editor's two validation messages | 13px 600 `#9d3028` under the Name and the Guideline field | the name's, at that weight, as one line under the row's fields, named by the Save's and the radio's `aria-describedby`; no body-empty message | *Two refusals with one cause are one sentence*: the row's Save and its default radio are refused by the one fact, so they point at one line rather than each at a copy under its own control. The body-empty message is not drawn — the rule this surface enforces is the name, and the guidance the gate still refuses on its own |
+| *New guideline* on the Guidelines card | a header button appending an empty row, opened for editing | the one form below the list, "Add a guideline", submitted by *Add tone of voice* (ADR 0074) | the prototype's row is keyed by its position in an array; a guideline is keyed by its ID, which `DerivedIdField` derives from the name, so an appended row has no key until it has a name. The prototype pays for that by writing the row into the list and marking the draft unsaved on the press, then rolling both back on Cancel — restoring the save state wholesale over anything else done meanwhile. The form holds the new guideline outside the draft instead, and what it holds is unsaved work the prompt names and cannot save, as every form below a list's is |
+| The guideline editor's two validation messages | 13px 600 `#9d3028` under the Name and the Guideline field | one line after the form's buttons, at that weight, saying the first rule broken in the order the form asks — the name, the ID while adding, then the guidance — the field that breaks it marked and described by the line | the methods handoff's placement, which every form below a list takes (ADR 0072, ADR 0074). The guidance is refused before the press now, as `_require_text` would refuse it after; the default's radio is the list's and refuses nothing, so no second control points at the line |
+| *Make default* on a guideline | an outline button on every guideline but the default (:1926–1928) | the radio, as the item's lead, named "Make {name} the shop default" | the operator's decision of 29 September 2026: one of a set is the default, and a set of radios says so where a button per item does not |
 | The option's confirm | drawn under the option's chips in place of its *Remove this option* button, the rest of the option still on screen (:971) | the whole option row replaced by the confirm | `form-decisions.md` 9.2, "the confirm takes the row's place", which this document's rule states and every other removal follows; the prototype's option is the one row it draws a confirm on, and one list whose confirm left the row standing would be the exception every other list had to be read against |
 | "Removed Colour from the draft. Undo" after the second press | drawn (:982) | the notice without its Undo, a line that takes focus once the row has gone | a draft removal is already reverted by *Discard changes*, the order's delete is the one removal that cannot be, and an Undo per removal would be a second history to keep in agreement with the draft's (ADR 0060) |
 | A header's Delete | a confirm in place of the row | on the order editor, the confirm under the header, full width, while the Delete is withdrawn | a header has no row for the confirm to take the place of, and a panel stating a whole consequence does not fit between the header's other actions |
 | Delete and Duplicate on the product editor | frame 2c draws both on the header, Duplicate with a copy mark | both, on the header and as a catalog row action, Duplicate without the mark; Delete's confirm under the header, naming the orders whose lines name one of the product's variants | the product key holds a confirm to its product across renames and discards (ADR 0061). The orders are read once, when the confirm opens — never per render or per row, which is what *Required by a scenario* is refused for — because it is paid by the operator who asked, at the moment the answer changes what they do; the mark is outside the verb vocabulary (ADR 0062) |
-| A guideline's delete | *Delete guideline* (:1969) | *Remove*, named "Remove {name}", and a confirm asking to remove it | every entry list in this workspace removes under one verb and the specs reach the control by that name; rule 5 |
+| A guideline's delete | *Delete guideline* (:1969) | the item's trash, named "Remove {name}", and a confirm asking to remove it in the item's place | every entry list in this workspace removes under one verb and the specs reach the control by that name; rule 5 |
 | The queue under the composer | a coloured letter badge per arm and the configuration beside it; the queue drawn only for the bench's send | the arm's name and what it runs, in words, and the same queue for a Run on an arm's card, a scoring pass, a replay, a fork and — without arms — a freeze | the workspace has no per-arm colour to paint a badge with, and the arm's name is what its card is titled; `form-decisions.md` 10.2 is the rule for every long action, and the prototype draws the one it had room for (ADR 0065) |
 | A line beside Replay and Fork | "Same seed, same starting snapshot. Replay reproduces this exactly." in the finding's card | "Replay runs this incident again as it was recorded; Fork runs it again with the arms you choose." under the header, describing both buttons | a replay runs its arms against their models again, and a model arm does not reproduce its answer exactly; the line says what each derivation is, beside the reach line that says why one cannot run (ADR 0053, ADR 0065) |
 | The Scenarios index's last chip | "Draft" (:6864) | "Never published", as on every other index | one name per thing (*Names*): the chip counts the scenarios with no published version, which is what every other index whose listing carries a published version calls "Never published" |
@@ -163,7 +164,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | History's status chips | none drawn; every other index's chips carry a count (:3576–3579) | All, Running, Completed and Failed, each named by its word alone, with no figure; the kinds the clock, the check and the triangle | `ExperimentHistoryResponse` carries a page and its total and no count per status, and a figure the payload lacks is not faked (*Lists and counts*). The prototype's `filterKind` classifier (:5568–5577) places none of the three words and would draw its check beside *Failed*, so the kinds are the README's meanings instead |
 | New experiment's arms and scenario | one select per row naming configuration, version, framework and model together ("cfg-atlas v4 — Pydantic AI · gpt-5-mini"), and the scenario with its version | two selects per row — the record, then its published version — with the framework and model as the row's second line; Arm B's hint adds "Leave it empty to run arm A alone." | a configuration's versions are a read of their own, so one list of every version of every configuration is one read per configuration before the select can open; and the lab runs one arm or two, which a row that could not be emptied would not say (ADR 0064) |
 | The agent-configuration index's name | "Agent configurations" on the lab rail (:4827), the page title (:3229), the links back to the index (:390, :3291), the tour surface (:4637) and the setup-chain step (:4506) | "Agent configs" on the rail entry, the page title, the links back to the index and its tour; the setup-chain step "Agent configuration", with "Open agent configs" as its link | "Agent configurations" wraps onto two lines beside its count in the 216px rail; *Agent configs* is the same word shortened, where *Agent setup* would take the word the shop's setup pages already hold (*Names*). The step names the record kind, as its neighbours Support identity and Judge do, and its link names the index |
-| A template's parameters | read-only rows of name, kind and *same-shop* (:607–612), with no way to author one on the editor | `EntryCard` rows that open in place on kind, description, default and whether a scenario must bind it, with ↑/↓ and a Remove that asks twice on the row and *Add parameter* below a rule | the parameters are authored on this editor and nowhere else once the block exists — the prototype's editor has no other place to write a description or a default — and ADR 0060 asks twice before one leaves; the order is what a binding follows, so it stays authored |
+| A template's parameters | read-only items of name, kind and *same-shop* (:607–616), with no way to author one on the editor | items under *Typed parameters* — the name in monospace, the kind and *bound same-shop* beside it, the description, default and binding as the detail — with ↑/↓, the pencil and a trash that asks twice, and one form below, "Add a parameter" / "Edit {name}", that asks the label, kind, description, default and whether it is required — which binds a scenario only while there is no default (ADR 0074) | the parameters are authored on this editor and nowhere else once the block exists — the prototype's editor has no other place to write a description or a default — and ADR 0060 asks twice before one leaves; the order is what a binding follows, so it stays authored and its arrows stay on the item. The row's hint is the slice's own: the prototype's, that the editor refuses a binding outside the scenario's shop, is the card's line already |
 | A scenario's composed blocks | a row of name, binding line and kind with a one-press ×, and the picker beside a free-text binding input (:3091–3120) | `EntryCard` rows that read each binding back as the object it names, open in place on field rows for the bindings and an objective's severity, with ↑/↓ and a Remove that asks twice, and the picker below a rule | a binding is picked from this shop's own objects and never typed (*Where a set comes from decides the control*); ADR 0060 names composed objectives and mutations among the removals that ask twice; objective order is priority and mutation order the run timeline, both authored |
 
 Georgia on the results' stat numerals landed with the surface that first draws it, the arm cards
@@ -433,18 +434,16 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   The published state says the version is immutable and links to New experiment. Every other
   definition still publishes on one press; a review is worth its second press where a draft
   spans a whole workspace rather than one form.
-- **A saved row opens where it stands** (`EntryCard` edit mode): one payload builder per entry
-  for the add form and the open row; one row open per list, siblings' Edit disabled with a line
-  saying why and that an open row is not in the draft until Save; Cancel writes nothing; the row
-  is a named form; a refusal one path makes the other makes too. An open row keeps what was
-  typed in it, and every field not typed in — and the row's name — follows any change to its
-  entry, a page's Discard included (ADR 0051, amended), so its Save never writes a discarded
-  value back. Fields that only make sense together follow as one unit or not at all: a
-  parameter's kind, requiredness and default. The lists that open this way:
-  the tone-of-voice guidelines; a product's variants, the one of its lists that does; a
-  template's parameters (the ↑/↓
-  on the row, because the order is authored); a scenario's composed objectives and mutations
-  (the ↑/↓ on the row too). A set of values entered one at a time is a `ChipListField`, and a
+- **A saved row opens where it stands** (`EntryCard` edit mode) on two lists only, as the
+  operator scoped Milestone 10: a product's variants, the one of its lists that does, and a
+  scenario's composed objectives and mutations (the ↑/↓ on the row, because the order is
+  authored). Every other list of records is edited in its card's form, below. One payload
+  builder per entry for the add form and the open row; one row open per list, siblings' Edit
+  disabled with a line saying why and that an open row is not in the draft until Save; Cancel
+  writes nothing; the row is a named form; a refusal one path makes the other makes too. An
+  open row keeps what was typed in it, and every field not typed in — and the row's name —
+  follows any change to its entry, a page's Discard included (ADR 0051, amended), so its Save
+  never writes a discarded value back. A set of values entered one at a time is a `ChipListField`, and a
   ticket's thread grows by its composer, rather than either being this.
   An open row asks in the add form's words, stacked as the add form draws them, except a
   composed block's, whose bindings and severity have no add form to share words with and stand
@@ -469,8 +468,12 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   product's options — the values as chips on the item and in the form, the key fixed — its
   media references, whose reference is its own key and stays asked, its typed attributes — the
   type beside the name, the key fixed, the form one unit through a discard — and its reviews,
-  named by their ID on their controls. A
-  list's control of its own stays on the item and free while the form edits another entry. The last enabled payment method stays on
+  named by their ID on their controls; the tone-of-voice guidelines — the default's radio as the
+  item's lead, the *shop default* pill beside the name, the ID fixed, the default's way-out line
+  where its trash would stand — and a template's parameters, the name in monospace and fixed,
+  the kind and *bound same-shop* beside it, ↑/↓ before the pencil. A
+  list's control of its own stays on the item and free while the form edits any entry, the one
+  it holds included, and an edit never moves what that control answers. The last enabled payment method stays on
   and on the list, a workspace rule stricter than the lab, which only refuses it at publication.
   Four of the handoff's hints on the method cards claim behaviour the lab does not have and are
   written as what it does instead (ADR 0072, *The hints say what the lab does*).
@@ -514,12 +517,14 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   then no value; *Add media* for a reference empty or another entry's, then the alt text empty;
   *Add attribute* for a label empty, the key not a slug or another attribute's while adding, a
   value empty or not one its type holds, a measurement's unit, then a choice's choices — none,
-  or none its value; *Add review* for an author empty, then the body — in one line after the
+  or none its value; *Add review* for an author empty, then the body; *Add tone of voice* for a
+  name empty, the ID not kebab-case or another guideline's while adding, then the guidance;
+  *Add parameter* at the template's cap, then a label empty, both while adding only — in one line after the
   buttons, a blank form refused and marking nothing, a `required` field left empty included, ADR 0072, ADR 0074), and every
   add form's submit, which is `PrimaryAction`
   with the create glyph wherever it is refused or not, and says its reason in a `RefusalLine`
   under it where it is — the scenario editor's *Add* at the objective and mutation caps (the
-  lab's sentence), *Add parameter* at the template's cap. Outside a form below a list, a refusal a field already states natively — a `required` field left
+  lab's sentence), and the new-block page's *Add parameter* at the template's cap. Outside a form below a list, a refusal a field already states natively — a `required` field left
   empty (in an add form or an open row alike); an identifier `DerivedIdField` refuses — is left
   to the field, so a submit whose only fault is a `required` field left empty is not dashed. Start is refused until it can work, and says every cause
   it waits for at once. A press in flight is not a refusal: it says nothing, and is `aria-disabled`
@@ -533,11 +538,12 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   Secondary buttons and native form controls keep native `disabled`, with their reason in `title`
   and a muted line their `aria-describedby` names.
   `entryEdit`'s refusal is `{ id, reason }` and never a bare `false`, so a Save that will not
-  save says so in the row. **Two refusals with one cause are one sentence**: a tone-of-voice
-  guideline with no name can neither be saved nor be made the shop default, and its Save and its
-  default radio point at the row's single line. It is the rule's one current example: a form
-  below a list says its one refusal once after its buttons whatever causes it, and Slice 39,
-  which moves the guidelines onto that form, decides whether the rule is retired.
+  save says so in the row. **Two refusals with one cause are one sentence**: a slug another shop
+  uses is refused on Shop details' *Slug* field and refuses the page's Save, and the Save names
+  the field's line (`DerivedIdField`'s `extraId`) rather than writing the sentence a second time
+  (ADR 0069). A form below a list says its one refusal once after its buttons, whatever causes
+  it, and the list's own control — the default guideline's radio — refuses nothing for what the
+  form holds.
 - **A long-running action reports itself** (`form-decisions.md` 10.2, ADR 0065). Sending a
   turn, running an arm, scoring, replaying, forking and freezing draw `ActionStatus`: the arms as
   a queue, each row saying where it stands in the prototype's words ("running…", "completed
@@ -551,9 +557,10 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   The pressed control holds focus while it runs; where it leaves because it succeeded, focus goes
   to what changed.
 - **A refusal that has a way out names the way out, where the control would have stood.** The
-  shop's default tone-of-voice guideline carries no Remove at all — deleting it would leave
+  shop's default tone-of-voice guideline carries no trash at all — deleting it would leave
   the draft owing `tone_of_voice_without_default` with no control on that page to pay it — and
-  the sentence naming the pointer stands in the Remove's place (`Workspace.dc.html` :1897).
+  the sentence naming the pointer stands in the trash's place on its item (`Workspace.dc.html`
+  :1897).
   That is a refusal rather than a blocked action: nothing on the row can be pressed to make it
   proceed, so there is no control to dash, and the second press is for the Removes that are
   offered (ADR 0060).

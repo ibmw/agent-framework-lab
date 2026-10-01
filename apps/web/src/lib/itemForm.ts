@@ -4,7 +4,9 @@ import { itemFormReason, useRegisterUnsavedWork } from "./unsavedWork";
 /**
  * The state behind a list edited in the form below it — Shop details' two method lists, an
  * order's lines and events, a profile's addresses, background and hidden facts, an identity's
- * guidance notes, and a product's options, media, attributes and reviews (ADR 0072, ADR 0074). The drawing is `components/ItemList.tsx`.
+ * guidance notes, a product's options, media, attributes and reviews, the tone-of-voice
+ * guidelines and a template's parameters (ADR 0072, ADR 0074). The drawing is
+ * `components/ItemList.tsx`.
  */
 
 /**

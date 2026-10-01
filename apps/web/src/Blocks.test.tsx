@@ -16,13 +16,22 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { MAX_PARAMETERS, PARAMETERS_FULL } from "./lib/blocks";
+import { PARAMETER_LABEL_RULE } from "./lib/fieldRules";
 import { TOURS } from "./lib/tours";
 import { neutralPillClasses } from "./lib/ui";
+import { itemFormReason } from "./lib/unsavedWork";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
 import { expectPublicationPill } from "./test/indexes";
+import { expectRulesInFieldOrder } from "./test/itemForm";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
-import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import {
+  describedText,
+  expectNotRefused,
+  expectRefused,
+  submitWithoutPressing,
+} from "./test/refused";
 import { expectCardOnRows, expectFieldRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -389,6 +398,39 @@ function renderAt(path: string) {
   return renderApp(path);
 }
 
+/** The checkbox that writes `required`, which binds a scenario only while there is no default. */
+const REQUIRED = "A scenario must bind this, unless the template gives a default";
+
+/** The parameter form's two optional fields, by the label they are asked by. */
+const DESCRIPTION = "Description (optional)";
+const DEFAULT = "Default (optional)";
+
+/** The form below *Typed parameters*: "Add a parameter", or "Edit {name}" while it holds one. */
+function parameterForm(name: string) {
+  return within(
+    within(screen.getByRole("region", { name: "Parameters" })).getByRole("group", { name }),
+  );
+}
+
+/** A parameter's item on the list, by the name it is drawn under. */
+function itemOf(name: string): HTMLElement {
+  const items = within(screen.getByRole("region", { name: "Parameters" })).getAllByRole("listitem");
+  const item = items.find((candidate) => within(candidate).queryByText(name, { exact: true }));
+  if (item === undefined) {
+    throw new Error(`No item for ${name}`);
+  }
+  return item;
+}
+
+/** The parameter `reference_parameter_with_default` refuses is never what the editor writes. */
+function expectNoReferenceWithADefault(parameters: Array<Record<string, unknown>>) {
+  for (const parameter of parameters) {
+    if (String(parameter.kind).endsWith("_reference")) {
+      expect(parameter.default, `${parameter.name} is a reference with a default`).toBeNull();
+    }
+  }
+}
+
 /** A promise this test resolves by hand, so a read can be held open while the page renders. */
 function heldOpen() {
   let release: () => void = () => {};
@@ -614,12 +656,13 @@ describe("objective block editor", () => {
 
     await screen.findByRole("heading", { name: "read-required-document" });
     await user.click(screen.getByRole("button", { name: "Edit severity" }));
-    expect(screen.getByLabelText("Default of severity")).toHaveValue("required");
-    await user.click(screen.getByRole("button", { name: "Cancel editing severity" }));
+    expect(parameterForm("Edit severity").getByLabelText(DEFAULT)).toHaveValue("required");
+    await user.click(parameterForm("Edit severity").getByRole("button", { name: "Cancel" }));
 
     await user.click(screen.getByRole("button", { name: "Edit doc_ref" }));
-    expect(screen.queryByLabelText("Default of doc_ref")).toBeNull();
-    expect(screen.getByText(/a template\s+cannot default it/)).toBeVisible();
+    const form = parameterForm("Edit doc_ref");
+    expect(form.queryByLabelText(DEFAULT)).toBeNull();
+    expect(form.getByText(/a template\s+cannot default it/)).toBeVisible();
   });
 
   it("says beside its checkbox that an optional parameter has nothing to fall back on, and saves it", async () => {
@@ -630,9 +673,9 @@ describe("objective block editor", () => {
 
     await screen.findByRole("heading", { name: "read-required-document" });
     await user.click(screen.getByRole("button", { name: "Edit severity" }));
-    const defaultOf = screen.getByLabelText("Default of severity");
-    const row = within(screen.getByRole("form", { name: "Edit severity" }));
-    const required = row.getByRole("checkbox", { name: "A scenario must bind this" });
+    const form = parameterForm("Edit severity");
+    const defaultOf = form.getByLabelText(DEFAULT);
+    const required = form.getByRole("checkbox", { name: REQUIRED });
     expect(screen.queryByText(sentence)).toBeNull();
 
     // Required with no default is the gate's own answer: nothing to say.
@@ -642,63 +685,104 @@ describe("objective block editor", () => {
 
     // Optional with no default is `optional_parameter_without_default`, said under the checkbox.
     await user.click(required);
-    const line = row.getByText(sentence);
+    const line = form.getByText(sentence);
     expect(line).toBeVisible();
     expect(line).toHaveAttribute("aria-live", "polite");
     expect(line).not.toHaveAttribute("role", "alert");
     expect(required).toHaveAttribute("aria-invalid", "true");
     expect(required).toHaveAccessibleDescription(sentence);
-    expect(defaultOf).toHaveAccessibleDescription(sentence);
+    expect(describedText(defaultOf).trim()).toBe(sentence);
 
     // A default clears it, and so would requiring the parameter again.
     await user.selectOptions(defaultOf, "expected");
     expect(screen.queryByText(sentence)).toBeNull();
     expect(required).not.toHaveAttribute("aria-invalid");
     await user.selectOptions(defaultOf, "");
-    expect(row.getByText(sentence)).toBeVisible();
+    expect(form.getByText(sentence)).toBeVisible();
     await user.click(required);
     expect(screen.queryByText(sentence)).toBeNull();
     await user.click(required);
 
-    // A finding, not a refusal: the row saves it, and the closed row goes on saying it.
-    await user.click(row.getByRole("button", { name: "Save severity" }));
-    expect(screen.getByText(sentence)).toBeVisible();
+    // A finding, not a refusal: the form saves it, and the item goes on saying it.
+    expectNotRefused(form.getByRole("button", { name: "Save changes" }));
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    const item = itemOf("severity");
+    expect(within(item).getByText(sentence)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
     const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
     expect(parameters[1]).toMatchObject({ name: "severity", required: false, default: null });
   });
 
-  it("keeps a parameter's kind, requiredness and default as one through a Discard", async () => {
+  it("keeps a parameter's kind, requiredness and default as one through a Discard, while the form holds an edit", async () => {
     const user = userEvent.setup();
     renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
 
-    // In the draft: entity_ref retyped to optional text with a default, and the row saved.
+    // In the draft: entity_ref retyped to optional text with a default, and the edit saved.
     await screen.findByRole("heading", { name: "concurrent-entity-mutation" });
     await user.click(screen.getByRole("button", { name: "Edit entity_ref" }));
-    await user.selectOptions(screen.getByLabelText("Kind of entity_ref"), "text");
-    const row = within(screen.getByRole("form", { name: "Edit entity_ref" }));
-    await user.click(row.getByRole("checkbox", { name: "A scenario must bind this" }));
-    await user.type(screen.getByLabelText("Default of entity_ref"), "a");
-    await user.click(screen.getByRole("button", { name: "Save entity_ref" }));
-    // Reopened, and only the default typed in.
+    const form = parameterForm("Edit entity_ref");
+    await user.selectOptions(form.getByLabelText("Kind"), "text");
+    await user.click(form.getByRole("checkbox", { name: REQUIRED }));
+    await user.type(form.getByLabelText(DEFAULT), "a");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    // Loaded again, and only the default typed in.
     await user.click(screen.getByRole("button", { name: "Edit entity_ref" }));
-    await user.clear(screen.getByLabelText("Default of entity_ref"));
-    await user.type(screen.getByLabelText("Default of entity_ref"), "b");
+    const again = parameterForm("Edit entity_ref");
+    await user.clear(again.getByLabelText(DEFAULT));
+    await user.type(again.getByLabelText(DEFAULT), "b");
 
-    // The lab holds a required reference with no default. Following its kind under the typed
-    // default would build a reference with a default, which the row no longer offers to clear.
+    // The lab holds a required reference with no default. The form is dirty, so it keeps all
+    // it holds (ADR 0074): a kind followed under the typed default would build a reference with
+    // a default, which the form no longer offers to clear.
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
 
-    await waitFor(() => expect(screen.getByLabelText("Kind of entity_ref")).toHaveValue("text"));
-    const open = within(screen.getByRole("form", { name: "Edit entity_ref" }));
-    expect(open.getByRole("checkbox", { name: "A scenario must bind this" })).not.toBeChecked();
-    expect(screen.getByLabelText("Default of entity_ref")).toHaveValue("b");
-    await user.click(screen.getByRole("button", { name: "Save entity_ref" }));
+    await waitFor(() => expect(screen.getByText("All changes saved")).toBeInTheDocument());
+    const kept = parameterForm("Edit entity_ref");
+    expect(kept.getByLabelText("Kind")).toHaveValue("text");
+    expect(kept.getByRole("checkbox", { name: REQUIRED })).not.toBeChecked();
+    expect(kept.getByLabelText(DEFAULT)).toHaveValue("b");
+    await user.click(kept.getByRole("button", { name: "Save changes" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
     const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
     expect(parameters[0]).toMatchObject({ kind: "text", required: false, default: "b" });
+    expectNoReferenceWithADefault(parameters);
+  });
+
+  it("follows a Discard whole while the form holds an untouched edit, so no reference keeps a default", async () => {
+    const user = userEvent.setup();
+    renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
+
+    await screen.findByRole("heading", { name: "concurrent-entity-mutation" });
+    await user.click(screen.getByRole("button", { name: "Edit entity_ref" }));
+    const form = parameterForm("Edit entity_ref");
+    await user.selectOptions(form.getByLabelText("Kind"), "text");
+    await user.click(form.getByRole("checkbox", { name: REQUIRED }));
+    await user.type(form.getByLabelText(DEFAULT), "a");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    // Loaded again on the draft's optional text, and left alone.
+    await user.click(screen.getByRole("button", { name: "Edit entity_ref" }));
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    // Clean, so it follows the lab's required reference whole: the default goes with the kind.
+    const followed = parameterForm("Edit entity_ref");
+    await waitFor(() => expect(followed.getByLabelText("Kind")).toHaveValue("entity_reference"));
+    expect(followed.queryByLabelText(DEFAULT)).toBeNull();
+    expect(followed.queryByRole("checkbox", { name: REQUIRED })).toBeNull();
+    await user.type(followed.getByLabelText(DESCRIPTION), " Moved.");
+    await user.click(followed.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
+    expect(parameters[0]).toMatchObject({
+      kind: "entity_reference",
+      required: true,
+      default: null,
+      description: "The order or customer that moves under the arm. Moved.",
+    });
+    expectNoReferenceWithADefault(parameters);
   });
 
   it("drops a default the new kind cannot carry when a parameter is retyped", async () => {
@@ -707,11 +791,12 @@ describe("objective block editor", () => {
 
     await screen.findByRole("heading", { name: "read-required-document" });
     await user.click(screen.getByRole("button", { name: "Edit severity" }));
-    await user.selectOptions(screen.getByLabelText("Kind of severity"), "entity_reference");
+    const form = parameterForm("Edit severity");
+    await user.selectOptions(form.getByLabelText("Kind"), "entity_reference");
 
     // The field is gone rather than showing a value the publish gate would refuse.
-    expect(screen.queryByLabelText("Default of severity")).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Save severity" }));
+    expect(form.queryByLabelText(DEFAULT)).toBeNull();
+    await user.click(form.getByRole("button", { name: "Save changes" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
     const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
@@ -739,12 +824,10 @@ describe("objective block editor", () => {
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
-    const form = screen.getByRole("form", { name: "Add a parameter" });
-    await user.type(within(form).getByLabelText("Label"), "policy ref");
-    expect(within(form).getByLabelText("Label")).toHaveAccessibleDescription(
-      /saved as policy_ref/i,
-    );
-    await user.click(within(form).getByRole("button", { name: "Add parameter" }));
+    const form = parameterForm("Add a parameter");
+    await user.type(form.getByLabelText("Label"), "policy ref");
+    expect(form.getByLabelText("Label")).toHaveAccessibleDescription(/saved as policy_ref/i);
+    await user.click(form.getByRole("button", { name: "Add parameter" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
@@ -757,21 +840,20 @@ describe("objective block editor", () => {
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
-    const form = screen.getByRole("form", { name: "Add a parameter" });
-    expect(within(form).getByLabelText("Label")).toHaveAttribute("placeholder", "Document");
-    expect(within(form).queryByPlaceholderText("doc_ref")).toBeNull();
+    const form = parameterForm("Add a parameter");
+    expect(form.getByLabelText("Label")).toHaveAttribute("placeholder", "Document");
+    expect(form.queryByPlaceholderText("doc_ref")).toBeNull();
 
-    await user.type(within(form).getByLabelText("Label"), "doc ref");
-    expect(within(form).getByLabelText("Label")).toHaveAccessibleDescription(/saved as doc_ref_2/i);
+    await user.type(form.getByLabelText("Label"), "doc ref");
+    expect(form.getByLabelText("Label")).toHaveAccessibleDescription(/saved as doc_ref_2/i);
 
-    await user.clear(within(form).getByLabelText("Label"));
-    await user.type(within(form).getByLabelText("Label"), "!!!");
-    expect(within(form).getByLabelText("Label")).toHaveAccessibleDescription(/saved as parameter/i);
-    await user.click(within(form).getByRole("button", { name: "Add parameter" }));
-    await user.type(within(form).getByLabelText("Label"), "!!!");
-    expect(within(form).getByLabelText("Label")).toHaveAccessibleDescription(
-      /saved as parameter_2/i,
-    );
+    await user.clear(form.getByLabelText("Label"));
+    await user.type(form.getByLabelText("Label"), "!!!");
+    expect(form.getByLabelText("Label")).toHaveAccessibleDescription(/saved as parameter/i);
+    await user.click(form.getByRole("button", { name: "Add parameter" }));
+    const next = parameterForm("Add a parameter");
+    await user.type(next.getByLabelText("Label"), "!!!");
+    expect(next.getByLabelText("Label")).toHaveAccessibleDescription(/saved as parameter_2/i);
   });
 
   it("reorders parameters, because order is what a scenario binds in", async () => {
@@ -865,26 +947,29 @@ describe("mutation block editor", () => {
     );
   });
 
-  it("adds the timing parameter the gate asks for", async () => {
+  it("adds the timing parameter the gate asks for, with its description and default given while adding", async () => {
     const user = userEvent.setup();
     renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
 
     await screen.findByRole("heading", { name: "concurrent-entity-mutation" });
-    const form = screen.getByRole("form", { name: "Add a parameter" });
-    await user.type(within(form).getByLabelText("Label"), "timing");
-    await user.selectOptions(within(form).getByLabelText("Kind"), "timing");
-    await user.click(within(form).getByRole("button", { name: "Add parameter" }));
-    await user.click(screen.getByRole("button", { name: "Edit timing" }));
-    await user.type(screen.getByLabelText("Default of timing"), "after_first_read");
-    await user.click(screen.getByRole("button", { name: "Save timing" }));
+    const form = parameterForm("Add a parameter");
+    await user.type(form.getByLabelText("Label"), "timing");
+    await user.selectOptions(form.getByLabelText("Kind"), "timing");
+    await user.type(form.getByLabelText(DESCRIPTION), " When the runtime injects it. ");
+    await user.type(form.getByLabelText(DEFAULT), "after_first_read");
+    await user.click(form.getByRole("button", { name: "Add parameter" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
     const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
-    expect(parameters[1]).toMatchObject({
+    // Stored stripped, as `_require_text` would otherwise refuse it.
+    expect(parameters[1]).toEqual({
       name: "timing",
       kind: "timing",
+      description: "When the runtime injects it.",
+      required: true,
       default: "after_first_read",
+      shop_bound: false,
     });
   });
 
@@ -1176,8 +1261,8 @@ describe("the block editor's side panel", () => {
 });
 
 /**
- * The block editor's sections on the reference pages' rows. The parameters stay a list with an
- * add form beneath it, whose stacked labels are an add form's (`ParameterForm`).
+ * The block editor's sections on the reference pages' rows. The parameters are a list with the
+ * one form below it (ADR 0074), whose stacked labels are the form's (`ItemFormRow`).
  */
 describe("the block editor's rows", () => {
   it("draws the template's fields on rows, the statement's rule under its label", async () => {
@@ -1220,53 +1305,158 @@ describe("the block editor's rows", () => {
 });
 
 /**
- * A template's parameters are a list on `EntryCard` (PLAN-UX Slice 33): a parameter opens where
- * it stands on its kind, description, default and whether a scenario must bind it; the arrows
- * stay on the row; *Add parameter* is the add form below it — both through `parameterEntry`.
+ * A template's parameters are edited in the form below them (ADR 0074, PLAN-UX Slice 39): each
+ * parameter an item with its kind, its binding and its ↑/↓, and one form that adds a parameter or
+ * edits the one chosen — both through `parameterEntry`.
  */
 describe("a template's parameters", () => {
-  async function openEditor() {
+  async function openEditor(content = OBJECTIVE_CONTENT) {
+    currentObjective = content;
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
     await screen.findByRole("heading", { name: "read-required-document" });
     return within(screen.getByRole("region", { name: "Parameters" }));
   }
 
-  it("reads a parameter back on its row and opens its fields in place", async () => {
-    const user = userEvent.setup();
+  /** A template at the contract's cap: its two parameters and six of text. */
+  function full(): ObjectiveBlockPayloadSchema {
+    return {
+      ...OBJECTIVE_CONTENT,
+      parameters: [
+        ...OBJECTIVE_CONTENT.parameters,
+        ...Array.from({ length: MAX_PARAMETERS - OBJECTIVE_CONTENT.parameters.length }, (_, i) => ({
+          name: `note_${i + 1}`,
+          kind: "text" as const,
+          description: "",
+          required: true,
+          default: null,
+          shop_bound: false,
+        })),
+      ],
+    };
+  }
+
+  it("reads a parameter back on its item: the name in monospace, its kind, its binding and its description", async () => {
     const parameters = await openEditor();
 
-    expect(parameters.queryByLabelText("Description of doc_ref")).toBeNull();
-    expect(parameters.getByText("The shop document the arm has to read.")).toBeVisible();
+    expect(parameters.getByRole("group", { name: "Typed parameters" })).toBeVisible();
+    const docRef = itemOf("doc_ref");
+    expect(within(docRef).getByText("doc_ref")).toHaveClass("font-mono");
+    expect(within(docRef).getByText("Document")).toBeVisible();
+    expect(within(docRef).getByText("bound same-shop")).toBeVisible();
+    expect(within(docRef).getByText("The shop document the arm has to read.")).toBeVisible();
+    expect(
+      within(docRef).getByText(
+        "Always bound by the scenario — a template cannot default an object.",
+      ),
+    ).toBeVisible();
+    const severity = itemOf("severity");
+    expect(within(severity).getByText(/Default:/)).toHaveTextContent("Default: Required");
+    // Required, but with a default: `check_bindings` lets a scenario leave it unbound.
+    expect(within(severity).getByText("A scenario may leave it to the default.")).toBeVisible();
+    expect(within(severity).queryByText("bound same-shop")).toBeNull();
+    // Its controls, in the order they stand: the arrows before the pencil, then the trash.
+    expect(
+      within(severity)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Move severity up", "Move severity down", "Edit severity", "Remove severity"]);
+    expect(within(severity).getByRole("button", { name: "Move severity down" })).toBeDisabled();
+    expect(within(docRef).getByRole("button", { name: "Move doc_ref up" })).toBeDisabled();
+  });
 
-    await user.click(parameters.getByRole("button", { name: "Edit doc_ref" }));
+  it("loads a parameter into the form with its name fixed, and saves it where it stands", async () => {
+    const user = userEvent.setup();
+    await openEditor();
 
-    const open = within(parameters.getByRole("form", { name: "Edit doc_ref" }));
-    expect(open.getByLabelText("Kind of doc_ref")).toHaveValue("document_reference");
-    expect(open.getByLabelText("Description of doc_ref")).toHaveValue(
-      "The shop document the arm has to read.",
+    const pencil = screen.getByRole("button", { name: "Edit doc_ref" });
+    await user.click(pencil);
+    expect(itemOf("doc_ref")).toHaveAttribute("aria-current", "true");
+    const form = parameterForm("Edit doc_ref");
+    // The name a scenario binds by is shown and fixed, so focus is on the first field asked.
+    expect(form.getByLabelText("Kind")).toHaveFocus();
+    const label = form.getByLabelText("Label");
+    expect(label).toHaveValue("doc_ref");
+    expect(label).toHaveAttribute("readonly");
+    await user.type(label, "x");
+    expect(label).toHaveValue("doc_ref");
+    expect(form.getByLabelText("Kind")).toHaveValue("document_reference");
+    expect(form.getByLabelText(DESCRIPTION)).toHaveValue("The shop document the arm has to read.");
+
+    await user.clear(form.getByLabelText(DESCRIPTION));
+    await user.type(form.getByLabelText(DESCRIPTION), "The policy the arm must read.");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+
+    expect(pencil).toHaveFocus();
+    expect(parameterForm("Add a parameter").getByLabelText("Label")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const saved = savedPayloads[0].parameters as Array<Record<string, unknown>>;
+    expect(saved.map((entry) => entry.name)).toEqual(["doc_ref", "severity"]);
+    expect(saved[0]).toEqual({
+      ...OBJECTIVE_CONTENT.parameters[0],
+      description: "The policy the arm must read.",
+    });
+  });
+
+  it("refuses an empty label while adding, in the order the form asks, and marks nothing on a blank form", async () => {
+    const user = userEvent.setup();
+    await openEditor();
+
+    const add = parameterForm("Add a parameter");
+    const button = add.getByRole("button", { name: "Add parameter" });
+    expectRefused(button, PARAMETER_LABEL_RULE);
+    expect(add.getByLabelText("Label")).not.toHaveAttribute("aria-invalid");
+    await submitWithoutPressing(button);
+    expect(screen.getAllByRole("button", { name: /^Edit / })).toHaveLength(2);
+
+    await user.type(add.getByLabelText(DESCRIPTION), "Typed first.");
+    await expectRulesInFieldOrder(
+      user,
+      screen.getByRole("group", { name: "Add a parameter" }),
+      button,
+      { Label: { rule: PARAMETER_LABEL_RULE, answer: "policy ref" } },
     );
-    // The open row's arrows and Remove wait for Save or Cancel.
-    expect(parameters.queryByRole("button", { name: "Move doc_ref down" })).toBeNull();
-    expect(parameters.queryByRole("button", { name: "Remove doc_ref" })).toBeNull();
-    expect(parameters.getByRole("button", { name: "Move severity up" })).toBeVisible();
+  });
+
+  it("refuses an addition at the template's cap, marking no field, and still saves an edit", async () => {
+    const user = userEvent.setup();
+    await openEditor(full());
+
+    const add = parameterForm("Add a parameter");
+    await user.type(add.getByLabelText("Label"), "one more");
+    const button = add.getByRole("button", { name: "Add parameter" });
+    expectRefused(button, PARAMETERS_FULL);
+    expect(add.getByLabelText("Label")).not.toHaveAttribute("aria-invalid");
+    await submitWithoutPressing(button);
+    expect(screen.getAllByRole("button", { name: /^Edit / })).toHaveLength(MAX_PARAMETERS);
+    await user.click(add.getByRole("button", { name: "Add parameter" }));
+    expect(screen.getAllByRole("button", { name: /^Edit / })).toHaveLength(MAX_PARAMETERS);
+
+    // The cap is about adding: an edit at it is free.
+    await user.click(screen.getByRole("button", { name: "Edit note_1" }));
+    const form = parameterForm("Edit note_1");
+    await user.type(form.getByLabelText(DESCRIPTION), "A note.");
+    expectNotRefused(form.getByRole("button", { name: "Save changes" }));
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    expect(within(itemOf("note_1")).getByText("A note.")).toBeVisible();
   });
 
   it("saves a retyped parameter with exactly what the add form writes for the same kind", async () => {
     const user = userEvent.setup();
-    const parameters = await openEditor();
+    await openEditor();
 
-    const add = within(parameters.getByRole("form", { name: "Add a parameter" }));
+    const add = parameterForm("Add a parameter");
     await user.type(add.getByLabelText("Label"), "order");
     await user.selectOptions(add.getByLabelText("Kind"), "entity_reference");
     await user.click(add.getByRole("button", { name: "Add parameter" }));
 
     // `severity` is optional-capable and carries a default; as an entity reference it can
     // carry neither, and the builder says so the way the add form's does.
-    await user.click(parameters.getByRole("button", { name: "Edit severity" }));
-    const open = within(parameters.getByRole("form", { name: "Edit severity" }));
-    await user.selectOptions(open.getByLabelText("Kind of severity"), "entity_reference");
-    await user.clear(open.getByLabelText("Description of severity"));
-    await user.click(open.getByRole("button", { name: "Save severity" }));
+    await user.click(screen.getByRole("button", { name: "Edit severity" }));
+    const open = parameterForm("Edit severity");
+    await user.selectOptions(open.getByLabelText("Kind"), "entity_reference");
+    await user.clear(open.getByLabelText(DESCRIPTION));
+    await user.click(open.getByRole("button", { name: "Save changes" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
@@ -1277,41 +1467,101 @@ describe("a template's parameters", () => {
     expect(added).toMatchObject({ shop_bound: true, required: true, default: null });
   });
 
-  it("writes nothing on Cancel, and nothing typed in an open row reaches Save draft", async () => {
+  it("writes nothing on Cancel, empties the form and hands focus back to the Edit", async () => {
     const user = userEvent.setup();
-    const parameters = await openEditor();
+    await openEditor();
 
-    await user.type(screen.getByLabelText("Statement"), " now");
-    await user.click(parameters.getByRole("button", { name: "Edit doc_ref" }));
-    await user.type(parameters.getByLabelText("Description of doc_ref"), " Typed, never saved.");
+    const pencil = screen.getByRole("button", { name: "Edit doc_ref" });
+    await user.click(pencil);
+    const form = parameterForm("Edit doc_ref");
+    await user.type(form.getByLabelText(DESCRIPTION), " Typed, never saved.");
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(savedPayloads).toHaveLength(1));
-    const saved = savedPayloads[0].parameters as Array<Record<string, unknown>>;
-    expect(saved[0].description).toBe("The shop document the arm has to read.");
+    await user.click(form.getByRole("button", { name: "Cancel" }));
 
-    await user.click(parameters.getByRole("button", { name: "Cancel editing doc_ref" }));
-    expect(parameters.getByText("The shop document the arm has to read.")).toBeVisible();
-    expect(parameters.queryByText(/Typed, never saved/)).toBeNull();
+    expect(pencil).toHaveFocus();
+    expect(screen.queryByRole("group", { name: "Edit doc_ref" })).toBeNull();
+    const add = parameterForm("Add a parameter");
+    expect(add.getByLabelText("Label")).toHaveValue("");
+    expect(add.getByLabelText(DESCRIPTION)).toHaveValue("");
+    expect(itemOf("doc_ref")).not.toHaveAttribute("aria-current");
+    expect(screen.queryByText(/Typed, never saved/)).toBeNull();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    expect(savedPayloads).toEqual([]);
   });
 
-  it("holds one open row, and the other Edit says why it is disabled", async () => {
+  it("writes nothing when an untouched parameter is saved, so the draft stays clean", async () => {
     const user = userEvent.setup();
-    const parameters = await openEditor();
+    await openEditor();
 
-    await user.click(parameters.getByRole("button", { name: "Edit doc_ref" }));
+    const pencil = screen.getByRole("button", { name: "Edit severity" });
+    await user.click(pencil);
+    await user.click(parameterForm("Edit severity").getByRole("button", { name: "Save changes" }));
 
-    const sibling = parameters.getByRole("button", { name: "Edit severity" });
-    expect(sibling).toBeDisabled();
-    expect(sibling).toHaveAccessibleDescription(
-      "Editing doc_ref. Save or Cancel before opening another row; nothing in the open row reaches the draft until you press Save.",
+    expect(pencil).toHaveFocus();
+    expect(screen.queryByRole("group", { name: "Edit severity" })).toBeNull();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    expect(savedPayloads).toEqual([]);
+  });
+
+  it("moves another parameter with ↑ while the form edits one, and keeps the edit", async () => {
+    const user = userEvent.setup();
+    await openEditor();
+
+    await user.click(screen.getByRole("button", { name: "Edit doc_ref" }));
+    await user.type(parameterForm("Edit doc_ref").getByLabelText(DESCRIPTION), " Typed.");
+
+    // The arrows are the list's, never the form's: free while the form holds an edit.
+    const up = within(itemOf("severity")).getByRole("button", { name: "Move severity up" });
+    expect(up).toBeEnabled();
+    await user.click(up);
+
+    const items = within(screen.getByRole("region", { name: "Parameters" })).getAllByRole(
+      "listitem",
+    );
+    expect(items.map((item) => item.querySelector(".font-mono")?.textContent)).toEqual([
+      "severity",
+      "doc_ref",
+    ]);
+    const form = parameterForm("Edit doc_ref");
+    expect(form.getByLabelText(DESCRIPTION)).toHaveValue(
+      "The shop document the arm has to read. Typed.",
+    );
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const saved = savedPayloads[0].parameters as Array<Record<string, unknown>>;
+    expect(saved.map((entry) => entry.name)).toEqual(["severity", "doc_ref"]);
+    expect(saved[1].description).toBe("The shop document the arm has to read. Typed.");
+  });
+
+  it("asks before leaving a parameter typed in its form, and one edited there, with the form's own reason", async () => {
+    const user = userEvent.setup();
+    await openEditor();
+
+    await user.type(parameterForm("Add a parameter").getByLabelText("Label"), "policy ref");
+    await user.click(railEntry("Mutation blocks", "Experiment lab workspace"));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      "The Parameters form holds “policy ref”, which has not been added to the draft.",
+    );
+    expect(prompt).toHaveTextContent(itemFormReason("a parameter", "draft"));
+    await user.click(within(prompt).getByRole("button", { name: "Stay on this page" }));
+
+    await user.click(screen.getByRole("button", { name: "Edit doc_ref" }));
+    await user.type(parameterForm("Edit doc_ref").getByLabelText(DESCRIPTION), " Typed.");
+    await user.click(railEntry("Mutation blocks", "Experiment lab workspace"));
+    expect(await screen.findByRole("dialog", { name: "Unsaved changes" })).toHaveTextContent(
+      "The Parameters form holds an edit to doc_ref that has not reached the draft.",
     );
   });
 
-  it("removes a parameter only on the second press", async () => {
+  it("removes a parameter only on the second press, and empties the form that was editing it", async () => {
     const user = userEvent.setup();
     const parameters = await openEditor();
 
+    await user.click(parameters.getByRole("button", { name: "Edit severity" }));
     await user.click(parameters.getByRole("button", { name: "Remove severity" }));
     const confirm = parameters.getByRole("group", { name: "Remove the parameter severity?" });
     expect(confirm).toHaveFocus();
@@ -1328,5 +1578,99 @@ describe("a template's parameters", () => {
       ),
     );
     expect(parameters.getByText("Removed the parameter severity from the draft.")).toHaveFocus();
+    expect(screen.queryByRole("group", { name: "Edit severity" })).toBeNull();
+    expect(parameterForm("Add a parameter").getByLabelText("Label")).toHaveValue("");
+  });
+
+  it("says how a scenario binds each parameter as `check_bindings` holds it", async () => {
+    const literal = (name: string, required: boolean, value: string | null) => ({
+      name,
+      kind: "text" as const,
+      description: "",
+      required,
+      default: value,
+      shop_bound: false,
+    });
+    const reference = (name: string, required: boolean) => ({
+      name,
+      kind: "entity_reference" as const,
+      description: "",
+      required,
+      default: null,
+      shop_bound: true,
+    });
+    await openEditor({
+      ...OBJECTIVE_CONTENT,
+      parameters: [
+        literal("must", true, null),
+        literal("defaulted", true, "x"),
+        literal("optional", false, "y"),
+        literal("bare", false, null),
+        reference("bound_ref", true),
+        // An API-authored draft can hold one; `binding_missing` ignores the kind.
+        reference("loose_ref", false),
+      ],
+    });
+
+    expect(within(itemOf("bare")).getByText("A scenario may leave it unbound.")).toBeVisible();
+    expect(within(itemOf("bare")).queryByText(/leave it to the default/)).toBeNull();
+    expect(
+      within(itemOf("bound_ref")).getByText(
+        "Always bound by the scenario — a template cannot default an object.",
+      ),
+    ).toBeVisible();
+    expect(within(itemOf("loose_ref")).getByText("A scenario may leave it unbound.")).toBeVisible();
+    expect(within(itemOf("loose_ref")).queryByText(/Always bound/)).toBeNull();
+
+    expect(within(itemOf("must")).getByText("A scenario must bind this.")).toBeVisible();
+    expect(
+      within(itemOf("defaulted")).getByText("A scenario may leave it to the default."),
+    ).toBeVisible();
+    expect(within(itemOf("defaulted")).queryByText("A scenario must bind this.")).toBeNull();
+    expect(
+      within(itemOf("optional")).getByText("A scenario may leave it to the default."),
+    ).toBeVisible();
+  });
+
+  it("names no parameter in the form's finding until a label is typed", async () => {
+    const user = userEvent.setup();
+    await openEditor();
+
+    const add = parameterForm("Add a parameter");
+    await user.selectOptions(add.getByLabelText("Kind"), "text");
+    const required = add.getByRole("checkbox", { name: REQUIRED });
+    await user.click(required);
+    expect(screen.queryByText(/is optional but has nothing to fall back on/)).toBeNull();
+    expect(required).not.toHaveAttribute("aria-invalid");
+
+    await user.type(add.getByLabelText("Label"), "note");
+    expect(
+      add.getByText(
+        "note is optional but has nothing to fall back on, so a scenario that omits it leaves the runtime with no value; give it a default",
+      ),
+    ).toBeVisible();
+    expect(required).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("keeps the form on the parameter it edits when that parameter is moved", async () => {
+    const user = userEvent.setup();
+    await openEditor();
+
+    await user.click(screen.getByRole("button", { name: "Edit severity" }));
+    await user.type(parameterForm("Edit severity").getByLabelText(DESCRIPTION), " Moved.");
+    await user.click(within(itemOf("severity")).getByRole("button", { name: "Move severity up" }));
+
+    expect(itemOf("severity")).toHaveAttribute("aria-current", "true");
+    const form = parameterForm("Edit severity");
+    expect(form.getByLabelText(DESCRIPTION)).toHaveValue(
+      "Whether missing the read fails the objective. Moved.",
+    );
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const saved = savedPayloads[0].parameters as Array<Record<string, unknown>>;
+    expect(saved.map((entry) => entry.name)).toEqual(["severity", "doc_ref"]);
+    expect(saved[0].description).toBe("Whether missing the read fails the objective. Moved.");
   });
 });

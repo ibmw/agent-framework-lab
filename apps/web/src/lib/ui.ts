@@ -448,6 +448,8 @@ export function itemClasses(editing: boolean): string {
 /** An item's 30px icon button: the pencil and the trash, bordered, muted until hovered. */
 export const itemIconButtonClasses = `flex h-[30px] w-[30px] flex-none items-center justify-center rounded-lg border border-admin-quiet-border bg-admin-surface text-admin-muted transition ${focusRingClasses}`;
 export const itemEditButtonClasses = `${itemIconButtonClasses} hover:bg-[#f6f7f8] hover:text-admin-ink`;
+// An arrow at the end of the list it cannot pass fades as the held trash does.
+export const itemMoveButtonClasses = `${itemIconButtonClasses} text-[14px] enabled:hover:bg-[#f6f7f8] enabled:hover:text-admin-ink disabled:cursor-not-allowed disabled:opacity-55`;
 // A held Remove fades as a secondary control refused for a reason does (ADR 0063), and loses
 // the hover that would promise a press.
 export const itemRemoveButtonClasses = `${itemIconButtonClasses} enabled:hover:border-[#c98676] enabled:hover:text-lab-error disabled:cursor-not-allowed disabled:opacity-55`;

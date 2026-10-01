@@ -28,6 +28,7 @@ import {
   itemClasses,
   itemEditButtonClasses,
   itemIconButtonClasses,
+  itemMoveButtonClasses,
   itemRemoveButtonClasses,
   readOnlyValueClasses,
   searchFieldClasses,
@@ -226,8 +227,8 @@ describe("the list item", () => {
     expect(itemClasses(true)).not.toContain("bg-[#fafbfb]");
   });
 
-  it("gives the pencil and the trash one 30px bordered box with the workspace's ring", () => {
-    for (const classes of [itemEditButtonClasses, itemRemoveButtonClasses]) {
+  it("gives the pencil, the trash and the arrows one 30px bordered box with the workspace's ring", () => {
+    for (const classes of [itemEditButtonClasses, itemRemoveButtonClasses, itemMoveButtonClasses]) {
       expect(classes.startsWith(itemIconButtonClasses)).toBe(true);
     }
     expect(itemIconButtonClasses).toContain("h-[30px] w-[30px]");
@@ -242,6 +243,14 @@ describe("the list item", () => {
     );
     expect(itemRemoveButtonClasses).not.toMatch(/(^|\s)hover:/);
     expect(itemRemoveButtonClasses).toContain("disabled:cursor-not-allowed disabled:opacity-55");
+  });
+
+  it("fades an arrow at the end of the list as the held trash fades, with no hover promising a press", () => {
+    expect(itemMoveButtonClasses).toContain("disabled:cursor-not-allowed disabled:opacity-55");
+    expect(itemMoveButtonClasses).toContain(
+      "enabled:hover:bg-[#f6f7f8] enabled:hover:text-admin-ink",
+    );
+    expect(itemMoveButtonClasses).not.toMatch(/(^|\s)hover:/);
   });
 });
 
@@ -902,6 +911,9 @@ describe("the add form", () => {
       ),
     ).toBe(false);
     const drawing = consumers.filter(([, source]) => /\baddFormClasses\b/.test(codeOf(source)));
-    expect(drawing.length).toBeGreaterThan(5);
+    // Five since the guidelines and the editor's parameters moved to the form below their list
+    // (ADR 0074): the new-block page's parameters, a scenario's picker, a ticket's thread, the
+    // results' tag form and the product's variants.
+    expect(drawing).toHaveLength(5);
   });
 });

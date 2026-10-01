@@ -8,6 +8,9 @@ import type {
   ObjectiveEvidence,
 } from "@agent-lab/contracts";
 import { BLOCK_PARAMETER_KIND, optionsOf } from "./enumLabels";
+import { PARAMETER_LABEL_RULE } from "./fieldRules";
+import type { ItemRefusal } from "./itemForm";
+import { pythonStrip } from "./pythonText";
 
 /**
  * Client-side rules for authoring a block template.
@@ -21,6 +24,9 @@ export type BlockPayload = ObjectiveBlockPayloadSchema | MutationBlockPayloadSch
 
 /** Mirrors `MAX_BLOCK_PARAMETERS`, so the form stops where the contract does. */
 export const MAX_PARAMETERS = 8;
+
+/** Mirrors the contract's `MAX_BLOCK_PARAMETERS` refusal, in the workspace's words. */
+export const PARAMETERS_FULL = `A template carries at most ${MAX_PARAMETERS} parameters.`;
 
 /**
  * Mirrors the backend's `MAX_SLUG_LENGTH`, minus room for a `_2` uniqueness suffix. A name
@@ -101,6 +107,25 @@ export function acceptsDefault(kind: BlockParameterKind): boolean {
   return LITERAL_KINDS.includes(kind);
 }
 
+/**
+ * How a scenario binds a parameter, as its item says it. `check_bindings` (`domain/blocks.py`)
+ * raises `binding_missing` only for a parameter that is required *and* has no default, whatever
+ * its kind: a required parameter with a default may be left to it, and one that is not required
+ * may be left unbound — a reference too, which an API-authored draft can hold.
+ */
+export function bindingSentence(
+  parameter: Pick<BlockParameterSchema, "kind" | "required" | "default">,
+): string {
+  if (parameter.required && parameter.default === null) {
+    return acceptsDefault(parameter.kind)
+      ? "A scenario must bind this."
+      : "Always bound by the scenario — a template cannot default an object.";
+  }
+  return parameter.default === null
+    ? "A scenario may leave it unbound."
+    : "A scenario may leave it to the default.";
+}
+
 export function shopBoundCount(payload: BlockPayload): number {
   return payload.parameters.filter((entry) => bindsShopObject(entry.kind)).length;
 }
@@ -176,7 +201,10 @@ export function parameterFields(parameter: BlockParameterSchema): ParameterField
  * optional parameter with no default is a publish-gate error, so a kind that takes the default
  * away makes the parameter required again.
  */
-export function retypedFields(fields: ParameterFields, kind: BlockParameterKind): ParameterFields {
+export function retypedFields<FieldsT extends ParameterFields>(
+  fields: FieldsT,
+  kind: BlockParameterKind,
+): FieldsT {
   const literal = acceptsDefault(kind);
   return {
     ...fields,
@@ -206,12 +234,15 @@ export function parameterEntry(
 ): BlockParameterSchema {
   const held =
     saved !== undefined && saved.kind === fields.kind ? fields : retypedFields(fields, fields.kind);
+  // Stored stripped as the lab strips them: `_require_text` refuses surrounding whitespace on
+  // both, and a default of nothing but spaces is no default.
+  const stripped = held.default === null ? "" : pythonStrip(held.default);
   return {
     name,
     kind: held.kind,
-    description: held.description,
+    description: pythonStrip(held.description),
     required: held.required,
-    default: held.default,
+    default: stripped === "" ? null : stripped,
     shop_bound: bindsShopObject(held.kind),
   };
 }
@@ -233,14 +264,27 @@ export function addedParameter(
   name: string,
   kind: BlockParameterKind,
 ): BlockParameterSchema[] {
+  return withParameter(parameters, name, { kind, description: "", required: true, default: null });
+}
+
+/**
+ * One more parameter on a list of them, with every field the editor's form asks: the label is
+ * derived to an identifier no other parameter holds, and the fields go through `parameterEntry`
+ * as a new parameter's do.
+ */
+export function withParameter(
+  parameters: readonly BlockParameterSchema[],
+  label: string,
+  fields: ParameterFields,
+): BlockParameterSchema[] {
   return [
     ...parameters,
     parameterEntry(
       uniqueParameterName(
-        toIdentifier(name),
+        toIdentifier(label),
         parameters.map((entry) => entry.name),
       ),
-      { kind, description: "", required: true, default: null },
+      fields,
     ),
   ];
 }
@@ -296,4 +340,51 @@ export function moveParameter<PayloadT extends BlockPayload>(
   const [moved] = parameters.splice(index, 1);
   parameters.splice(target, 0, moved);
   return { ...payload, parameters };
+}
+
+/**
+ * What the editor's one parameter form holds (ADR 0074): the label it derives a new parameter's
+ * identifier from, and the parameter's fields. While editing the label is the parameter's name,
+ * shown and fixed, because a scenario binds by it.
+ */
+export interface ParameterFormFields extends ParameterFields {
+  label: string;
+}
+
+export type ParameterFormField = keyof ParameterFormFields;
+
+export const BLANK_PARAMETER: ParameterFormFields = {
+  label: "",
+  kind: "document_reference",
+  description: "",
+  required: true,
+  default: null,
+};
+
+export function parameterFormFields(parameter: BlockParameterSchema): ParameterFormFields {
+  return { label: parameter.name, ...parameterFields(parameter) };
+}
+
+/**
+ * The form's refusal, adding only: the template's cap, which is about the list and marks no
+ * field, then an empty label, which leaves nothing to derive an identifier from. An edit asks
+ * nothing the lab would refuse — the label is fixed, the kind is a closed set, a description may
+ * be empty, a default is optional — and the gate's `optional_parameter_without_default` is a
+ * finding said under the checkbox, not a refusal (ADR 0063's lab amendment).
+ */
+export function parameterRefusal(
+  fields: ParameterFormFields,
+  count: number,
+  editing: string | null,
+): ItemRefusal<ParameterFormField> | null {
+  if (editing !== null) {
+    return null;
+  }
+  if (count >= MAX_PARAMETERS) {
+    return { field: null, reason: PARAMETERS_FULL };
+  }
+  if (pythonStrip(fields.label) === "") {
+    return { field: "label", reason: PARAMETER_LABEL_RULE };
+  }
+  return null;
 }

@@ -31,14 +31,11 @@ const TITLE_REFUSAL = "A note needs a title.";
 function Harness({
   initial = NOTES,
   saved = NOTES,
-  units,
   onWrite,
 }: {
   initial?: Note[];
   /** What a page's Discard puts back: the notes as the lab holds them. */
   saved?: Note[];
-  /** Fields the list declares follow only together. */
-  units?: readonly (readonly ("title" | "body")[])[];
   onWrite?: (notes: Note[]) => void;
 }) {
   const [notes, setNotes] = useState(initial);
@@ -46,7 +43,6 @@ function Harness({
     keyOf: (note) => note.id,
     labelOf: (note) => note.title,
     fieldsOf: (note) => ({ title: note.title, body: note.body }),
-    units,
   });
   const notice = useId();
 
@@ -294,22 +290,6 @@ describe("EntryCard edit mode", () => {
     // So the row's Save writes the typing and nothing the discard threw away.
     await user.click(screen.getByRole("button", { name: "Save Returns" }));
     expect(written.at(-1)).toEqual([{ ...NOTES[0], title: "Refunds" }, NOTES[1]]);
-  });
-
-  it("keeps a declared unit whole when any field of it was typed in", async () => {
-    const user = userEvent.setup();
-    const edited = [{ ...NOTES[0], body: "Sixty days." }, NOTES[1]];
-    render(<Harness initial={edited} units={[["title", "body"]]} />);
-
-    await user.click(screen.getByRole("button", { name: "Edit Returns" }));
-    await user.clear(screen.getByLabelText("Title"));
-    await user.type(screen.getByLabelText("Title"), "Refunds");
-
-    await user.click(screen.getByRole("button", { name: "Discard changes" }));
-
-    // The list says title and body only make sense together: the typed title holds its body.
-    expect(screen.getByLabelText("Title")).toHaveValue("Refunds");
-    expect(screen.getByLabelText("Body")).toHaveValue("Sixty days.");
   });
 
   it("counts a field typed back to where it started as untouched", async () => {

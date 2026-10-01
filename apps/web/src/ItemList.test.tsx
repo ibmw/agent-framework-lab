@@ -4,7 +4,7 @@ import { type ReactNode, useId, useRef, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { ConfirmRemove, RemovalNotice } from "./components/ConfirmRemove";
 import { FieldHint } from "./components/FieldHint";
-import { EditButton, ItemFormRow, ListItem, RemoveButton } from "./components/ItemList";
+import { EditButton, ItemFormRow, ListItem, MoveButton, RemoveButton } from "./components/ItemList";
 import {
   formTitle,
   type ItemRefusal,
@@ -317,6 +317,48 @@ describe("what an item carries beyond its name, key and line", () => {
     const remove = within(item("Home")).getByRole("button", { name: "Remove the home entry" });
     expect(remove).toHaveAttribute("title", "Remove the home entry");
     expect(within(item("Home")).queryByRole("button", { name: "Remove Home" })).toBeNull();
+  });
+});
+
+describe("a control the list keeps on its items", () => {
+  it("stands a lead before the name, and arrows named by the entry before the pencil", async () => {
+    const user = userEvent.setup();
+    const moved: string[] = [];
+    render(
+      <ul>
+        <ListItem
+          name="doc_ref"
+          monospace
+          lead={<input type="radio" aria-label="Make doc_ref the default" />}
+          detail="The document."
+          editing={false}
+        >
+          <MoveButton name="doc_ref" direction="up" disabled onMove={() => moved.push("up")} />
+          <MoveButton
+            name="doc_ref"
+            direction="down"
+            disabled={false}
+            onMove={() => moved.push("down")}
+          />
+          <EditButton name="doc_ref" buttonRef={() => undefined} onEdit={() => undefined} />
+        </ListItem>
+      </ul>,
+    );
+
+    const entry = item("doc_ref");
+    const lead = within(entry).getByRole("radio", { name: "Make doc_ref the default" });
+    const name = within(entry).getByText("doc_ref");
+    expect(lead.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      within(entry)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Move doc_ref up", "Move doc_ref down", "Edit doc_ref"]);
+    const up = within(entry).getByRole("button", { name: "Move doc_ref up" });
+    expect(up).toBeDisabled();
+    expect(up).toHaveAttribute("title", "Move doc_ref up");
+    await user.click(within(entry).getByRole("button", { name: "Move doc_ref down" }));
+    expect(moved).toEqual(["down"]);
   });
 });
 
