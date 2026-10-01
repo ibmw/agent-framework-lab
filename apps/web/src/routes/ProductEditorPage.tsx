@@ -57,6 +57,7 @@ import {
   CHIP_LABEL_MAX_LENGTH,
   isVariantSku,
   KEBAB_PATTERN,
+  LABEL_MAX_LENGTH,
   MEDIA_REFERENCE_RULE,
   MONEY_PATTERN,
   MONEY_RULE,
@@ -69,6 +70,7 @@ import {
   productWithoutVariantRule,
   REFERENCE_PATTERN,
   REVIEW_RATING_RULE,
+  TEXT_MAX_LENGTH,
   VARIANT_SKU_RENAME_RULE,
   VARIANT_SKU_RULE,
   variantInStockWithoutInventoryRule,
@@ -490,6 +492,7 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
             <FieldRows>
               <Field label="Title" hint={PRODUCT_TITLE_RULE}>
                 <input
+                  maxLength={LABEL_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={product.title}
                   onChange={(event) => retitle(event.target.value)}
@@ -567,6 +570,7 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
                */}
               <Field label="Category" hint={PRODUCT_CATEGORY_RULE}>
                 <input
+                  maxLength={LABEL_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   list={categoryListId}
                   autoComplete="off"
@@ -581,6 +585,7 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
               </datalist>
               <Field label="Description" hint={PRODUCT_DESCRIPTION_RULE}>
                 <textarea
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full`}
                   value={product.description}
                   onChange={(event) => update({ ...product, description: event.target.value })}
@@ -882,6 +887,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
         >
           <FieldHint label="Option name">
             <input
+              maxLength={LABEL_MAX_LENGTH}
               ref={nameInput}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.name}
@@ -1528,6 +1534,7 @@ function MediaCard({ product, onChange }: EditorProps) {
         >
           <FieldHint label="Reference" hint={MEDIA_REFERENCE_RULE}>
             <input
+              maxLength={TEXT_MAX_LENGTH}
               ref={referenceInput}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.reference}
@@ -1538,6 +1545,7 @@ function MediaCard({ product, onChange }: EditorProps) {
           </FieldHint>
           <FieldHint label="Alt text">
             <input
+              maxLength={LABEL_MAX_LENGTH}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.altText}
               {...refusedProps(marked, "altText", reasonId)}
@@ -1716,6 +1724,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
         >
           <FieldHint label="Label">
             <input
+              maxLength={LABEL_MAX_LENGTH}
               ref={labelInput}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.label}
@@ -1758,6 +1767,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
           </FieldHint>
           <FieldHint label="Value">
             <input
+              maxLength={LABEL_MAX_LENGTH}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.value}
               {...refusedProps(marked, "value", reasonId)}
@@ -1767,6 +1777,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
           {type === "measurement" ? (
             <FieldHint label="Unit">
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={form.fields.unit}
                 {...refusedProps(marked, "unit", reasonId)}
@@ -1929,6 +1940,7 @@ function ReviewsCard({ product, onChange }: EditorProps) {
         >
           <FieldHint label="Author">
             <input
+              maxLength={LABEL_MAX_LENGTH}
               ref={authorInput}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.author}
@@ -1943,6 +1955,7 @@ function ReviewsCard({ product, onChange }: EditorProps) {
           <div className="col-span-full">
             <FieldHint label="Body">
               <input
+                maxLength={TEXT_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={form.fields.body}
                 {...refusedProps(marked, "body", reasonId)}

@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { PROVEN_MODEL_RULE, unexercisedModelRule } from "../lib/fieldRules";
+import { LABEL_MAX_LENGTH, PROVEN_MODEL_RULE, unexercisedModelRule } from "../lib/fieldRules";
 import { fieldControlClasses } from "../lib/ui";
 import { type Arrangement, FieldHint } from "./FieldHint";
 
@@ -55,6 +55,7 @@ export function ProvenModelField({
         arrangement={arrangement}
       >
         <input
+          maxLength={LABEL_MAX_LENGTH}
           className={`${fieldControlClasses} w-full`}
           list={listId}
           value={value}

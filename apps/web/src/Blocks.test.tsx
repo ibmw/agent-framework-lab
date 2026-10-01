@@ -1021,6 +1021,22 @@ describe("the two create pages", () => {
     expectNotRefused(create);
   });
 
+  it("reads a name of padding alone as no name, as the lab's `str.strip()` would", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/objective-blocks/new");
+
+    const create = await screen.findByRole("button", { name: "Create block" });
+    await user.click(screen.getByLabelText("Name"));
+    // Kept by JavaScript's `trim()`, removed by Python's `str.strip()`: there is no name here,
+    // not a name that leaves no slug.
+    await user.paste("\x85\x1c\u2028");
+    expectRefused(create, "The template needs a name before it can be created.");
+
+    await user.type(screen.getByLabelText("Name"), "Identify entity");
+    await user.click(create);
+    await waitFor(() => expect(createdNames).toEqual(["identify-entity"]));
+  });
+
   it("refuses a name this library already answers to, and says which", async () => {
     const user = userEvent.setup();
     renderAt("/lab/objective-blocks/new");

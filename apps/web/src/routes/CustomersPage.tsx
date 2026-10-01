@@ -16,9 +16,15 @@ import { LocaleField } from "../components/LocaleField";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
-import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "../lib/fieldRules";
+import {
+  CUSTOMER_EMAIL_RULE,
+  CUSTOMER_NAME_RULE,
+  CUSTOMER_SINCE_RULE,
+  LABEL_MAX_LENGTH,
+} from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import { todayInput } from "../lib/orders";
+import { pythonStrip } from "../lib/pythonText";
 import { useArrivedRemoval, useRemoval } from "../lib/removal";
 import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import {
@@ -381,11 +387,11 @@ export function NewCustomerPage() {
   // Today on the operator's own calendar, which a date field shows and takes (ADR 0064).
   const [customerSince, setCustomerSince] = useState(todayInput);
 
-  const displayName = [givenName.trim(), familyName.trim()].filter(Boolean).join(" ");
+  const displayName = [pythonStrip(givenName), pythonStrip(familyName)].filter(Boolean).join(" ");
   const blockedBy =
-    givenName.trim() === "" || familyName.trim() === ""
+    pythonStrip(givenName) === "" || pythonStrip(familyName) === ""
       ? "The profile needs a given name and a family name."
-      : email.trim() === ""
+      : pythonStrip(email) === ""
         ? "The profile needs an email address: it is what identifies it wherever it is reused."
         : undefined;
 
@@ -400,9 +406,10 @@ export function NewCustomerPage() {
     try {
       const created = await createCustomerProfile({
         identity: {
-          given_name: givenName,
-          family_name: familyName,
-          email,
+          // Stripped as Python strips them: `require_label` refuses a padded name.
+          given_name: pythonStrip(givenName),
+          family_name: pythonStrip(familyName),
+          email: pythonStrip(email),
           locale,
           phone: null,
         },
@@ -440,6 +447,7 @@ export function NewCustomerPage() {
           <FieldRows>
             <Field label="Given name" hint={CUSTOMER_NAME_RULE}>
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={givenName}
                 required
@@ -449,6 +457,7 @@ export function NewCustomerPage() {
             </Field>
             <Field label="Family name" hint={CUSTOMER_NAME_RULE}>
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={familyName}
                 required
@@ -458,6 +467,7 @@ export function NewCustomerPage() {
             </Field>
             <Field label="Email" hint={CUSTOMER_EMAIL_RULE}>
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 type="email"
                 value={email}

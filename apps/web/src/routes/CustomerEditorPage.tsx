@@ -71,9 +71,11 @@ import {
   CUSTOMER_NAME_RULE,
   CUSTOMER_PHONE_RULE,
   CUSTOMER_SINCE_RULE,
+  LABEL_MAX_LENGTH,
   LOYALTY_TIER_RULE,
   PERSONA_SUMMARY_RULE,
   PERSONA_TRAITS_RULE,
+  TEXT_MAX_LENGTH,
 } from "../lib/fieldRules";
 import {
   formTitle,
@@ -342,6 +344,7 @@ export function CustomerEditorPage() {
             <FieldRows>
               <Field label="Given name" hint={CUSTOMER_NAME_RULE}>
                 <input
+                  maxLength={LABEL_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={content.identity.given_name}
                   onChange={(event) =>
@@ -354,6 +357,7 @@ export function CustomerEditorPage() {
               </Field>
               <Field label="Family name" hint={CUSTOMER_NAME_RULE}>
                 <input
+                  maxLength={LABEL_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={content.identity.family_name}
                   onChange={(event) =>
@@ -366,6 +370,7 @@ export function CustomerEditorPage() {
               </Field>
               <Field label="Email" hint={CUSTOMER_EMAIL_RULE}>
                 <input
+                  maxLength={LABEL_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   type="email"
                   value={content.identity.email}
@@ -455,6 +460,7 @@ export function CustomerEditorPage() {
             <FieldRows>
               <Field label="Account notes" hint={ACCOUNT_NOTES_RULE}>
                 <textarea
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full`}
                   value={content.account.notes}
                   onChange={(event) => editAccount({ notes: event.target.value })}
@@ -489,6 +495,7 @@ export function CustomerEditorPage() {
             <FieldRows>
               <Field label="Summary" hint={PERSONA_SUMMARY_RULE}>
                 <textarea
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full`}
                   value={content.persona.summary}
                   onChange={(event) =>
@@ -784,6 +791,7 @@ function AddressBook({
     return (
       <FieldHint key={field} label={ADDRESS_LABELS[field]} optional={optional}>
         <input
+          maxLength={LABEL_MAX_LENGTH}
           ref={field === "label" ? firstField : undefined}
           className={`${fieldControlClasses} w-full`}
           value={form.fields[field]}
@@ -1092,6 +1100,7 @@ function BackgroundList({
         <div className="col-span-full">
           <FieldHint label="Note">
             <input
+              maxLength={TEXT_MAX_LENGTH}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.note}
               {...refusedProps(marked, "note", reasonId)}
@@ -1235,6 +1244,7 @@ function HiddenFacts({
       >
         <FieldHint label="Hidden fact">
           <input
+            maxLength={TEXT_MAX_LENGTH}
             ref={factInput}
             className={`${fieldControlClasses} w-full`}
             value={form.fields.note}
@@ -1244,6 +1254,7 @@ function HiddenFacts({
         </FieldHint>
         <FieldHint label="Revealed when" optional>
           <input
+            maxLength={TEXT_MAX_LENGTH}
             className={`${fieldControlClasses} w-full`}
             value={form.fields.revealedWhen}
             onChange={(event) => form.update({ revealedWhen: event.target.value })}

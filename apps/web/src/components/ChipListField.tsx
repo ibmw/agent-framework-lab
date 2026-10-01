@@ -1,6 +1,7 @@
 import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { savedAsPreview } from "../lib/fieldPreviews";
 import { alreadyTakenMessage } from "../lib/fieldRules";
+import { pythonStrip } from "../lib/pythonText";
 import { useRemoval } from "../lib/removal";
 import { fieldControlClasses, subtleButtonClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
@@ -134,7 +135,8 @@ export function ChipListField({
 }) {
   const [typed, setTyped] = useState("");
   const removal = useRemoval(confirmRemoval?.scope);
-  const trimmed = typed.trim();
+  // Stripped as Python strips it: each chip is a `require_label` the lab refuses padded.
+  const trimmed = pythonStrip(typed);
   const candidate = normalize ? normalize(trimmed) : trimmed;
   const colliding = candidate !== "" && values.includes(candidate);
 

@@ -7,7 +7,9 @@ import type {
   VariantSchema,
 } from "@agent-lab/contracts";
 import { clampSlug, SLUG_MAX_LENGTH, slugify, uniqueId, uniqueVariantSku } from "./entryIds";
+import { LABEL_MAX_LENGTH } from "./fieldRules";
 import type { DraftProduct, ShopDraft } from "./productKeys";
+import { pythonStrip } from "./pythonText";
 
 /**
  * The slug a shop name suggests, in the spelling the shop identity rule accepts.
@@ -51,25 +53,46 @@ export function isPlaceholderHandle(handle: string): boolean {
  */
 export function toPayload(content: ShopContentSchema | ShopDraft): ShopPayloadSchema {
   return {
-    identity: content.identity,
+    identity: { ...content.identity, name: pythonStrip(content.identity.name) },
     products: content.products.map(toProductPayload),
-    faq: content.faq,
-    policies: content.policies,
+    faq: content.faq.map((entry) => ({
+      ...entry,
+      question: pythonStrip(entry.question),
+      answer: pythonStrip(entry.answer),
+    })),
+    policies: content.policies.map(strippedDocument),
     payment_methods: content.payment_methods,
     fulfilment_methods: content.fulfilment_methods,
-    support_guidelines: content.support_guidelines,
+    support_guidelines: content.support_guidelines.map(strippedDocument),
     tone_of_voice_guidelines: content.tone_of_voice_guidelines,
     logo: content.logo,
   };
 }
 
+/**
+ * The texts a page edits in place, stripped as Python strips them: `require_label` and
+ * `require_text` refuse padding, and a field typed into — a textarea above all — ends on a
+ * space or a newline as often as not. What a form below a list writes is stripped by that form.
+ */
+function strippedDocument<DocumentT extends { title: string; body: string }>(
+  document: DocumentT,
+): DocumentT {
+  return { ...document, title: pythonStrip(document.title), body: pythonStrip(document.body) };
+}
+
 function toProductPayload(product: ProductViewSchema | DraftProduct): ProductSchema {
   const { ratings: _ratings, ...rest } = product;
-  if ("key" in rest) {
-    const { key: _key, ...payload } = rest;
+  const stripped = {
+    ...rest,
+    title: pythonStrip(rest.title),
+    description: pythonStrip(rest.description),
+    category: pythonStrip(rest.category),
+  };
+  if ("key" in stripped) {
+    const { key: _key, ...payload } = stripped;
     return payload;
   }
-  return rest;
+  return stripped;
 }
 
 /** The product the draft holds under `key`, which no rename moves (ADR 0061). */
@@ -125,13 +148,31 @@ export function removeProduct(content: ShopDraft, key: string): ShopDraft {
 export function draftCategories(content: ShopDraft, exceptKey: string): string[] {
   const spellings = content.products
     .filter((product) => product.key !== exceptKey)
-    .map((product) => product.category.trim())
+    .map((product) => pythonStrip(product.category))
     .filter((category) => category !== "");
   return [...new Set(spellings)].sort((left, right) => left.localeCompare(right));
 }
 
 /** What a copy's handle adds to its source's (ADR 0062). */
 export const COPY_SUFFIX = "-copy";
+
+const COPY_TITLE_SUFFIX = " (copy)";
+
+/**
+ * The copy's title: the source's, marked, and never past `require_label`'s cap. A source at the
+ * cap is cut to make room for the mark — by code points, as Python counts, and stripped where
+ * the cut lands, as `experiment_derivations` cuts a derived label — so a duplicate is a product
+ * the draft can save without anyone typing.
+ */
+export function copyTitle(title: string): string {
+  if (title === "") {
+    return "";
+  }
+  const characters = Array.from(title);
+  const room = LABEL_MAX_LENGTH - COPY_TITLE_SUFFIX.length;
+  const kept = characters.length <= room ? title : pythonStrip(characters.slice(0, room).join(""));
+  return `${kept}${COPY_TITLE_SUFFIX}`;
+}
 
 /**
  * A copy of the product the draft holds under `key`, appended to the draft (ADR 0062).
@@ -184,7 +225,7 @@ export function duplicateProduct(
     ...source,
     key: mint(),
     handle,
-    title: source.title === "" ? "" : `${source.title} (copy)`,
+    title: copyTitle(source.title),
     status: "draft",
     variants,
   };

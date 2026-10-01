@@ -28,9 +28,11 @@ import { optionsOf, SUPPORT_CHANNEL } from "../lib/enumLabels";
 import {
   alreadyTakenMessage,
   DERIVED_KEBAB_RULE,
+  LABEL_MAX_LENGTH,
   SHOP_NAME_RULE,
   SHOP_SLUG_DETAIL_RULE,
   SHOP_SLUG_TAKEN_PLACE,
+  TEXT_MAX_LENGTH,
   TONE_DEFAULT_REMOVAL_RULE,
 } from "../lib/fieldRules";
 import {
@@ -237,6 +239,7 @@ export function ShopIdentityPage() {
         <FieldRows>
           <Field label="Name" hint={SHOP_NAME_RULE}>
             <input
+              maxLength={LABEL_MAX_LENGTH}
               className={`${fieldControlClasses} w-full`}
               value={identity.name}
               onChange={(event) =>
@@ -517,6 +520,7 @@ export function ToneOfVoicePage() {
           >
             <FieldHint label="Name">
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 ref={nameInput}
                 className={`${fieldControlClasses} w-full`}
                 value={form.fields.name}
@@ -547,6 +551,7 @@ export function ToneOfVoicePage() {
             <div className="col-span-full">
               <FieldHint label="Guidance">
                 <textarea
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full`}
                   value={form.fields.guidance}
                   {...refusedProps(marked, "guidance", reasonId)}

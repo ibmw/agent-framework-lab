@@ -330,6 +330,17 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   never written, and the page's Save names the field's line; the shop slug is refused on Shop
   details off the listing the create page reads, and only when the operator changes it (ADR
   0069).
+- **A text stops where the lab's rule does, and is sent as the lab strips it.** Every control
+  that types a text the lab caps carries that rule's `maxLength` — `require_label`'s 200,
+  `require_text`'s 4000, a run note's 2000 — swept from the Python's rules and from the
+  workspace's controls alike in `lib/textFieldCaps.test.ts`. `maxLength` counts as the browser
+  counts, in UTF-16 units, so it is never looser than the lab's code points, and stricter only
+  for astral characters. A text the page writes rather than the operator types is cut to fit —
+  a duplicate's title — or refused in words before the write: a new address's recipient, which
+  is the customer's whole name as last saved, and the new-scenario page's hidden facts, joined
+  one to a line. A blank check and every write read padding as Python's `str.strip()` does
+  (`pythonStrip`), never as `trim()`; each `trim()` left is named in `lib/textStrip.test.ts`
+  with why the lab never reads what it trims.
 - **A field states its own width.** The shared control declares none; every call site composes
   one — `w-full` almost everywhere — so a narrow field is narrow on screen (ADR 0069).
 - **A free-text field over a set the draft already uses offers it** as a `<datalist>`, spelled as

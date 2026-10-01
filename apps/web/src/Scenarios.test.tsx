@@ -19,6 +19,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { CHIP_LABEL_MAX_LENGTH, hiddenFactsTooLongRule, TEXT_MAX_LENGTH } from "./lib/fieldRules";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
@@ -824,6 +825,37 @@ describe("the new-scenario page", () => {
         bindings: [],
       },
     ]);
+  });
+
+  it("refuses hidden facts that, joined one to a line, pass the prose's cap", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
+    await compose(user, "read-required-document");
+    const create = screen.getByRole("button", { name: "Create scenario" });
+    expectNotRefused(create);
+
+    // Each chip stops at its own cap; it is the join that no field stops. Twenty at the cap
+    // with nineteen line breaks between them come to 4019, past the 4000 `require_text` keeps.
+    const field = screen.getByLabelText("New hidden fact");
+    const count = Math.ceil(TEXT_MAX_LENGTH / (CHIP_LABEL_MAX_LENGTH + 1));
+    for (let index = 0; index < count; index += 1) {
+      await user.click(field);
+      await user.paste(`${index}`.padEnd(CHIP_LABEL_MAX_LENGTH, "x"));
+      await user.click(screen.getByRole("button", { name: "Add fact" }));
+    }
+    const length = count * CHIP_LABEL_MAX_LENGTH + count - 1;
+    expect(length).toBeGreaterThan(TEXT_MAX_LENGTH);
+    expectRefused(create, hiddenFactsTooLongRule(length));
+    await user.click(create);
+    await submitWithoutPressing(create);
+    expect(created).toEqual([]);
+
+    await user.click(
+      screen.getByRole("button", { name: `Remove ${"0".padEnd(CHIP_LABEL_MAX_LENGTH, "x")}` }),
+    );
+    expectNotRefused(create);
   });
 
   it("makes the scenario, saves what it composed, and lands in its editor", async () => {

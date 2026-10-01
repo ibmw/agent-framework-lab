@@ -13,7 +13,7 @@ import type {
 } from "@agent-lab/contracts";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { mutationBlocks, objectiveBlocks } from "../api/blocks";
+import { mutationBlocks, objectiveBlocks, toBlockPayload } from "../api/blocks";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { Field, FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
 import { GateFindingLine } from "../components/GateFindingLine";
@@ -61,9 +61,10 @@ import {
   withParameter,
 } from "../lib/blocks";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { SLUG_MAX_LENGTH } from "../lib/entryIds";
 import { BLOCK_PARAMETER_KIND, labelOf, OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
 import { savedAsPreview } from "../lib/fieldPreviews";
-import { optionalParameterWithoutDefaultRule } from "../lib/fieldRules";
+import { optionalParameterWithoutDefaultRule, TEXT_MAX_LENGTH } from "../lib/fieldRules";
 import {
   formTitle,
   type ItemFormWords,
@@ -93,8 +94,7 @@ const OBJECTIVE_CLIENT: DefinitionClient<
   previewDraft: objectiveBlocks.previewDraft,
   replaceDraft: objectiveBlocks.replaceDraft,
   publish: objectiveBlocks.publish,
-  // `shop_bound` is the server's derived echo of the kind, so the content is the payload.
-  toPayload: (content) => content,
+  toPayload: toBlockPayload,
   unavailable: "The objective-block library is unavailable.",
 };
 
@@ -107,7 +107,7 @@ const MUTATION_CLIENT: DefinitionClient<
   previewDraft: mutationBlocks.previewDraft,
   replaceDraft: mutationBlocks.replaceDraft,
   publish: mutationBlocks.publish,
-  toPayload: (content) => content,
+  toPayload: toBlockPayload,
   unavailable: "The mutation-block library is unavailable.",
 };
 
@@ -232,6 +232,7 @@ function BlockEditor<
             <FieldRows>
               <Field label="Name">
                 <input
+                  maxLength={SLUG_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full font-mono`}
                   value={content.name}
                   onChange={(event) => edit({ ...content, name: event.target.value })}
@@ -246,6 +247,7 @@ function BlockEditor<
                 hint="A scenario renders each bound instance as this statement followed by what it was bound to — “Read document → Address-change policy”."
               >
                 <input
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={content.statement}
                   placeholder="Read document"
@@ -254,6 +256,7 @@ function BlockEditor<
               </Field>
               <Field label="Description">
                 <textarea
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full`}
                   value={content.description}
                   onChange={(event) => edit({ ...content, description: event.target.value })}
@@ -592,6 +595,7 @@ function TemplateParameters<PayloadT extends BlockPayload>({
         <div className="col-span-full">
           <FieldHint label="Description" optional>
             <input
+              maxLength={TEXT_MAX_LENGTH}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.description}
               onChange={(event) => form.update({ description: event.target.value })}
@@ -617,6 +621,7 @@ function TemplateParameters<PayloadT extends BlockPayload>({
                 </select>
               ) : (
                 <input
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={form.fields.default ?? ""}
                   placeholder={form.fields.kind === "timing" ? "after_first_read" : "PT30S"}

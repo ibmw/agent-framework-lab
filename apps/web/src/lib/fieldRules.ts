@@ -177,6 +177,37 @@ export const REVIEW_RATING_RULE = "A whole number of stars, from one to five.";
  */
 export const CHIP_LABEL_MAX_LENGTH = 200;
 
+/**
+ * What the lab keeps of a text, by the rule it is sent to: `require_label` and `require_email`
+ * stop at `MAX_LABEL_LENGTH`, `require_text` at `MAX_TEXT_LENGTH`, both in `domain/content.py`,
+ * and an experiment note at `MAX_NOTE_LENGTH` in `domain/experiment.py`, which is stricter than
+ * the `require_text` it also passes. Every control that types one stops there (`maxLength`,
+ * swept in `lib/textFieldCaps.test.ts`).
+ */
+export const LABEL_MAX_LENGTH = 200;
+
+export const TEXT_MAX_LENGTH = 4000;
+
+export const NOTE_MAX_LENGTH = 2000;
+
+/**
+ * Two texts the page writes rather than the operator types, and so can arrive past their cap
+ * with no `maxLength` to stop them, refused before the write that would meet the 422.
+ *
+ * An address being added ships to the customer: `resolvedAddress` makes the profile's display
+ * name its recipient — the name the lab derived from the *saved* given and family names, so the
+ * sentence asks for a save, and a shorter name typed above does not clear it until then — and a given and a family name of up to 200 characters each join into one
+ * longer than the 200 `require_label` keeps of a recipient. The new-scenario page joins its
+ * hidden facts one to a line into the one `require_text` prose the lab keeps at 4000.
+ */
+export function addressRecipientTooLongRule(length: number): string {
+  return `A new address ships to the customer, whose name is ${length} characters long, and the lab keeps at most ${LABEL_MAX_LENGTH} of a recipient: shorten the customer's name and save it first.`;
+}
+
+export function hiddenFactsTooLongRule(length: number): string {
+  return `The hidden facts come to ${length} characters, one to a line, and the lab keeps at most ${TEXT_MAX_LENGTH}.`;
+}
+
 export const TICKET_TAG_MAX_LENGTH = 64;
 
 /**
@@ -665,7 +696,7 @@ export const GUIDANCE_BODY_RULE = "A note needs its guidance.";
 /**
  * The product editor's four forms below a list (`lib/productEntries.ts`, ADR 0074), said after
  * their buttons. Each is one of the rules `domain/shop.py` holds the entry to, though not all of
- * them: the length caps `require_label` and `require_text` enforce are not checked here.
+ * them: the length caps `require_label` and `require_text` enforce are each field's `maxLength`.
  * `OptionDefinition`, `MediaReference`, `TypedAttribute` and `ProductReview` refuse a name, a
  * reference, a label, a value, a unit, an author or a body left empty or only padding
  * (`require_label`, `require_text`), an option without a value, a key that is not a slug

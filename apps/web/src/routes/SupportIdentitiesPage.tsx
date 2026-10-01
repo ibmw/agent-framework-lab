@@ -9,8 +9,9 @@ import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
-import { IDENTITY_TONE_RULE } from "../lib/fieldRules";
+import { IDENTITY_TONE_RULE, LABEL_MAX_LENGTH, TEXT_MAX_LENGTH } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
+import { pythonStrip } from "../lib/pythonText";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -171,9 +172,9 @@ export function NewSupportIdentityPage() {
   const [remit, setRemit] = useState("");
 
   const blockedBy =
-    name.trim() === ""
+    pythonStrip(name) === ""
       ? "The identity needs a name before it can be created."
-      : title.trim() === ""
+      : pythonStrip(title) === ""
         ? "The identity needs the role title the agent presents as."
         : undefined;
 
@@ -187,7 +188,12 @@ export function NewSupportIdentityPage() {
     let identityId: string;
     try {
       const created = await createSupportIdentity({
-        role: { name, title, description: remit },
+        // Stripped as Python strips them: `require_label` and `require_text` refuse padding.
+        role: {
+          name: pythonStrip(name),
+          title: pythonStrip(title),
+          description: pythonStrip(remit),
+        },
       });
       identityId = created.identity_id;
     } catch (cause: unknown) {
@@ -223,6 +229,7 @@ export function NewSupportIdentityPage() {
               hint="How the identity is listed. Agent configurations adopt a published identity by this name."
             >
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={name}
                 required
@@ -235,6 +242,7 @@ export function NewSupportIdentityPage() {
               hint="The role the support agent presents as. A customer may see it, so it is part of the fiction."
             >
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={title}
                 required
@@ -249,6 +257,7 @@ export function NewSupportIdentityPage() {
               extra={IDENTITY_TONE_RULE}
             >
               <textarea
+                maxLength={TEXT_MAX_LENGTH}
                 className={`${textAreaClasses} w-full`}
                 value={remit}
                 placeholder="First contact for delivery, returns and payment questions."

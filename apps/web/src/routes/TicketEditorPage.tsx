@@ -40,8 +40,14 @@ import {
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { DOCUMENT_KINDS } from "../lib/documents";
 import { optionsOf, TICKET_ORIGIN_KIND, TICKET_STATUS } from "../lib/enumLabels";
-import { TICKET_TAG_MAX_LENGTH, TICKET_TAGS_RULE } from "../lib/fieldRules";
+import {
+  LABEL_MAX_LENGTH,
+  TEXT_MAX_LENGTH,
+  TICKET_TAG_MAX_LENGTH,
+  TICKET_TAGS_RULE,
+} from "../lib/fieldRules";
 import { fromLocalInput, fulfilmentLabel, paymentLabel, toLocalInput } from "../lib/orders";
+import { pythonStrip } from "../lib/pythonText";
 import { consequenceOf, REMOVAL_FINDINGS, type Removal, useRemoval } from "../lib/removal";
 import {
   appendMessage,
@@ -319,6 +325,7 @@ function IncidentCard({
       <FieldRows>
         <Field label="Subject" hint="The incident as the customer would describe it.">
           <input
+            maxLength={LABEL_MAX_LENGTH}
             className={`${fieldControlClasses} w-full`}
             value={content.subject}
             onChange={(event) => onEdit({ ...content, subject: event.target.value })}
@@ -468,14 +475,14 @@ function Conversation({
   // silently does nothing. Neither field can say it — an empty box and a cleared time are
   // both valid states of those controls.
   const addRefusal =
-    body.trim() === "" ? THREAD_BODY_EMPTY : instant === null ? THREAD_SENT_AT_EMPTY : null;
+    pythonStrip(body) === "" ? THREAD_BODY_EMPTY : instant === null ? THREAD_SENT_AT_EMPTY : null;
 
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (addRefusal !== null || instant === null) {
       return;
     }
-    const addition = appendMessage(content, author, body.trim(), instant);
+    const addition = appendMessage(content, author, pythonStrip(body), instant);
     if (!addition.ok) {
       setRefused(addition.reason);
       return;
@@ -587,6 +594,7 @@ function Conversation({
           </label>
         </div>
         <textarea
+          maxLength={TEXT_MAX_LENGTH}
           aria-label="Add a history message"
           className={`${textAreaClasses} w-full`}
           placeholder="Add a history message…"

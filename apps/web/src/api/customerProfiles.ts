@@ -9,6 +9,7 @@ import type {
   CustomerProfileVersionListResponse,
   CustomerProfileVersionResponse,
 } from "@agent-lab/contracts";
+import { pythonStrip } from "../lib/pythonText";
 import { apiPath, JSON_HEADERS, read } from "./client";
 
 function profilesPath(suffix = ""): string {
@@ -28,7 +29,19 @@ export function toProfilePayload(
   content: CustomerProfileContentSchema,
 ): CustomerProfilePayloadSchema {
   const { display_name: _displayName, default_address_id: _defaultAddressId, ...payload } = content;
-  return payload;
+  // The texts the editor types in place, stripped as Python strips them: `require_label` and
+  // `require_text` refuse padding. What a form below a list writes is stripped by that form.
+  return {
+    ...payload,
+    identity: {
+      ...payload.identity,
+      given_name: pythonStrip(payload.identity.given_name),
+      family_name: pythonStrip(payload.identity.family_name),
+      email: pythonStrip(payload.identity.email),
+    },
+    account: { ...payload.account, notes: pythonStrip(payload.account.notes) },
+    persona: { ...payload.persona, summary: pythonStrip(payload.persona.summary) },
+  };
 }
 
 export async function listCustomerProfiles(

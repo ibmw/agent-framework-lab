@@ -7,7 +7,32 @@ import type {
   SupportIdentityVersionListResponse,
   SupportIdentityVersionResponse,
 } from "@agent-lab/contracts";
+import { pythonStrip } from "../lib/pythonText";
 import { apiPath, JSON_HEADERS, read } from "./client";
+
+/**
+ * What a draft write sends. An identity carries no derived evidence, so it is the content —
+ * with the texts the editor types in place stripped as Python strips them: `require_label` and
+ * `require_text` refuse padding, and a textarea ends on a newline as often as not. Its guidance
+ * notes are stripped by the form below their list.
+ */
+export function toSupportIdentityPayload(
+  content: SupportIdentityPayloadSchema,
+): SupportIdentityPayloadSchema {
+  return {
+    ...content,
+    role: {
+      ...content.role,
+      name: pythonStrip(content.role.name),
+      title: pythonStrip(content.role.title),
+      description: pythonStrip(content.role.description),
+    },
+    escalation: {
+      ...content.escalation,
+      escalate_to: pythonStrip(content.escalation.escalate_to),
+    },
+  };
+}
 
 function identitiesPath(suffix = ""): string {
   return apiPath(`/support-identities${suffix}`);

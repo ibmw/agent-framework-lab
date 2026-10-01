@@ -28,6 +28,8 @@ import {
   writeLabel,
   writesOf,
 } from "../lib/evidence";
+import { NOTE_MAX_LENGTH } from "../lib/fieldRules";
+import { pythonStrip } from "../lib/pythonText";
 import {
   addFormClasses,
   fieldControlClasses,
@@ -288,8 +290,8 @@ function NotesAndTags({
   const [tag, setTag] = useState("");
   const tagReasonId = useId();
   const noteReasonId = useId();
-  const tagEmpty = tag.trim() === "";
-  const noteEmpty = note.trim() === "";
+  const tagEmpty = pythonStrip(tag) === "";
+  const noteEmpty = pythonStrip(note) === "";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -321,7 +323,7 @@ function NotesAndTags({
       return;
     }
     void write(
-      () => addExperimentNote(shopId, experimentId, { body: note.trim() }),
+      () => addExperimentNote(shopId, experimentId, { body: pythonStrip(note) }),
       "This note could not be saved.",
       () => setNote(""),
     );
@@ -345,7 +347,7 @@ function NotesAndTags({
     }
     // The whole set every time, because that is what the contract takes: the backend folds
     // what was typed, so a tag already on the run comes back as the one chip it always was.
-    void file([...annotations.tags, tag.trim()], () => setTag(""));
+    void file([...annotations.tags, pythonStrip(tag)], () => setTag(""));
   };
 
   return (
@@ -443,6 +445,7 @@ function NotesAndTags({
           Add a note
         </label>
         <textarea
+          maxLength={NOTE_MAX_LENGTH}
           id="experiment-note"
           className={`${textAreaClasses} w-full`}
           placeholder="What this run showed, in your own words…"

@@ -19,6 +19,7 @@ import {
   TICKET_ORIGIN_KIND,
   TICKET_STATUS,
 } from "./enumLabels";
+import { pythonStrip } from "./pythonText";
 
 /**
  * Status is never carried by colour alone: every badge pairs its tone with a written label,
@@ -80,7 +81,8 @@ export function toTicketRequest(content: TicketContentSchema): ReplaceTicketDraf
   return {
     payload: {
       reference: content.reference,
-      subject: content.subject,
+      // Stripped as Python strips it: `require_label` refuses a padded subject.
+      subject: pythonStrip(content.subject),
       channel: content.channel,
       status: content.status,
       origin: content.origin,

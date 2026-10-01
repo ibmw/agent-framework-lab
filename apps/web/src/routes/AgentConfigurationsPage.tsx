@@ -21,8 +21,9 @@ import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
 import { useCreateThenComplete } from "../lib/createDefinition";
-import { SUPPORT_IDENTITY_PIN_RULE } from "../lib/fieldRules";
+import { LABEL_MAX_LENGTH, SUPPORT_IDENTITY_PIN_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
+import { pythonStrip } from "../lib/pythonText";
 import { onlyChoiceNote, soleCandidate } from "../lib/singleChoice";
 import {
   accentButtonClasses,
@@ -254,19 +255,20 @@ export function NewAgentConfigurationPage() {
     {
       create: async () => {
         const created = await createAgentConfiguration({
-          name,
+          name: pythonStrip(name),
           support_identity_id: identityId,
         });
         return { id: created.configuration_id, draft: created.content };
       },
       compose: (made) => ({
         ...made,
-        name,
+        // Stripped as Python strips them: `require_label` refuses a padded name or model.
+        name: pythonStrip(name),
         framework_id: frameworkId,
         model: {
           ...made.model,
           provider: provider === "" ? made.model.provider : provider,
-          model_id: modelId,
+          model_id: pythonStrip(modelId),
         },
       }),
       replace: replaceAgentConfigurationDraft,
@@ -284,9 +286,9 @@ export function NewAgentConfigurationPage() {
           ? "What a configuration may name could not be read, so nothing can be created here yet."
           : identities.length === 0
             ? "Author a support identity first: a configuration adopts exactly one."
-            : name.trim() === ""
+            : pythonStrip(name) === ""
               ? "The configuration needs a name before it can be created."
-              : modelId.trim() === ""
+              : pythonStrip(modelId) === ""
                 ? "The configuration needs the model its arms will run on."
                 : undefined,
   );
@@ -321,6 +323,7 @@ export function NewAgentConfigurationPage() {
               hint="How this configuration is listed on the bench and in history."
             >
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={name}
                 required

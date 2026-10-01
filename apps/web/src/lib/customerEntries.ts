@@ -7,13 +7,15 @@ import type {
 import { COUNTRY_PATTERN } from "./countries";
 import {
   ADDRESS_FIELDS_RULE,
+  addressRecipientTooLongRule,
   BACKGROUND_DATE_RULE,
   BACKGROUND_NOTE_RULE,
   COUNTRY_RULE,
   HIDDEN_FACT_RULE,
+  LABEL_MAX_LENGTH,
 } from "./fieldRules";
 import type { ItemRefusal } from "./itemForm";
-import { pythonStrip } from "./pythonText";
+import { pythonLength, pythonStrip } from "./pythonText";
 
 /**
  * A customer profile's three lists as the forms below them hold them (ADR 0074): the address
@@ -110,7 +112,8 @@ export function resolvedAddress(
  * The first rule the address form breaks, in the order it asks (`ADDRESS_FORM_FIELDS`): a
  * required line empty or only spaces, in the lab's one sentence for all five; a country that is
  * not two uppercase letters (`require_country_code`). The recipient of an address being added
- * is not asked, and an empty one — a profile with no name yet — is said with no field marked.
+ * is not asked, and an empty one — a profile with no name yet — or one past `require_label`'s
+ * cap — a long given name and family name together — is said with no field marked.
  */
 export function addressRefusal(
   fields: AddressFields & { country: string },
@@ -125,8 +128,15 @@ export function addressRefusal(
     } else if (REQUIRED_ADDRESS_TEXT.has(field) && blank(fields[field])) {
       return { field, reason: ADDRESS_FIELDS_RULE };
     }
-    if (mode === "adding" && field === "label" && blank(fields.recipient)) {
-      return { field: null, reason: ADDRESS_FIELDS_RULE };
+    if (mode === "adding" && field === "label") {
+      if (blank(fields.recipient)) {
+        return { field: null, reason: ADDRESS_FIELDS_RULE };
+      }
+      // Not typed, so no `maxLength` stopped it: the customer's whole name.
+      const length = pythonLength(pythonStrip(fields.recipient));
+      if (length > LABEL_MAX_LENGTH) {
+        return { field: null, reason: addressRecipientTooLongRule(length) };
+      }
     }
   }
   return null;

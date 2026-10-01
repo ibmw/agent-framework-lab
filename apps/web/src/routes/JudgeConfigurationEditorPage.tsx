@@ -31,11 +31,13 @@ import { describeProvider } from "../lib/agents";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { JUDGE_EVIDENCE_SCOPE } from "../lib/enumLabels";
 import {
+  LABEL_MAX_LENGTH,
   PROVEN_PROVIDER_RULE,
   RUBRIC_EMPTY_RULE,
   rubricNamesAnArmRule,
   TEMPERATURE_PATTERN,
   TEMPERATURE_RULE,
+  TEXT_MAX_LENGTH,
   unprovenJudgeProviderRule,
 } from "../lib/fieldRules";
 import { unreachableProviderNote } from "../lib/modelConnections";
@@ -279,6 +281,7 @@ export function JudgeConfigurationEditorPage() {
             <FieldRows>
               <Field label="Name">
                 <input
+                  maxLength={LABEL_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={content.name}
                   onChange={(event) => edit({ ...content, name: event.target.value })}
@@ -286,6 +289,7 @@ export function JudgeConfigurationEditorPage() {
               </Field>
               <Field label="Description">
                 <input
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={content.description}
                   onChange={(event) => edit({ ...content, description: event.target.value })}
@@ -308,6 +312,7 @@ export function JudgeConfigurationEditorPage() {
                 extraTone="finding"
               >
                 <textarea
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full min-h-56 font-mono`}
                   value={content.rubric}
                   aria-required

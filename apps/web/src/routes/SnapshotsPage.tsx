@@ -29,8 +29,9 @@ import {
 } from "../components/WorkspaceChrome";
 import { FREEZE_NOTE, freezeReport } from "../lib/actionStatus";
 import { DEFINITION_TYPE, labelOf } from "../lib/enumLabels";
-import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
+import { LABEL_MAX_LENGTH, MAX_SEED, SEED_RULE } from "../lib/fieldRules";
 import { fulfilmentLabel, paymentLabel } from "../lib/orders";
+import { pythonStrip } from "../lib/pythonText";
 import { channelLabel, originLabel } from "../lib/tickets";
 import {
   editorColumnsClasses,
@@ -442,7 +443,8 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const labelReasonId = useId();
-  const labelRefusal = label.trim() === "" ? { id: labelReasonId, reason: LABEL_MISSING } : null;
+  const labelRefusal =
+    pythonStrip(label) === "" ? { id: labelReasonId, reason: LABEL_MISSING } : null;
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -465,7 +467,7 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
   const clone = async (event: FormEvent) => {
     event.preventDefault();
     // Refused before the press too (ADR 0063); this is the handler's own check.
-    if (label.trim() === "") {
+    if (pythonStrip(label) === "") {
       setError(LABEL_MISSING);
       return;
     }
@@ -474,7 +476,7 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
     try {
       // The response is the arm, so it is appended rather than refetched. A failed reload
       // would otherwise be reported as a failed clone, after the arm already exists.
-      const created = await cloneSandbox(shopId, snapshotId, { label: label.trim() });
+      const created = await cloneSandbox(shopId, snapshotId, { label: pythonStrip(label) });
       setArms((current) => [...current, created]);
       setLabel("");
     } catch (cause: unknown) {
@@ -506,6 +508,7 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
           <label className={fieldLabelClasses}>
             Arm label
             <input
+              maxLength={LABEL_MAX_LENGTH}
               className={`${fieldControlClasses} w-full`}
               value={label}
               onChange={(event) => setLabel(event.target.value)}

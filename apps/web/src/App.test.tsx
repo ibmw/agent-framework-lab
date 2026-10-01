@@ -21,6 +21,7 @@ import {
   ATTRIBUTE_VALUE_AMONG_CHOICES_RULE,
   ATTRIBUTE_VALUE_RULE,
   ENTRY_KEY_RULE,
+  LABEL_MAX_LENGTH,
   MEDIA_ALT_TEXT_RULE,
   MEDIA_NEEDS_REFERENCE,
   OPTION_NAME_RULE,
@@ -32,6 +33,7 @@ import {
   REVIEW_BODY_RULE,
   SHOP_NAME_RULE,
   SHOP_SLUG_DETAIL_RULE,
+  TEXT_MAX_LENGTH,
   TONE_DEFAULT_REMOVAL_RULE,
   TONE_GUIDANCE_RULE,
   TONE_ID_RULE,
@@ -1520,6 +1522,21 @@ describe("shop workspace", () => {
     expect(fulfilment.getAllByText("express-air-freight", { selector: "code" })).toHaveLength(1);
   });
 
+  it("stops a tone-of-voice guideline's name and guidance where the lab's rules stop them", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await screen.findByRole("region", { name: "Guidelines" }));
+
+    for (const [label, cap] of [
+      ["Name", LABEL_MAX_LENGTH],
+      ["Guidance", TEXT_MAX_LENGTH],
+    ] as const) {
+      await user.click(tone.getByLabelText(label));
+      await user.paste("x".repeat(cap + 5));
+      expect(tone.getByLabelText(label), label).toHaveValue("x".repeat(cap));
+    }
+  });
+
   it("derives a tone-of-voice id from the name", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/setup/tone`);
@@ -1535,6 +1552,29 @@ describe("shop workspace", () => {
     await user.clear(tone.getByLabelText("ID"));
     await user.type(tone.getByLabelText("ID"), "warm");
     expect(tone.getByLabelText("ID")).toBeInvalid();
+  });
+
+  it("stops a product's four lists' texts where the lab's rules stop them", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const region = async (name: string) => within(await screen.findByRole("region", { name }));
+    // Pasted past the cap, as a value too long to type would arrive: `maxLength` cuts it where
+    // `require_label` (200) or `require_text` (4000) would refuse it.
+    const fields: [string, string, number][] = [
+      ["Options", "Option name", LABEL_MAX_LENGTH],
+      ["Media references", "Reference", TEXT_MAX_LENGTH],
+      ["Media references", "Alt text", LABEL_MAX_LENGTH],
+      ["Custom attributes (typed)", "Label", LABEL_MAX_LENGTH],
+      ["Custom attributes (typed)", "Value", LABEL_MAX_LENGTH],
+      ["Ratings and reviews", "Author", LABEL_MAX_LENGTH],
+      ["Ratings and reviews", "Body", TEXT_MAX_LENGTH],
+    ];
+    for (const [card, label, cap] of fields) {
+      const field = (await region(card)).getByLabelText(label);
+      await user.click(field);
+      await user.paste("x".repeat(cap + 5));
+      expect(field, `${card} · ${label}`).toHaveValue("x".repeat(cap));
+    }
   });
 
   it("derives option and attribute keys, and shows a review id only on the saved row", async () => {

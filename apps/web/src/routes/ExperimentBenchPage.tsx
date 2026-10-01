@@ -49,6 +49,8 @@ import {
   writeLabel,
   writesOf,
 } from "../lib/evidence";
+import { TEXT_MAX_LENGTH } from "../lib/fieldRules";
+import { pythonStrip } from "../lib/pythonText";
 import {
   chipClasses,
   fieldLabelClasses,
@@ -199,7 +201,7 @@ export function ExperimentBenchPage() {
     if (running) {
       return;
     }
-    if (message.trim() === "") {
+    if (pythonStrip(message) === "") {
       setError("Write the customer's next message before sending it.");
       return;
     }
@@ -224,7 +226,7 @@ export function ExperimentBenchPage() {
     try {
       await deliverParticipantTurn(shopId, experimentId, {
         run_ids: reached,
-        message: message.trim(),
+        message: pythonStrip(message),
       });
       delivered = true;
       setMessage("");
@@ -428,6 +430,7 @@ export function ExperimentBenchPage() {
               <label className={fieldLabelClasses}>
                 Message
                 <textarea
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full`}
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}

@@ -22,6 +22,8 @@ import {
   DOCUMENT_KIND_FIXED_RULE,
   DOCUMENT_SLUG_FIXED_RULE,
   DOCUMENT_TITLE_RULE,
+  LABEL_MAX_LENGTH,
+  TEXT_MAX_LENGTH,
 } from "../lib/fieldRules";
 import { findingClauses, type RemovalFinding, removedState, useRemoval } from "../lib/removal";
 import { documentToolName } from "../lib/scenarios";
@@ -190,6 +192,7 @@ export function DocumentEditorPage() {
             <FieldRows>
               <Field label="Title" hint={DOCUMENT_TITLE_RULE}>
                 <input
+                  maxLength={LABEL_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={document.title}
                   required
@@ -240,6 +243,7 @@ export function DocumentEditorPage() {
                 extra={`${words} word${words === 1 ? "" : "s"}`}
               >
                 <textarea
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full`}
                   rows={9}
                   value={document.body}

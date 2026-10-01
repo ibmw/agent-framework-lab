@@ -11,6 +11,7 @@ import {
   previewSupportIdentityDraft,
   publishSupportIdentity,
   replaceSupportIdentityDraft,
+  toSupportIdentityPayload,
 } from "../api/supportIdentities";
 import { ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
@@ -34,6 +35,8 @@ import {
   CHIP_LABEL_MAX_LENGTH,
   ESCALATION_CONDITIONS_RULE,
   IDENTITY_TONE_RULE,
+  LABEL_MAX_LENGTH,
+  TEXT_MAX_LENGTH,
 } from "../lib/fieldRules";
 import {
   BLANK_GUIDANCE,
@@ -70,8 +73,7 @@ const CLIENT: DefinitionClient<
   previewDraft: previewSupportIdentityDraft,
   replaceDraft: replaceSupportIdentityDraft,
   publish: publishSupportIdentity,
-  // A support identity carries no derived evidence, so the content *is* the payload.
-  toPayload: (content) => content,
+  toPayload: toSupportIdentityPayload,
   unavailable: "The support-identity service is unavailable.",
 };
 
@@ -205,6 +207,7 @@ export function SupportIdentityEditorPage() {
             <FieldRows>
               <Field label="Name">
                 <input
+                  maxLength={LABEL_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={content.role.name}
                   onChange={(event) =>
@@ -214,6 +217,7 @@ export function SupportIdentityEditorPage() {
               </Field>
               <Field label="Title">
                 <input
+                  maxLength={LABEL_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={content.role.title}
                   onChange={(event) =>
@@ -225,6 +229,7 @@ export function SupportIdentityEditorPage() {
                   it under Remit (:1808) — so it is the row's rule, and the create page's words. */}
               <Field label="Remit" hint={IDENTITY_TONE_RULE}>
                 <textarea
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full`}
                   value={content.role.description}
                   onChange={(event) =>
@@ -276,6 +281,7 @@ export function SupportIdentityEditorPage() {
             <FieldRows>
               <Field label="Escalate to">
                 <input
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={content.escalation.escalate_to}
                   onChange={(event) =>
@@ -508,6 +514,7 @@ function GuidanceNotes({
       >
         <FieldHint label="Title">
           <input
+            maxLength={LABEL_MAX_LENGTH}
             ref={titleInput}
             className={`${fieldControlClasses} w-full`}
             value={form.fields.title}
@@ -518,6 +525,7 @@ function GuidanceNotes({
         <div className="col-span-full">
           <FieldHint label="Guidance">
             <textarea
+              maxLength={TEXT_MAX_LENGTH}
               className={`${textAreaClasses} w-full`}
               value={form.fields.body}
               {...refusedProps(marked, "body", reasonId)}

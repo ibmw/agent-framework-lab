@@ -14,11 +14,13 @@ import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome
 import { nextReference, SLUG_MAX_LENGTH } from "../lib/entryIds";
 import {
   alreadyTakenMessage,
+  LABEL_MAX_LENGTH,
   REFERENCE_PATTERN,
   TICKET_REFERENCE_RULE,
   tooLongMessage,
 } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
+import { pythonStrip } from "../lib/pythonText";
 import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import { channelLabel, originLabel } from "../lib/tickets";
 import {
@@ -247,7 +249,7 @@ export function NewTicketPage() {
       ? listings.customers.error !== null
         ? "The customers attached to this shop could not be read, and a ticket is raised by one of them."
         : "Attach a customer to this shop first — a ticket is raised by a customer the shop has."
-      : subject.trim() === ""
+      : pythonStrip(subject) === ""
         ? "The ticket needs a subject: the incident as the customer would describe it."
         : customerId === ""
           ? "Choose the customer who raised the ticket."
@@ -272,7 +274,7 @@ export function NewTicketPage() {
     try {
       const created = await createTicket(shopId, {
         reference,
-        subject: subject.trim(),
+        subject: pythonStrip(subject),
         customer_profile_id: customerId,
         channel,
       });
@@ -294,7 +296,7 @@ export function NewTicketPage() {
       backTo={`/shops/${shopId}/tickets`}
       backLabel="Tickets"
       breadcrumb="opening an incident"
-      title={subject.trim()}
+      title={pythonStrip(subject)}
       untitled="New ticket"
       formId={formId}
       createLabel="Create ticket"
@@ -308,6 +310,7 @@ export function NewTicketPage() {
           <FieldRows>
             <Field label="Subject" hint="The incident as the customer would describe it.">
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={subject}
                 required

@@ -53,8 +53,10 @@ import { type EntryEdit, entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { labelOf, OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
 import {
   CONTEXT_DOCUMENTS_CAP_RULE,
+  LABEL_MAX_LENGTH,
   MUTATIONS_CAP_RULE,
   OBJECTIVES_CAP_RULE,
+  TEXT_MAX_LENGTH,
 } from "../lib/fieldRules";
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
@@ -346,6 +348,7 @@ export function ScenarioEditorPage() {
             <FieldRows>
               <Field label="Name">
                 <input
+                  maxLength={LABEL_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={content.name}
                   onChange={(event) => edit({ ...content, name: event.target.value })}
@@ -685,6 +688,7 @@ export function ScenarioEditorPage() {
             }
           >
             <textarea
+              maxLength={TEXT_MAX_LENGTH}
               aria-label="Hidden facts"
               className={`${textAreaClasses} w-full`}
               value={content.hidden_facts}
@@ -705,6 +709,7 @@ export function ScenarioEditorPage() {
             <FieldRows>
               <Field label="A resolved incident looks like">
                 <textarea
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full`}
                   value={content.completion.statement}
                   placeholder="The order ships to the confirmed address and the customer acknowledges it."
@@ -1154,6 +1159,7 @@ function BindingField({
   return (
     <Field label={parameter.name} hint={hint}>
       <input
+        maxLength={TEXT_MAX_LENGTH}
         aria-label={name}
         className={`${fieldControlClasses} w-full`}
         value={value}

@@ -20,6 +20,7 @@ import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
 import { useCreateThenComplete } from "../lib/createDefinition";
+import { LABEL_MAX_LENGTH, TEXT_MAX_LENGTH } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import { pythonStrip } from "../lib/pythonText";
 import {
@@ -230,16 +231,16 @@ export function NewJudgePage() {
   const creating = useCreateThenComplete<JudgeConfigurationPayloadSchema>(
     {
       create: async () => {
-        const created = await createJudgeConfiguration({ name });
+        const created = await createJudgeConfiguration({ name: pythonStrip(name) });
         return { id: created.judge_id, draft: created.content };
       },
       compose: (made) => ({
         ...made,
-        name,
+        name: pythonStrip(name),
         // Stripped as Python strips it: `require_text` refuses a rubric with surrounding
         // whitespace, and the one the operator typed often ends on a newline.
         rubric: pythonStrip(rubric),
-        model: { ...made.model, provider, model_id: modelId },
+        model: { ...made.model, provider, model_id: pythonStrip(modelId) },
       }),
       replace: replaceJudgeConfigurationDraft,
       refresh: listings.judges.refresh,
@@ -254,11 +255,11 @@ export function NewJudgePage() {
         ? "Reading what this lab has proven it can judge with…"
         : resourcesError !== null
           ? "What a judge may name could not be read, so nothing can be created here yet."
-          : name.trim() === ""
+          : pythonStrip(name) === ""
             ? "The judge needs a name before it can be created."
             : pythonStrip(rubric) === ""
               ? "The judge has no rubric yet, and the rubric is the whole of what a judge is: nothing can be scored until it is written."
-              : modelId.trim() === ""
+              : pythonStrip(modelId) === ""
                 ? "The judge needs the model that will score with it."
                 : undefined,
   );
@@ -286,6 +287,7 @@ export function NewJudgePage() {
               hint="How this judge is listed. An objective names the judge that scores it."
             >
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={name}
                 required
@@ -333,6 +335,7 @@ export function NewJudgePage() {
               hint="Write what a met objective looks like, not what a good agent looks like. The judge scores one arm's record at a time, and it is the whole of what this judge is — a judge with no rubric cannot be created here and could not be published either."
             >
               <textarea
+                maxLength={TEXT_MAX_LENGTH}
                 className={`${textAreaClasses} w-full`}
                 value={rubric}
                 rows={7}

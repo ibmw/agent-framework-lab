@@ -36,6 +36,7 @@ import {
   PAID_AT_RULE,
   PAYMENT_STATUS_RULE,
   SHIPPED_AT_RULE,
+  TEXT_MAX_LENGTH,
 } from "../lib/fieldRules";
 import {
   formTitle,
@@ -1185,6 +1186,7 @@ function OrderEvents({
         <div className="col-span-full">
           <FieldHint label="Summary">
             <textarea
+              maxLength={TEXT_MAX_LENGTH}
               className={`${textAreaClasses} w-full`}
               value={form.fields.summary}
               placeholder="Customer asked by email to change the delivery address."

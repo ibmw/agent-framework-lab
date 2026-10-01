@@ -17,6 +17,7 @@ import {
   publishAgentConfiguration,
   readAgentConfigurationResources,
   replaceAgentConfigurationDraft,
+  toAgentConfigurationPayload,
 } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
 import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
@@ -34,16 +35,20 @@ import {
 } from "../components/WorkspaceChrome";
 import { ARCHITECTURE_LABELS, ARCHITECTURES, describeProvider } from "../lib/agents";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { SLUG_MAX_LENGTH } from "../lib/entryIds";
 import { labelOf, SUPPORT_PERMISSION } from "../lib/enumLabels";
 import {
+  LABEL_MAX_LENGTH,
   PROVEN_PROVIDER_RULE,
   SUPPORT_IDENTITY_PIN_RULE,
   TEMPERATURE_PATTERN,
   TEMPERATURE_RULE,
+  TEXT_MAX_LENGTH,
   TONE_OVERRIDE_RULE,
   unprovenAgentProviderRule,
 } from "../lib/fieldRules";
 import { unreachableProviderNote } from "../lib/modelConnections";
+import { pythonStrip } from "../lib/pythonText";
 import {
   editorColumnsClasses,
   editorMainClasses,
@@ -73,8 +78,7 @@ const CLIENT: DefinitionClient<
   previewDraft: (id, signal) => previewAgentConfigurationDraft(id, undefined, signal),
   replaceDraft: replaceAgentConfigurationDraft,
   publish: publishAgentConfiguration,
-  // A configuration carries no derived evidence, so the content *is* the payload.
-  toPayload: (content) => content,
+  toPayload: toAgentConfigurationPayload,
   unavailable: UNAVAILABLE,
 };
 
@@ -424,6 +428,7 @@ export function AgentConfigurationEditorPage() {
             <FieldRows>
               <Field label="Name">
                 <input
+                  maxLength={LABEL_MAX_LENGTH}
                   className={`${fieldControlClasses} w-full`}
                   value={content.name}
                   onChange={(event) => edit({ ...content, name: event.target.value })}
@@ -480,6 +485,7 @@ export function AgentConfigurationEditorPage() {
               </Field>
               <Field label="Description">
                 <textarea
+                  maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full`}
                   value={content.description}
                   onChange={(event) => edit({ ...content, description: event.target.value })}
@@ -542,6 +548,7 @@ export function AgentConfigurationEditorPage() {
               )}
             </FieldRows>
             <textarea
+              maxLength={TEXT_MAX_LENGTH}
               ref={promptRef}
               aria-label="Prompt template"
               // The size is `!` because it has to beat the one it overrides: `textAreaClasses`
@@ -630,6 +637,7 @@ export function AgentConfigurationEditorPage() {
                   extra={overrideEcho(content.tone_of_voice.guideline_id, guidelines, previewShop)}
                 >
                   <input
+                    maxLength={SLUG_MAX_LENGTH}
                     className={`${fieldControlClasses} w-full`}
                     list="tone-of-voice-guidelines"
                     value={content.tone_of_voice.guideline_id}
@@ -974,7 +982,8 @@ function ResolvedPrompt({
     if (match.index > index) {
       parts.push(prompt.slice(index, match.index));
     }
-    const name = match[1].trim();
+    // As `scan_prompt_variables` strips it in Python, so a chip names the variable the gate reads.
+    const name = pythonStrip(match[1]);
     const resolved = values.get(name);
     const unresolvable = resolved === undefined || !resolved.injectable;
     parts.push(

@@ -13,6 +13,7 @@ import type {
   ShopDocumentKind,
 } from "@agent-lab/contracts";
 import { slugify, uniqueId } from "./entryIds";
+import { pythonStrip } from "./pythonText";
 
 /**
  * Client-side rules for composing a scenario.
@@ -263,8 +264,8 @@ export function objectiveFields(instance: BoundObjectiveSchema): ObjectiveFields
  */
 function storedBindings(values: Readonly<Record<string, string>>): ScenarioBindingSchema[] {
   return Object.entries(values)
-    .filter(([, value]) => value !== "")
-    .map(([parameter, value]) => ({ parameter, value }))
+    .map(([parameter, value]) => ({ parameter, value: pythonStrip(value) }))
+    .filter(({ value }) => value !== "")
     .sort((left, right) => left.parameter.localeCompare(right.parameter));
 }
 
@@ -503,12 +504,14 @@ export function readChecksByDocument(
 export function toScenarioRequest(content: ScenarioContentSchema): ReplaceScenarioDraftRequest {
   return {
     payload: {
-      name: content.name,
+      // The prose the editor types in place, stripped as Python strips it: `require_label` and
+      // `require_text` refuse padding, and a textarea ends on a newline as often as not.
+      name: pythonStrip(content.name),
       context_documents: content.context_documents,
       objectives: content.objectives,
       mutations: content.mutations,
-      hidden_facts: content.hidden_facts,
-      completion: content.completion,
+      hidden_facts: pythonStrip(content.hidden_facts),
+      completion: { ...content.completion, statement: pythonStrip(content.completion.statement) },
     },
   };
 }

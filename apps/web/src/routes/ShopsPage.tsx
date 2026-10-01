@@ -21,12 +21,14 @@ import { optionsOf, SUPPORT_CHANNEL } from "../lib/enumLabels";
 import {
   alreadyTakenMessage,
   KEBAB_PATTERN,
+  LABEL_MAX_LENGTH,
   SHOP_NAME_RULE,
   SHOP_SLUG_RULE,
   SHOP_SLUG_TAKEN_PLACE,
 } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import { currencyForLocale, DEFAULT_LOCALE } from "../lib/locales";
+import { pythonStrip } from "../lib/pythonText";
 import { shopSlugFromName } from "../lib/shop";
 import {
   accentButtonClasses,
@@ -259,7 +261,7 @@ export function NewShopPage() {
   // could write one that is already used — the refusal would come from the lab rather than
   // from the form, which is the one thing `DerivedIdField` exists to prevent.
   const blockedBy =
-    name.trim() === ""
+    pythonStrip(name) === ""
       ? "The shop needs a name before it can be created."
       : loading
         ? "Reading which slugs are already used…"
@@ -279,7 +281,8 @@ export function NewShopPage() {
     try {
       const created = await createShop(
         {
-          name,
+          // Stripped as Python strips it: `require_label` refuses a padded name.
+          name: pythonStrip(name),
           slug,
           locale,
           currencies,
@@ -317,7 +320,7 @@ export function NewShopPage() {
                   className={`${fieldControlClasses} w-full`}
                   value={name}
                   required
-                  maxLength={200}
+                  maxLength={LABEL_MAX_LENGTH}
                   placeholder="Harbour Lane Supply"
                   onChange={(event) => setName(event.target.value)}
                 />

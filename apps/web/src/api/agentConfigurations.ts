@@ -8,7 +8,25 @@ import type {
   AgentConfigurationVersionResponse,
   CreateAgentConfigurationRequest,
 } from "@agent-lab/contracts";
+import { pythonStrip } from "../lib/pythonText";
 import { apiPath, JSON_HEADERS, read } from "./client";
+
+/**
+ * What a draft write sends. A configuration carries no derived evidence, so it is the content —
+ * with the texts the editor types in place stripped as Python strips them: `require_label` and
+ * `require_text` refuse padding, and a textarea ends on a newline as often as not.
+ */
+export function toAgentConfigurationPayload(
+  content: AgentConfigurationPayloadSchema,
+): AgentConfigurationPayloadSchema {
+  return {
+    ...content,
+    name: pythonStrip(content.name),
+    description: pythonStrip(content.description),
+    prompt: pythonStrip(content.prompt),
+    model: { ...content.model, model_id: pythonStrip(content.model.model_id) },
+  };
+}
 
 function configurationsPath(suffix = ""): string {
   return apiPath(`/agent-configurations${suffix}`);

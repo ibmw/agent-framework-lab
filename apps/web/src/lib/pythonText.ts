@@ -16,6 +16,14 @@ const PYTHON_WHITESPACE =
   "\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000";
 const PYTHON_STRIP = new RegExp(`^[${PYTHON_WHITESPACE}]+|[${PYTHON_WHITESPACE}]+$`, "g");
 
+/**
+ * How long Python's `len()` reads `value`: in code points, where JavaScript's `length` counts
+ * UTF-16 units and so reads a character outside the Basic Multilingual Plane as two.
+ */
+export function pythonLength(value: string): number {
+  return Array.from(value).length;
+}
+
 /** `value` with what Python's `str.strip()` removes taken off both ends, as the server strips it. */
 export function pythonStrip(value: string): string {
   return value.replace(PYTHON_STRIP, "");

@@ -38,6 +38,7 @@ import { useCreateThenComplete } from "../lib/createDefinition";
 import { BLOCK_PARAMETER_KIND, labelOf } from "../lib/enumLabels";
 import { savedAsPreview } from "../lib/fieldPreviews";
 import { filterList } from "../lib/filters";
+import { pythonStrip } from "../lib/pythonText";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -341,7 +342,7 @@ function NewBlockPage<PayloadT extends BlockPayload>({
     (made) =>
       listing.loading
         ? "Reading what this library already holds…"
-        : label.trim() === ""
+        : pythonStrip(label) === ""
           ? "The template needs a name before it can be created."
           : name === ""
             ? "A name is saved as a lowercase slug, and this one leaves none — use letters or digits."

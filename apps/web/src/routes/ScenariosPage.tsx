@@ -24,8 +24,16 @@ import {
   PublicationPill,
 } from "../components/WorkspaceChrome";
 import { useCreateThenComplete } from "../lib/createDefinition";
-import { CHIP_LABEL_MAX_LENGTH, MUTATIONS_CAP_RULE, OBJECTIVES_CAP_RULE } from "../lib/fieldRules";
+import {
+  CHIP_LABEL_MAX_LENGTH,
+  hiddenFactsTooLongRule,
+  LABEL_MAX_LENGTH,
+  MUTATIONS_CAP_RULE,
+  OBJECTIVES_CAP_RULE,
+  TEXT_MAX_LENGTH,
+} from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
+import { pythonLength, pythonStrip } from "../lib/pythonText";
 import {
   addMutation,
   addObjective,
@@ -411,6 +419,9 @@ export function NewScenarioPage() {
   const [name, setName] = useState("");
   const [ticketId, setTicketId] = useState("");
   const [facts, setFacts] = useState<string[]>([]);
+  // One fact to a line: `hidden_facts` is one piece of operator-only prose, and the editor
+  // renders it in a textarea where these read back as the lines they were.
+  const hiddenFacts = facts.join("\n");
   const [objectives, setObjectives] = useState<string[]>([]);
   const [mutations, setMutations] = useState<string[]>([]);
   /**
@@ -506,7 +517,7 @@ export function NewScenarioPage() {
   const creating = useCreateThenComplete<ScenarioContentSchema>(
     {
       create: async () => {
-        const made = await createScenario(shopId, { name: name.trim(), ticket_id: ticketId });
+        const made = await createScenario(shopId, { name: pythonStrip(name), ticket_id: ticketId });
         return { id: made.scenario_id, draft: made.content };
       },
       // The draft the editor would save for these answers, built over the one the lab made —
@@ -516,10 +527,8 @@ export function NewScenarioPage() {
       compose: (made) => {
         const named: ScenarioContentSchema = {
           ...made,
-          name: name.trim(),
-          // One fact to a line: `hidden_facts` is one piece of operator-only prose, and the
-          // editor renders it in a textarea where these read back as the lines they were.
-          hidden_facts: facts.join("\n"),
+          name: pythonStrip(name),
+          hidden_facts: hiddenFacts,
         };
         const withObjectives = objectives.reduce<ScenarioContentSchema>(
           (content, blockId) =>
@@ -535,7 +544,8 @@ export function NewScenarioPage() {
       replace: (id, payload) => replaceScenarioDraft(shopId, id, toScenarioRequest(payload)),
       refresh: listings.scenarios.refresh,
       editorAt: (id) => `/shops/${shopId}/scenarios/${id}`,
-      owes: () => `Scenario ${name.trim()} was created without the objectives composed for it.`,
+      owes: () =>
+        `Scenario ${pythonStrip(name)} was created without the objectives composed for it.`,
       standing: "created · what it composes is not saved yet",
       whenCreateFails: "The scenario could not be created.",
       whenCompleteFails: "The scenario was created, but what it composes could not be saved.",
@@ -557,28 +567,31 @@ export function NewScenarioPage() {
               ? "Reading this shop's incidents and the block libraries…"
               : tickets.length === 0
                 ? "A scenario is built on a ticket, and this shop has none yet."
-                : name.trim() === ""
+                : pythonStrip(name) === ""
                   ? "Give the scenario a name first."
-                  : made === null && taken.includes(name.trim())
-                    ? `${name.trim()} is the name of a scenario this shop already holds.`
-                    : // A press while a template's draft is still coming would compose the
-                      // payload without it: `run` reads `compose` from the render the press
-                      // happened in, and the objective landing a moment later would be an
-                      // answer on screen that never reaches the draft and registers nothing
-                      // to prompt about (ADR 0051). Asked before the objectives check,
-                      // because a page reading its first template has none yet and this is
-                      // the truer reason.
-                      reading.length > 0
-                      ? "Reading what the template just composed declares…"
-                      : // The select seeds itself from the first incident and offers no empty
-                        // option, so this is the render between the listing landing and that
-                        // effect committing — and the guard that keeps an empty `ticket_id` off
-                        // the wire if either of those ever changes.
-                        ticketId === ""
-                        ? "Pick the incident this scenario is built on."
-                        : objectives.length === 0
-                          ? "Compose at least one objective — a run needs something to be scored against."
-                          : undefined,
+                  : made === null && taken.includes(pythonStrip(name))
+                    ? `${pythonStrip(name)} is the name of a scenario this shop already holds.`
+                    : // Each chip stops at its own cap; joined, they can pass the prose's.
+                      pythonLength(hiddenFacts) > TEXT_MAX_LENGTH
+                      ? hiddenFactsTooLongRule(pythonLength(hiddenFacts))
+                      : // A press while a template's draft is still coming would compose the
+                        // payload without it: `run` reads `compose` from the render the press
+                        // happened in, and the objective landing a moment later would be an
+                        // answer on screen that never reaches the draft and registers nothing
+                        // to prompt about (ADR 0051). Asked before the objectives check,
+                        // because a page reading its first template has none yet and this is
+                        // the truer reason.
+                        reading.length > 0
+                        ? "Reading what the template just composed declares…"
+                        : // The select seeds itself from the first incident and offers no empty
+                          // option, so this is the render between the listing landing and that
+                          // effect committing — and the guard that keeps an empty `ticket_id` off
+                          // the wire if either of those ever changes.
+                          ticketId === ""
+                          ? "Pick the incident this scenario is built on."
+                          : objectives.length === 0
+                            ? "Compose at least one objective — a run needs something to be scored against."
+                            : undefined,
   );
 
   return (
@@ -626,6 +639,7 @@ export function NewScenarioPage() {
               hint="What the bench and every report will call it. A shop answers to one scenario of each name, so this one has to be free."
             >
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={name}
                 required

@@ -525,7 +525,7 @@ function ConnectionCard({
   // trimmed first would send something other than what its chip was lit for: `trim()` removes a
   // byte-order mark the server keeps.
   const endpoint = baseUrl;
-  const key = typed === null || typed.trim() === "" ? null : typed.trim();
+  const key = typed === null || pythonStrip(typed) === "" ? null : pythonStrip(typed);
   // The typed endpoint as the server would store it, against what the lab holds as stored, so
   // a trailing slash, a shouted host or `:443` on the saved endpoint is nothing to save.
   const moves = !sameEndpoint(endpoint, saved?.base_url ?? "");

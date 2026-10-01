@@ -922,6 +922,28 @@ describe("the new-judge page", () => {
     expect(completed[0].rubric).toBe("Score whether the tone stayed warm.");
   });
 
+  it("reads a name as the lab does: padding alone is none, and padding around it is not sent", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/judges/new");
+
+    const create = await screen.findByRole("button", { name: "Create judge" });
+    const name = screen.getByLabelText("Name");
+    await user.type(screen.getByLabelText("Criteria"), "Score whether the tone stayed warm.");
+    await user.click(name);
+    // Kept by JavaScript's `trim()`, removed by Python's `str.strip()`, which `require_label` reads.
+    await user.paste("\x85\x1c");
+    expectRefused(create, "The judge needs a name before it can be created.");
+
+    await user.type(name, "Tone");
+    await user.paste("\u2028");
+    expectNotRefused(create);
+    await user.click(create);
+
+    await waitFor(() => expect(completed).toHaveLength(1));
+    expect(created.at(-1)?.name).toBe("Tone");
+    expect(completed[0].name).toBe("Tone");
+  });
+
   it("puts each field's hint in that control's accessible description", async () => {
     renderAt("/lab/judges/new");
 

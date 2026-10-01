@@ -10,7 +10,24 @@ import type {
   ObjectiveBlockPreviewResponse,
   ObjectiveBlockVersionResponse,
 } from "@agent-lab/contracts";
+import { pythonStrip } from "../lib/pythonText";
 import { apiPath, JSON_HEADERS, read } from "./client";
+
+/**
+ * What a draft write sends. `shop_bound` is the server's derived echo of the kind, so it is the
+ * content — with the statement and the description stripped as Python strips them:
+ * `require_text` refuses padding, and a textarea ends on a newline as often as not. A
+ * parameter's texts are stripped by the form below their list.
+ */
+export function toBlockPayload<PayloadT extends { statement: string; description: string }>(
+  content: PayloadT,
+): PayloadT {
+  return {
+    ...content,
+    statement: pythonStrip(content.statement),
+    description: pythonStrip(content.description),
+  };
+}
 
 /**
  * The two block libraries are cross-shop, so they sit at the root of the contract beside

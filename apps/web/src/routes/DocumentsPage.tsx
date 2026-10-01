@@ -34,8 +34,10 @@ import {
   DOCUMENT_SLUG_RULE,
   DOCUMENT_TITLE_RULE,
   KEBAB_PATTERN,
+  LABEL_MAX_LENGTH,
 } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
+import { pythonStrip } from "../lib/pythonText";
 import { useArrivedRemoval, useRemoval } from "../lib/removal";
 import {
   fieldControlClasses,
@@ -263,7 +265,7 @@ export function NewDocumentPage() {
   const suggested = uniqueSuggestion(slugify(title, ""), taken);
 
   const blockedBy =
-    title.trim() === ""
+    pythonStrip(title) === ""
       ? "The document needs a title: it is what the tool result is labelled with."
       : id === ""
         ? "The document needs a slug, which is how a scenario names the read."
@@ -280,7 +282,8 @@ export function NewDocumentPage() {
       appendDocument(content, {
         kind,
         id,
-        title,
+        // Stripped as Python strips it: `require_label` refuses a padded title.
+        title: pythonStrip(title),
         body: "",
         policyKind: kind === "policy" ? DEFAULT_POLICY_KIND : null,
       }),
@@ -306,6 +309,7 @@ export function NewDocumentPage() {
           <FieldRows>
             <Field label="Title" hint={DOCUMENT_TITLE_RULE}>
               <input
+                maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={title}
                 required

@@ -16,10 +16,12 @@ import {
 } from "./customerEntries";
 import {
   ADDRESS_FIELDS_RULE,
+  addressRecipientTooLongRule,
   BACKGROUND_DATE_RULE,
   BACKGROUND_NOTE_RULE,
   COUNTRY_RULE,
   HIDDEN_FACT_RULE,
+  LABEL_MAX_LENGTH,
 } from "./fieldRules";
 
 /** Every subset of a list, in order, the empty one included. */
@@ -105,6 +107,28 @@ describe("the address form's refusal", () => {
     // After the label, where the recipient stands in the form that asks it.
     expect(addressRefusal({ ...ADDRESS, label: "", recipient: "" }, "adding")?.field).toBe("label");
     expect(addressRefusal({ ...ADDRESS, recipient: "", city: "" }, "adding")?.field).toBeNull();
+  });
+
+  it("refuses an entry being added for a customer whose whole name is past the recipient's cap", () => {
+    // Not typed into a field, so no `maxLength` stopped it: a given and a family name of up to
+    // 200 characters each, joined. Counted as Python counts, after the strip the entry gets.
+    const atCap = "x".repeat(LABEL_MAX_LENGTH);
+    expect(addressRefusal({ ...ADDRESS, recipient: ` ${atCap}\x85` }, "adding")).toBeNull();
+    const long = `${"x".repeat(150)} ${"y".repeat(150)}`;
+    expect(addressRefusal({ ...ADDRESS, recipient: long }, "adding")).toEqual({
+      field: null,
+      reason: addressRecipientTooLongRule(301),
+    });
+    expect(addressRecipientTooLongRule(301)).toBe(
+      "A new address ships to the customer, whose name is 301 characters long, and the lab keeps at most 200 of a recipient: shorten the customer's name and save it first.",
+    );
+    expect(
+      addressRefusal({ ...ADDRESS, recipient: "😀".repeat(LABEL_MAX_LENGTH) }, "adding"),
+    ).toBeNull();
+    // After the label, where the recipient stands in the form that asks it.
+    expect(addressRefusal({ ...ADDRESS, label: "", recipient: long }, "adding")?.field).toBe(
+      "label",
+    );
   });
 
   it("leaves the second street line and the region free", () => {
