@@ -1,5 +1,7 @@
 import type { ObjectiveBlockPayloadSchema } from "@agent-lab/contracts";
 import { describe, expect, it } from "vitest";
+import blocksDomain from "../../../api/src/capability_lab/domain/blocks.py?raw";
+import contentDomain from "../../../api/src/capability_lab/domain/content.py?raw";
 import {
   acceptsDefault,
   addedParameter,
@@ -23,8 +25,6 @@ import {
   uniqueParameterName,
   withParameter,
 } from "./blocks";
-import blocksDomain from "../../../api/src/capability_lab/domain/blocks.py?raw";
-import contentDomain from "../../../api/src/capability_lab/domain/content.py?raw";
 import { SLUG_MAX_LENGTH } from "./entryIds";
 import { PARAMETER_LABEL_RULE } from "./fieldRules";
 

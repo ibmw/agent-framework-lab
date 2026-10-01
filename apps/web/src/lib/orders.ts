@@ -23,6 +23,7 @@ import {
   ORDER_EVENTS_CAP_RULE,
 } from "./fieldRules";
 import type { ItemRefusal } from "./itemForm";
+import { pythonStrip } from "./pythonText";
 
 /**
  * Status is never carried by colour alone: every pill pairs its tone with a written label,
@@ -262,7 +263,7 @@ export function orderEventEntry(
     id,
     kind: fields.kind,
     occurred_at: untouched ? kept : (fromLocalInput(fields.occurredAt) ?? ""),
-    summary: fields.summary.trim(),
+    summary: pythonStrip(fields.summary),
   };
 }
 
@@ -286,7 +287,7 @@ export function orderEventRefusal(
   if (fromLocalInput(fields.occurredAt) === null) {
     return { field: "occurredAt", reason: ORDER_EVENT_TIME_RULE };
   }
-  if (fields.summary.trim() === "") {
+  if (pythonStrip(fields.summary) === "") {
     return { field: "summary", reason: ORDER_EVENT_SUMMARY_RULE };
   }
   return null;

@@ -3,6 +3,7 @@ import { isSlug } from "./entryIds";
 import { PAYMENT_METHOD_KIND } from "./enumLabels";
 import { alreadyTakenMessage, TRANSIT_WINDOW_RULE } from "./fieldRules";
 import type { ItemRefusal } from "./itemForm";
+import { pythonStrip } from "./pythonText";
 
 /**
  * The payment and fulfilment method forms on Shop details: what each holds, the order its
@@ -90,7 +91,7 @@ function identityRefusal(
   takenIds: readonly string[],
   editing: string | null,
 ): MethodRefusal | null {
-  if (form.name.trim() === "") {
+  if (pythonStrip(form.name) === "") {
     return { field: "name", reason: METHOD_NAME_RULE };
   }
   if (!isSlug(form.id)) {
@@ -124,7 +125,7 @@ export function fulfilmentRefusal(
   if (identity !== null) {
     return identity;
   }
-  if (form.carrier.trim() === "") {
+  if (pythonStrip(form.carrier) === "") {
     return { field: "carrier", reason: METHOD_CARRIER_RULE };
   }
   const min = transitDays(form.min);
@@ -142,18 +143,19 @@ export function fulfilmentRefusal(
 }
 
 /**
- * The entry a valid form writes. The name and the carrier are trimmed, because the lab refuses
- * a padded label (`require_label`); `enabled` is the caller's.
+ * The entry a valid form writes. The name and the carrier are stripped as Python strips them
+ * (`pythonStrip`), because the lab refuses a padded label (`require_label`); `enabled` is the
+ * caller's.
  */
 export function paymentMethodOf(form: PaymentForm, enabled: boolean): PaymentMethodSchema {
-  return { id: form.id, name: form.name.trim(), kind: form.kind, enabled };
+  return { id: form.id, name: pythonStrip(form.name), kind: form.kind, enabled };
 }
 
 export function fulfilmentMethodOf(form: FulfilmentForm): FulfilmentMethodSchema {
   return {
     id: form.id,
-    name: form.name.trim(),
-    carrier: form.carrier.trim(),
+    name: pythonStrip(form.name),
+    carrier: pythonStrip(form.carrier),
     min_transit_days: Number(form.min),
     max_transit_days: Number(form.max),
   };

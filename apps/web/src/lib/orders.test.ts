@@ -17,6 +17,7 @@ import {
   lineQuantity,
   lineRefusal,
   lineTotal,
+  orderEventEntry,
   orderEventRefusal,
   previewTotals,
   todayInput,
@@ -397,5 +398,17 @@ describe("the event form's refusal", () => {
         }
       }
     }
+  });
+
+  it("reads a summary as empty, and strips it, where Python's str.strip() does", () => {
+    // Python strips NEL and the information separators; `trim()` keeps them.
+    expect(orderEventRefusal({ ...GOOD, summary: "\x85\x1c" })).toEqual({
+      field: "summary",
+      reason: ORDER_EVENT_SUMMARY_RULE,
+    });
+    expect(orderEventEntry("e1", { ...GOOD, summary: "\x85Called.\x1f" }).summary).toBe("Called.");
+    // `trim()` takes the byte-order mark off; the lab keeps it, so it is a summary.
+    expect(orderEventRefusal({ ...GOOD, summary: "\ufeff" })).toBeNull();
+    expect(orderEventEntry("e1", { ...GOOD, summary: "\ufeff" }).summary).toBe("\ufeff");
   });
 });

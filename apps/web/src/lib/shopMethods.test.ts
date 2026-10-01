@@ -196,6 +196,34 @@ describe("what a form writes", () => {
     });
   });
 
+  it("strips and refuses as Python's str.strip() does, not as trim() does", () => {
+    const fulfilment = {
+      name: "Express",
+      id: "express",
+      carrier: "Nordic Post",
+      min: "1",
+      max: "2",
+    };
+    // Python strips NEL and the information separators, so either is an empty name.
+    expect(paymentRefusal({ name: "\x85\x1c", id: "visa", kind: "card" }, [], null)?.reason).toBe(
+      METHOD_NAME_RULE,
+    );
+    expect(fulfilmentRefusal({ ...fulfilment, carrier: "\x85" }, [], null)?.reason).toBe(
+      METHOD_CARRIER_RULE,
+    );
+    expect(
+      fulfilmentMethodOf({
+        ...fulfilment,
+        name: "\x85Express\x1d",
+        carrier: "\x1eNordic Post\x85",
+      }),
+    ).toMatchObject({ name: "Express", carrier: "Nordic Post" });
+    expect(paymentMethodOf({ name: "Visa\x85", id: "visa", kind: "card" }, true).name).toBe("Visa");
+    // `trim()` would empty a byte-order mark; the lab keeps it, so it is a name.
+    expect(paymentRefusal({ name: "\ufeff", id: "visa", kind: "card" }, [], null)).toBeNull();
+    expect(paymentMethodOf({ name: "\ufeff", id: "visa", kind: "card" }, true).name).toBe("\ufeff");
+  });
+
   it("caps a name and a carrier where require_label does", () => {
     expect(contentPython).toContain(`MAX_LABEL_LENGTH = ${METHOD_LABEL_MAX_LENGTH}`);
   });
