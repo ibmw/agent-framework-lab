@@ -26,6 +26,19 @@ Amendment: 2026-10-01 — What stays on `EntryCard` draws the item's pencil and 
 row's Edit is `EditButton`, its Remove `RemoveButton` or, one press, `TrashButton`, and a
 composed block's arrows `MoveButton`; the open row's Save and Cancel keep their words (ADR 0075).
 
+Amendment: 2026-10-01 — Four behaviours review left open. *Make default* on an address hands
+focus to the new default's pencil, which the pill describes, since the button that had it is not
+drawn on the default. A variant's typed option value, kept across a *Discard changes*, is dropped
+once the option no longer offers it, in the open row and the add form alike: what is written
+falls back to the value the variant holds (or the option's first). A reference
+parameter the draft holds as not required — authored through the API, which the gate refuses
+with "make it required" — is asked the `required` checkbox, with that finding under it, while
+the form edits it with its kind kept; it stays for as long as the form is open, so ticking it
+keeps focus, and a reference saved required is asked nothing, as before. And, applying ADR 0063
+to the experiment setup, a preview the lab refuses (a 4xx) is said only on Start's refusal line,
+while one that fails on the lab's side (a 5xx) or cannot be reached is said above the form until
+a later preview answers: two refusals with one cause are one sentence.
+
 On 29 September 2026 the operator asked that the lists an editor edits with a form meet the
 pattern Shop details' *Payment methods* draws (ADR 0072), so that editing an entry is learned
 once. This records that pattern as the workspace's, what stays on `EntryCard`, and how the
@@ -268,8 +281,10 @@ and stays on the item.
   optional) and the checkbox that writes `required`, now named "A scenario must bind this, unless
   the template gives a default", which is what `required` holds a scenario to; the gate's finding
   under it as before (ADR 0063's lab amendment), naming the parameter only once a label is typed
-  while adding. Edit moves focus to *Kind*, the first field the form asks while editing. Refused,
-  adding only: the template's cap (`PARAMETERS_FULL`, which marks no field), then an empty label
+  while adding. A reference is asked the checkbox only when the draft holds it as not required and
+  its kind is kept, which is the one way the gate's "make it required" is answered here. Edit
+  moves focus to *Kind*, the first field the form asks while editing. Refused, adding only: the
+  template's cap (`PARAMETERS_FULL`, which marks no field), then an empty label
   (`PARAMETER_LABEL_RULE`); an edit asks nothing the lab refuses. The labels "Kind of {name}",
   "Description of {name}" and "Default of {name}" give way to the form's own. `ParameterForm`
   stays the new-block page's; `withParameter` and `parameterRefusal` in `lib/blocks.ts` are the
