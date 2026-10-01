@@ -1,6 +1,7 @@
 # Project plan — the record of what was delivered
 
-Status: history — closed 2026-09-20; Milestone 8 appended 2026-09-28, Milestone 9 2026-09-29.
+Status: history — closed 2026-09-20; Milestone 8 appended 2026-09-28, Milestone 9 2026-09-29,
+Milestone 10 2026-10-01.
 **Read `docs/PLAN.md` for the delivery rules, the vocabulary and the open work.** This file holds
 what that document carried before it was compressed to open work only: the narrative of the
 implementation state as it stood, and Milestones 0 to 7 as they were planned and delivered,
@@ -8,8 +9,9 @@ verbatim. The ADRs each milestone names are the authoritative record of the deci
 roadmap's own account of them, kept because it says why the milestones came in this order.
 Nothing here is edited any more, save that a milestone delivered since is appended after
 Milestone 7, verbatim as `docs/PLAN.md` carried it: Milestone 8 on 2026-09-28, whose plan is
-`docs/history/PLAN-UX-2026-09-20.md`, and Milestone 9 on 2026-09-29, whose plan is
-`docs/history/PLAN-UX-2026-09-28.md`.
+`docs/history/PLAN-UX-2026-09-20.md`, Milestone 9 on 2026-09-29, whose plan is
+`docs/history/PLAN-UX-2026-09-28.md`, and Milestone 10 on 2026-10-01, whose plan is
+`docs/history/PLAN-UX-2026-09-29.md`.
 
 The last section is the walk through delivered milestones that `docs/decisions-and-next-step.md`
 carried under *Recommended next steps* until the same date.
@@ -1185,6 +1187,17 @@ create page — with *Shop details* and *Tone of voice* as the reference, as the
 change. `docs/PLAN-UX.md` is the authority for its scope, order and checks. Tickets landed as an
 index, a create page and an editor with ADR 0073, which supersedes the three-pane helpdesk ADR
 0016 decided. Acceptance is that plan's.
+
+## Milestone 10 — A list is edited in the form below it
+
+Bring the lists the editors edit with a form, all but the product's variants and a scenario's
+composed blocks, onto the pattern Shop details' *Payment methods* draws (ADR 0072): compact items
+with an icon Edit and Remove, and one form below the list that adds or, on Edit, holds the item it
+loaded. The operator asked for it on 29 September 2026; it is built on the primitives the workspace
+already has, without a backend or contract change. `docs/PLAN-UX.md` is the authority for its
+scope, order and checks. ADR 0074, written with its first slice, records the pattern, which
+supersedes *A saved row opens where it stands* for the lists it converts. Acceptance is that
+plan's.
 
 ## Historical POC milestones
 
