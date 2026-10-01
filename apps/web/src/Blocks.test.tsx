@@ -714,6 +714,46 @@ describe("objective block editor", () => {
     expect(parameters[1]).toMatchObject({ name: "severity", required: false, default: null });
   });
 
+  it("asks to require a reference the draft holds as optional, as the gate tells it to", async () => {
+    const user = userEvent.setup();
+    const sentence =
+      "entity_ref is optional but has nothing to fall back on, so a scenario that omits it leaves the runtime with no value; make it required, since a template cannot default an object reference";
+    // Authored through the API: the form never builds an optional reference itself.
+    currentMutation = {
+      ...MUTATION_CONTENT,
+      parameters: [{ ...MUTATION_CONTENT.parameters[0], required: false }],
+    };
+    renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
+
+    await screen.findByRole("heading", { name: "concurrent-entity-mutation" });
+    await user.click(screen.getByRole("button", { name: "Edit entity_ref" }));
+    const form = parameterForm("Edit entity_ref");
+    expect(form.queryByLabelText(DEFAULT)).toBeNull();
+    const required = form.getByRole("checkbox", { name: REQUIRED });
+    expect(required).not.toBeChecked();
+    expect(required).toHaveAccessibleDescription(sentence);
+
+    // Ticked, the gate has nothing left to say, and the checkbox stays where focus is.
+    await user.click(required);
+    expect(required).toBeChecked();
+    expect(required).toHaveFocus();
+    expect(form.queryByText(sentence)).toBeNull();
+    await user.click(form.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
+    expect(parameters[0]).toMatchObject({
+      name: "entity_ref",
+      kind: "entity_reference",
+      required: true,
+      default: null,
+    });
+
+    // Required as saved, the reference is asked nothing again.
+    await user.click(screen.getByRole("button", { name: "Edit entity_ref" }));
+    expect(parameterForm("Edit entity_ref").queryByRole("checkbox", { name: REQUIRED })).toBeNull();
+  });
+
   it("keeps a parameter's kind, requiredness and default as one through a Discard, while the form holds an edit", async () => {
     const user = userEvent.setup();
     renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);

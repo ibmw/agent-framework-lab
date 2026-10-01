@@ -417,6 +417,36 @@ function TemplateParameters<PayloadT extends BlockPayload>({
       ? optionalParameterWithoutDefaultRule(findingName, literal)
       : null;
   const optionalWithoutDefault = finding !== null;
+  // A reference is always required once the form has chosen its kind (`retypedFields`), so the
+  // checkbox is not drawn for one. A draft authored through the API can still hold a reference
+  // that is not, which the gate refuses with "make it required" — and an edit writes what the
+  // draft held while the kind is unchanged. So the one reference the form asks about is that
+  // one: opened with its kind kept and not required as saved, the checkbox stands while the
+  // form is open, so ticking it does not take away the control that had focus.
+  const savedEntry =
+    form.editing === null
+      ? undefined
+      : parameters.find((parameter) => parameter.name === form.editing);
+  const optionalReference =
+    !literal &&
+    savedEntry !== undefined &&
+    savedEntry.kind === form.fields.kind &&
+    !savedEntry.required;
+  const requiredCheckbox = (
+    <div className="col-span-full grid gap-1">
+      <label className="flex items-center gap-2 text-[13px]">
+        <input
+          type="checkbox"
+          checked={form.fields.required}
+          aria-describedby={optionalWithoutDefault ? findingId : undefined}
+          aria-invalid={optionalWithoutDefault || undefined}
+          onChange={(event) => form.update({ required: event.target.checked })}
+        />
+        {REQUIRED_LABEL}
+      </label>
+      <GateFindingLine id={findingId}>{finding}</GateFindingLine>
+    </div>
+  );
 
   function submit() {
     if (refusal !== null) {
@@ -630,20 +660,10 @@ function TemplateParameters<PayloadT extends BlockPayload>({
                 />
               )}
             </FieldHint>
-            <div className="col-span-full grid gap-1">
-              <label className="flex items-center gap-2 text-[13px]">
-                <input
-                  type="checkbox"
-                  checked={form.fields.required}
-                  aria-describedby={optionalWithoutDefault ? findingId : undefined}
-                  aria-invalid={optionalWithoutDefault || undefined}
-                  onChange={(event) => form.update({ required: event.target.checked })}
-                />
-                {REQUIRED_LABEL}
-              </label>
-              <GateFindingLine id={findingId}>{finding}</GateFindingLine>
-            </div>
+            {requiredCheckbox}
           </>
+        ) : optionalReference ? (
+          requiredCheckbox
         ) : (
           // A template that defaulted a reference would hand one shop's object to every other
           // shop, so the field is absent rather than present and refused.
