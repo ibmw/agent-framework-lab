@@ -746,7 +746,7 @@ function OptionValuesField({
       maxLength={CHIP_LABEL_MAX_LENGTH}
       addLabel="Add value"
       placeholder="Ocean Blue"
-      empty="No value yet; an option needs at least one."
+      placement="item-form"
       values={values}
       takenPlace="a value of this option"
       refusedBy={refusedBy}
@@ -1822,7 +1822,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
                 maxLength={CHIP_LABEL_MAX_LENGTH}
                 addLabel="Add choice"
                 placeholder="Regular"
-                empty="No choice yet; a choice attribute needs at least one."
+                placement="item-form"
                 values={form.fields.choices}
                 takenPlace="a choice of this attribute"
                 refusedBy={marked?.field === "choices" ? reasonId : undefined}

@@ -39,6 +39,18 @@ to the experiment setup, a preview the lab refuses (a 4xx) is said only on Start
 while one that fails on the lab's side (a 5xx) or cannot be reached is said above the form until
 a later preview answers: two refusals with one cause are one sentence.
 
+Amendment: 2026-10-02 — The option's values and the attribute's choices draw no empty line of
+their own ("No value yet; an option needs at least one."): the form's refusal line names the
+missing value (`OPTION_NEEDS_VALUE`, `ATTRIBUTE_NEEDS_CHOICE`). `ChipListField` takes where it
+stands as one decision every caller makes — `placement: "card"` with the `empty` line it says,
+on the cards with no refusal line of their own (traits, tags, conditions, hidden facts), or
+`placement: "item-form"` with none. The field draws one label, its legend; the input is named
+by the legend followed by its own hidden label ("Values New value"), the drawn words first. In
+the form's grid the input takes one track as the fields above it and *Add* the next; on a card
+the row aligns its items at the top rather than the bottom (`items-end` to `items-start`). In
+both, *Add* is the control's height (`subtleFieldButtonClasses`) and top-aligned with the input
+rather than its hint, so the two are level.
+
 On 29 September 2026 the operator asked that the lists an editor edits with a form meet the
 pattern Shop details' *Payment methods* draws (ADR 0072), so that editing an entry is learned
 once. This records that pattern as the workspace's, what stays on `EntryCard`, and how the

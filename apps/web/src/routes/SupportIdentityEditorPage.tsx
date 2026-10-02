@@ -304,6 +304,7 @@ export function SupportIdentityEditorPage() {
               addLabel="Add condition"
               placeholder="the customer asks for a manager"
               empty="No condition yet; this identity never escalates."
+              placement="card"
               values={content.escalation.conditions}
               takenPlace="an escalation condition"
               confirmRemoval={{

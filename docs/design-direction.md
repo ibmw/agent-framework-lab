@@ -343,6 +343,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   with why the lab never reads what it trims.
 - **A field states its own width.** The shared control declares none; every call site composes
   one — `w-full` almost everywhere — so a narrow field is narrow on screen (ADR 0069).
+- **Fields side by side stay level.** A stacked field packs at the top of its cell
+  (`fieldLabelClasses`), so two fields in one row keep their controls level and one height
+  whatever lines sit under either.
 - **A free-text field over a set the draft already uses offers it** as a `<datalist>`, spelled as
   the lab keeps it: the product category offers the other products' categories (ADR 0069).
 - **A reference reads as what it points at.** A ticket's origin product and its suggested
@@ -372,7 +375,13 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   saved content holds what was saved. A name derived from other fields is a `DerivedIdField`
   without the "Saved as" preview; a date defaults to the operator's own today.
 - **A list entered one value at a time is one control** (`ChipListField`): named remove
-  buttons, duplicates refused and said, respelling previewed to the shape the gate wants.
+  buttons, duplicates refused and said, respelling previewed to the shape the gate wants. Its
+  legend is the one label drawn, and the input is named by the legend followed by its own
+  hidden label ("Values New value"), the drawn words first. *Add* stands beside the input at the
+  control's height, top-aligned and so level with it, the hint under the input; in the form
+  below a list the input takes one track of the form's grid. It says it is empty only where
+  nothing else does: not in the form below a list, whose refusal line names the missing value
+  (ADR 0074).
 - **A small closed set of toggles is one control** (`ToggleChipGroup`, ADR 0071): the
   prototype's chips — pine with a check when on, plain when off — each a native checkbox laid
   transparent over its chip, in a fieldset named by the row. The last chip of a set the lab

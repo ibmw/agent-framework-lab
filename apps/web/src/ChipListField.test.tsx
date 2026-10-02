@@ -5,16 +5,19 @@ import { describe, expect, it, vi } from "vitest";
 import { ChipListField } from "./components/ChipListField";
 import { CHIP_LABEL_MAX_LENGTH } from "./lib/fieldRules";
 import { normalizeTag } from "./lib/tickets";
+import { controlHeightClasses, itemFormGridClasses, itemFormTracksClasses } from "./lib/ui";
 
 function Harness({
   initial = [] as string[],
   normalize,
   maxLength = CHIP_LABEL_MAX_LENGTH,
+  placement = "card",
   onWrite,
 }: {
   initial?: string[];
   normalize?: (value: string) => string;
   maxLength?: number;
+  placement?: "card" | "item-form";
   onWrite?: (values: string[]) => void;
 }) {
   const [values, setValues] = useState(initial);
@@ -24,7 +27,7 @@ function Harness({
       label="New value"
       hint="One value per chip. Every variant chooses one of these, and each must be different."
       addLabel="Add value"
-      empty="No value yet."
+      {...(placement === "card" ? { placement, empty: "No value yet." } : { placement })}
       values={values}
       normalize={normalize}
       maxLength={maxLength}
@@ -120,6 +123,69 @@ describe("ChipListField", () => {
     render(<Harness />);
 
     expect(group().getByText("No value yet.")).toBeVisible();
+  });
+
+  it("draws no line of its own for an empty list in the form below a list, which says it", async () => {
+    const user = userEvent.setup();
+    render(<Harness placement="item-form" />);
+
+    // The option form's refusal line names the missing value; the list says nothing twice.
+    expect(group().queryByRole("list")).toBeNull();
+    expect(group().queryByText("No value yet.")).toBeNull();
+
+    // The chips still show where the line would have been.
+    await user.type(group().getByLabelText("New value"), "Ocean Blue{Enter}");
+    expect(group().getByRole("list")).toContainElement(
+      group().getByRole("button", { name: "Remove Ocean Blue" }),
+    );
+  });
+
+  it("draws one label over its input, and names the input with the drawn words first", () => {
+    render(<Harness />);
+
+    const field = group().getByLabelText("New value");
+    // WCAG 2.5.3: the name starts with "Values", the label a sighted reader sees over it.
+    expect(field).toHaveAccessibleName("Values New value");
+    const label = document.querySelector(`label[for="${field.id}"]`);
+    expect(label).toHaveClass("sr-only");
+    expect(screen.getByText("Values").tagName).toBe("LEGEND");
+    expect(screen.getByText("Values")).not.toHaveClass("sr-only");
+  });
+
+  it.each(["card", "item-form"] as const)(
+    "on a %s, puts Add beside the input, top-aligned, with the hint under the input alone",
+    (placement) => {
+      render(<Harness placement={placement} />);
+
+      const field = group().getByLabelText("New value");
+      const add = group().getByRole("button", { name: "Add value" });
+      const hint = group().getByText(/One value per chip/);
+      // The input's column and the button are the two items of one row; the hint lives inside
+      // the input's column, so it can never push the button off the input's top edge.
+      const row = add.parentElement as HTMLElement;
+      const column = [...row.children].find((child) => child.contains(field)) as HTMLElement;
+      expect(column).not.toBe(add);
+      expect(column).toContainElement(hint);
+      expect(field.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect([...row.children]).toEqual([column, add]);
+      expect(row).toHaveClass("items-start");
+      expect(row).not.toHaveClass("items-end");
+      // The input's height, so top-aligned is level.
+      expect(add).toHaveClass(controlHeightClasses);
+      expect(field).toHaveClass(controlHeightClasses);
+      expect(add).not.toHaveClass("min-h-8");
+    },
+  );
+
+  it("in the form below a list, lays the input in the first of the form grid's own tracks", () => {
+    render(<Harness placement="item-form" />);
+
+    const add = group().getByRole("button", { name: "Add value" });
+    const row = add.parentElement as HTMLElement;
+    expect(row.className).toBe(itemFormTracksClasses);
+    expect(add).toHaveClass("justify-self-start");
+    // The same tracks as the fields above it, so the input is as wide as "Option name".
+    expect(itemFormTracksClasses).toBe(itemFormGridClasses.replace("auto-fit", "auto-fill"));
   });
 
   it("stores what was written where the caller respells nothing", async () => {

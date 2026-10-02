@@ -708,6 +708,7 @@ export function NewScenarioPage() {
             addLabel="Add fact"
             placeholder="Something true that the ticket does not say…"
             empty="No hidden fact yet."
+            placement="card"
             values={facts}
             maxLength={CHIP_LABEL_MAX_LENGTH}
             onChange={setFacts}

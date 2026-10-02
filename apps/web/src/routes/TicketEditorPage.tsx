@@ -437,6 +437,7 @@ function IncidentCard({
         addLabel="Add tag"
         placeholder="address change"
         empty="No tag yet."
+        placement="card"
         values={content.tags}
         normalize={normalizeTag}
         takenPlace="a tag on this ticket"

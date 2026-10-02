@@ -4,6 +4,7 @@ import type { Removal } from "../lib/removal";
 import {
   itemClasses,
   itemEditButtonClasses,
+  itemFormGridClasses,
   itemMoveButtonClasses,
   itemRemoveButtonClasses,
   outlineButtonClasses,
@@ -289,9 +290,7 @@ export function ItemFormRow({
       }}
     >
       <FieldGroup label={title} hint={hint}>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(160px,100%),1fr))] items-start gap-3">
-          {children}
-        </div>
+        <div className={itemFormGridClasses}>{children}</div>
         <div className="mt-3.5 flex flex-wrap items-center gap-2">
           <PrimaryAction
             variant="accent"

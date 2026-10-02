@@ -517,6 +517,7 @@ export function CustomerEditorPage() {
               addLabel="Add trait"
               placeholder="mildly anxious"
               empty="No trait yet."
+              placement="card"
               values={content.persona.traits}
               takenPlace="a trait of this persona"
               onChange={(traits) => edit({ ...content, persona: { ...content.persona, traits } })}

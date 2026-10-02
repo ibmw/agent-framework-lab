@@ -1776,6 +1776,34 @@ describe("typed controls on the product editor", () => {
     });
   });
 
+  it("leaves the empty option and choice lists to the form's refusal line", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+    const values = within(options.getByRole("group", { name: "Values" }));
+    expect(values.queryByRole("list")).toBeNull();
+    expect(options.queryByText(/No value yet/)).toBeNull();
+    // Once the name is typed, the one line that says the list is empty is the form's own.
+    await user.type(options.getByLabelText("Option name"), "Fit");
+    await user.click(options.getByRole("button", { name: "Add option" }));
+    expect(values.getByLabelText("New value")).toHaveAccessibleDescription(
+      expect.stringContaining(OPTION_NEEDS_VALUE),
+    );
+
+    const attributes = within(screen.getByRole("region", { name: "Custom attributes (typed)" }));
+    await user.selectOptions(attributes.getByLabelText("Type"), "choice");
+    const choices = within(attributes.getByRole("group", { name: "Choices" }));
+    expect(choices.queryByRole("list")).toBeNull();
+    expect(attributes.queryByText(/No choice yet/)).toBeNull();
+    await user.type(attributes.getByLabelText("Label"), "Cut");
+    await user.type(attributes.getByLabelText("Value"), "Regular");
+    await user.click(attributes.getByRole("button", { name: "Add attribute" }));
+    expect(choices.getByLabelText("New choice")).toHaveAccessibleDescription(
+      expect.stringContaining(ATTRIBUTE_NEEDS_CHOICE),
+    );
+  });
+
   it("enters attribute choices as chips, and writes them in the order entered", async () => {
     const user = userEvent.setup();
     type SavedPayload = { products: Array<{ attributes: Array<{ choices: string[] }> }> };

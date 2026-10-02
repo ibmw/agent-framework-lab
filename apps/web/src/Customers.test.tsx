@@ -1387,6 +1387,19 @@ describe("the field pattern on the customer editor", () => {
     );
   });
 
+  it("says the persona has no trait once the last one is removed", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    // The persona card has no refusal line of its own, so the list says it holds nothing.
+    const traits = within(screen.getByRole("group", { name: "Traits" }));
+    for (const remove of traits.getAllByRole("button", { name: /^Remove / })) {
+      await user.click(remove);
+    }
+    expect(traits.getByText("No trait yet.")).toBeVisible();
+  });
+
   it("keeps the persona's traits named by their own group, not by a row as well", async () => {
     renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
     await screen.findByRole("heading", { name: "Maya Laurent" });

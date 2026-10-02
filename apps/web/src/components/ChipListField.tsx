@@ -1,9 +1,9 @@
-import { type KeyboardEvent, type ReactNode, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useId, useState } from "react";
 import { savedAsPreview } from "../lib/fieldPreviews";
 import { alreadyTakenMessage } from "../lib/fieldRules";
 import { pythonStrip } from "../lib/pythonText";
 import { useRemoval } from "../lib/removal";
-import { fieldControlClasses, subtleButtonClasses } from "../lib/ui";
+import { fieldControlClasses, itemFormTracksClasses, subtleFieldButtonClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "./ConfirmRemove";
 import { FieldHint } from "./FieldHint";
@@ -42,63 +42,15 @@ export function ChipList({ label, values }: { label: string; values: readonly st
   );
 }
 
-/**
- * A list of short values entered one at a time: each saved value is a chip with a named
- * remove button, and a duplicate is refused where it was typed rather than dropped.
- *
- * Taken from the two lists that hand-rolled this — the ticket's tags and the customer's
- * persona traits — which differed in two ways that are settled here rather than averaged:
- *
- * - **Normalisation is a prop, not a policy.** Tags are stored as slugs and traits are stored
- *   as the operator wrote them ("mildly anxious", which frame 6b draws with its space). A
- *   component that normalised for everyone would rewrite a trait, and one that normalised for
- *   nobody would put the caller's rewriting *after* `onChange`, where this component can
- *   neither compare a candidate against what is already stored nor show what it will save.
- *   `DerivedIdField` already asks for this exact function under this exact name, so the
- *   workspace has one answer to the question and this is it.
- * - **The remove button is always named.** Tags labelled theirs and traits did not, so a
- *   reader without a pointer heard "✕" three times on the persona card. The glyph is
- *   decorative here and the name is "Remove Ocean Blue", on every list.
- *
- * **Duplicates are the component's job.** Each of the five lists this serves is
- * `_require_unique` in the domain — option values, attribute choices, persona traits, ticket
- * tags, escalation conditions — so refusal is one rule the lab applies to all of them rather
- * than five callers' preferences. It is said as it is typed, on `DerivedIdField`'s collision
- * model: the line under the field turns to the error treatment and is announced, the field is
- * marked invalid, and pressing Add does nothing. Silence would have been the fifth copy of
- * the bug this component replaces.
- *
- * There is no `<form>` here and the Add control is a plain button: three of the five lists sit
- * *inside* another form — the product editor's add-option and add-attribute forms — and a
- * nested form is not a thing the HTML parser will build. Enter in the field adds a chip and is
- * stopped from reaching the form outside it, which is the behaviour the nesting would
- * otherwise have stolen.
- */
-export function ChipListField({
-  legend,
-  label,
-  hint,
-  addLabel,
-  placeholder,
-  empty,
-  values,
-  normalize,
-  maxLength,
-  takenPlace = "in the list",
-  confirmRemoval,
-  refusedBy,
-  onChange,
-}: {
+type ChipListFieldProps = {
   /** Names the group: what this list *is* ("Values", "Tags"). */
   legend: string;
-  /** Names the control that takes the next one ("New tag"). */
+  /** Names the control that takes the next one ("New tag"), for a reader; it is not drawn. */
   label: string;
   hint: ReactNode;
   /** The button that commits what is typed ("Add tag"). */
   addLabel: string;
   placeholder?: string;
-  /** What the list says when it holds nothing. Omitted where the surrounding card says it. */
-  empty?: string;
   values: readonly string[];
   /** How a typed value is spelled when stored. Omitted where it is stored as written. */
   normalize?: (value: string) => string;
@@ -132,7 +84,88 @@ export function ChipListField({
    */
   refusedBy?: string;
   onChange: (values: string[]) => void;
-}) {
+} & (
+  | {
+      /**
+       * On its own under a card's rows, the input taking the width the *Add* button leaves it.
+       * The card has no refusal line of its own — traits, tags, conditions, hidden facts — so
+       * the list says when it holds nothing, in `empty`.
+       */
+      placement: "card";
+      /** What the list says when it holds nothing. */
+      empty: string;
+    }
+  | {
+      /**
+       * Across the grid of the form below a list (`ItemFormRow`): the input takes one track as
+       * the fields above it do and *Add* the next. It draws no line for an empty list: the
+       * form's refusal line names the missing value as soon as the rest is filled
+       * (`OPTION_NEEDS_VALUE`, `ATTRIBUTE_NEEDS_CHOICE`), and a line of its own would say the
+       * same rule twice.
+       */
+      placement: "item-form";
+    }
+);
+
+/**
+ * A list of short values entered one at a time: each saved value is a chip with a named
+ * remove button, and a duplicate is refused where it was typed rather than dropped.
+ *
+ * Taken from the two lists that hand-rolled this — the ticket's tags and the customer's
+ * persona traits — which differed in two ways that are settled here rather than averaged:
+ *
+ * - **Normalisation is a prop, not a policy.** Tags are stored as slugs and traits are stored
+ *   as the operator wrote them ("mildly anxious", which frame 6b draws with its space). A
+ *   component that normalised for everyone would rewrite a trait, and one that normalised for
+ *   nobody would put the caller's rewriting *after* `onChange`, where this component can
+ *   neither compare a candidate against what is already stored nor show what it will save.
+ *   `DerivedIdField` already asks for this exact function under this exact name, so the
+ *   workspace has one answer to the question and this is it.
+ * - **The remove button is always named.** Tags labelled theirs and traits did not, so a
+ *   reader without a pointer heard "✕" three times on the persona card. The glyph is
+ *   decorative here and the name is "Remove Ocean Blue", on every list.
+ *
+ * **Duplicates are the component's job.** Each of the five lists this serves is
+ * `_require_unique` in the domain — option values, attribute choices, persona traits, ticket
+ * tags, escalation conditions — so refusal is one rule the lab applies to all of them rather
+ * than five callers' preferences. It is said as it is typed, on `DerivedIdField`'s collision
+ * model: the line under the field turns to the error treatment and is announced, the field is
+ * marked invalid, and pressing Add does nothing. Silence would have been the fifth copy of
+ * the bug this component replaces.
+ *
+ * **One label for one control.** The legend is the only label drawn: it names the group and
+ * sits over the field that takes the next value, as "Option name" sits over its input. The
+ * input's own label ("New value") is not drawn, and the input is named by the two together —
+ * "Values New value", the drawn words first (WCAG 2.5.3) — so a reader still hears which
+ * control of the group they are on and nobody sees two labels stacked over one input. The *Add*
+ * button stands beside the input at its height, top-aligned and so level with it, and the hint
+ * runs under the input alone.
+ *
+ * There is no `<form>` here and the Add control is a plain button: three of the five lists sit
+ * *inside* another form — the product editor's add-option and add-attribute forms — and a
+ * nested form is not a thing the HTML parser will build. Enter in the field adds a chip and is
+ * stopped from reaching the form outside it, which is the behaviour the nesting would
+ * otherwise have stolen.
+ */
+export function ChipListField(props: ChipListFieldProps) {
+  const {
+    legend,
+    label,
+    hint,
+    addLabel,
+    placeholder,
+    placement,
+    values,
+    normalize,
+    maxLength,
+    takenPlace = "in the list",
+    confirmRemoval,
+    refusedBy,
+    onChange,
+  } = props;
+  const empty = props.placement === "card" ? props.empty : null;
+  const legendId = useId();
+  const labelId = useId();
   const [typed, setTyped] = useState("");
   const removal = useRemoval(confirmRemoval?.scope);
   // Stripped as Python strips it: each chip is a `require_label` the lab refuses padded.
@@ -169,45 +202,59 @@ export function ChipListField({
 
   return (
     <fieldset className="grid gap-2">
-      <legend className="text-xs font-semibold text-admin-muted">{legend}</legend>
-      <ul className={pillRowClasses}>
-        {values.map((value) => {
-          const drop = () => onChange(values.filter((entry) => entry !== value));
-          return confirmRemoval && removal.isArmed(value) ? (
-            <ConfirmRemove
-              key={value}
-              as="li"
-              title={confirmRemoval.title(value)}
-              consequence={confirmRemoval.consequence(value, values)}
-              onConfirm={removal.confirm(drop, confirmRemoval.notice(value))}
-              onKeep={removal.keep}
-            />
-          ) : (
-            <li key={value}>
-              <span className={`${pillClasses} gap-1 pr-1 pl-2.5`}>
-                <span className="[overflow-wrap:anywhere]">{value}</span>
-                <button
-                  className="rounded-full px-1.5 text-admin-muted transition hover:bg-admin-canvas hover:text-lab-error"
-                  type="button"
-                  aria-label={`Remove ${value}`}
-                  ref={confirmRemoval ? removal.trigger(value) : undefined}
-                  onClick={
-                    confirmRemoval ? removal.ask(value, drop, confirmRemoval.notice(value)) : drop
-                  }
-                >
-                  <span aria-hidden>✕</span>
-                </button>
-              </span>
-            </li>
-          );
-        })}
-        {values.length === 0 && empty ? <li className="text-admin-muted">{empty}</li> : null}
-      </ul>
+      {/* The rendered legend stands outside the fieldset's grid, so it takes the label's own
+          4px to the first thing under it rather than the grid's gap. */}
+      <legend id={legendId} className="mb-1 text-xs font-semibold text-admin-muted">
+        {legend}
+      </legend>
+      {values.length > 0 || empty !== null ? (
+        <ul className={pillRowClasses}>
+          {values.map((value) => {
+            const drop = () => onChange(values.filter((entry) => entry !== value));
+            return confirmRemoval && removal.isArmed(value) ? (
+              <ConfirmRemove
+                key={value}
+                as="li"
+                title={confirmRemoval.title(value)}
+                consequence={confirmRemoval.consequence(value, values)}
+                onConfirm={removal.confirm(drop, confirmRemoval.notice(value))}
+                onKeep={removal.keep}
+              />
+            ) : (
+              <li key={value}>
+                <span className={`${pillClasses} gap-1 pr-1 pl-2.5`}>
+                  <span className="[overflow-wrap:anywhere]">{value}</span>
+                  <button
+                    className="rounded-full px-1.5 text-admin-muted transition hover:bg-admin-canvas hover:text-lab-error"
+                    type="button"
+                    aria-label={`Remove ${value}`}
+                    ref={confirmRemoval ? removal.trigger(value) : undefined}
+                    onClick={
+                      confirmRemoval ? removal.ask(value, drop, confirmRemoval.notice(value)) : drop
+                    }
+                  >
+                    <span aria-hidden>✕</span>
+                  </button>
+                </span>
+              </li>
+            );
+          })}
+          {values.length === 0 && empty !== null ? (
+            <li className="text-admin-muted">{empty}</li>
+          ) : null}
+        </ul>
+      ) : null}
       {confirmRemoval ? <RemovalNotice removal={removal} /> : null}
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-48 flex-1">
+      <div
+        className={
+          placement === "item-form" ? itemFormTracksClasses : "flex flex-wrap items-start gap-2"
+        }
+      >
+        <div className={placement === "item-form" ? undefined : "min-w-48 flex-1"}>
           <FieldHint
             label={label}
+            labelHidden
+            labelId={labelId}
             hint={hint}
             extra={extra}
             extraTone={colliding ? "error" : "muted"}
@@ -217,6 +264,7 @@ export function ChipListField({
               value={typed}
               placeholder={placeholder}
               maxLength={maxLength}
+              aria-labelledby={`${legendId} ${labelId}`}
               aria-invalid={colliding || refusedBy !== undefined || undefined}
               aria-describedby={refusedBy}
               onChange={(event) => setTyped(event.target.value)}
@@ -224,7 +272,14 @@ export function ChipListField({
             />
           </FieldHint>
         </div>
-        <button className={subtleButtonClasses} type="button" onClick={add}>
+        {/* The input's height and top-aligned with it, which is the first thing drawn in its
+            column now that its label is not: level with the input, and the hint under the
+            input never moves it down. */}
+        <button
+          className={`${subtleFieldButtonClasses} ${placement === "item-form" ? "justify-self-start" : ""}`}
+          type="button"
+          onClick={add}
+        >
           <ButtonIcon verb="create" />
           {addLabel}
         </button>

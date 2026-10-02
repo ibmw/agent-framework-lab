@@ -165,6 +165,13 @@ const fieldSurfaceClasses =
   "rounded-[9px] border border-admin-field-border bg-admin-surface px-3.5 text-admin-ink outline-none transition focus:border-lab-primary focus:ring-[3px] focus:ring-lab-primary/20 aria-invalid:border-lab-error disabled:cursor-not-allowed disabled:opacity-65";
 
 /**
+ * The single-line control's height, the handoff's `min-height:44px`: every control a value is
+ * typed or chosen in, and the button that stands beside one (`subtleFieldButtonClasses`), so the
+ * two are one height and level at the top.
+ */
+export const controlHeightClasses = "min-h-[44px]";
+
+/**
  * The single-line control: the handoff's `min-height:44px`, `10px 14px` and `14.5px`.
  *
  * A floor rather than the `h-10` this used to be, because the README writes `min-height` and
@@ -173,7 +180,7 @@ const fieldSurfaceClasses =
  * whose value wraps. A fixed height clips all three; a floor lets them grow and holds the
  * target size for a pointer everywhere else.
  */
-export const fieldControlClasses = `box-border min-h-[44px] py-2.5 text-[14.5px] ${fieldSurfaceClasses}`;
+export const fieldControlClasses = `box-border ${controlHeightClasses} py-2.5 text-[14.5px] ${fieldSurfaceClasses}`;
 
 /**
  * The single-line control for an identifier a reader checks character by character: the same
@@ -185,7 +192,7 @@ export const fieldControlClasses = `box-border min-h-[44px] py-2.5 text-[14.5px]
  * Tailwind emits one of two font sizes last whatever order a class string writes them in, and
  * here that is the control's 14.5px.
  */
-export const idControlClasses = `box-border min-h-[44px] py-2.5 font-mono text-[13.5px] ${fieldSurfaceClasses}`;
+export const idControlClasses = `box-border ${controlHeightClasses} py-2.5 font-mono text-[13.5px] ${fieldSurfaceClasses}`;
 
 /**
  * The multi-line control, at the prototype's own metrics rather than the input's: 14px on a
@@ -211,7 +218,36 @@ export const textAreaClasses = `box-border min-h-24 py-[11px] text-[14px] leadin
 export const readOnlyValueClasses =
   "box-border flex min-h-[44px] w-full items-center rounded-[9px] border border-admin-border bg-admin-canvas px-3.5 text-[14px] text-admin-ink-soft";
 
-export const fieldLabelClasses = "grid gap-1 text-xs font-semibold text-admin-muted";
+/**
+ * A stacked field: its label, its control and the lines under it, packed at the top.
+ *
+ * `content-start` because this is a grid that is often a grid item itself: in a form grid
+ * whose cells stretch to the row's tallest field (the variant add form's), a field with fewer
+ * lines under it than its neighbour would otherwise share the spare height among its own rows
+ * — the label's and the control's among them — and draw its control lower and taller than the
+ * one beside it, as the price did beside the SKU.
+ */
+export const fieldLabelClasses = "grid content-start gap-1 text-xs font-semibold text-admin-muted";
+
+/**
+ * The grid the form below a list lays its fields in: the methods handoff's
+ * `repeat(auto-fit, minmax(160px, 1fr))` at 12px (`shop-details.template.html` :172), so each
+ * field fills its track and the tracks share the row.
+ */
+export const itemFormGridClasses =
+  "grid grid-cols-[repeat(auto-fit,minmax(min(160px,100%),1fr))] items-start gap-3";
+
+/**
+ * The same tracks for a field that spans that grid and must line its own parts up with the
+ * fields above it: a list's add-a-value input in the first track, its *Add* in the next.
+ *
+ * `auto-fill` where the grid says `auto-fit`, and the two agree: `auto-fit` collapses only the
+ * tracks no item occupies, and a full-width item occupies every one, so the form's grid keeps
+ * as many tracks as fit — which is what `auto-fill` keeps here, where two items would otherwise
+ * stretch over the whole row.
+ */
+export const itemFormTracksClasses =
+  "grid grid-cols-[repeat(auto-fill,minmax(min(160px,100%),1fr))] items-start gap-3";
 
 /**
  * The form row, in the one shape the handoff gives all 107 of them.
@@ -351,13 +387,21 @@ const unavailableClasses =
 
 const buttonBaseClasses = `${buttonShapeClasses} ${focusRingClasses} ${unavailableClasses}`;
 
-const smallButtonBaseClasses = `inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition ${focusRingClasses} ${unavailableClasses}`;
+/** The small button's shape with no height, so the one that stands beside a field can take the field's. */
+const smallButtonShapeClasses = `inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition ${focusRingClasses} ${unavailableClasses}`;
+
+const smallButtonBaseClasses = `min-h-8 ${smallButtonShapeClasses}`;
+
+const subtleColourClasses =
+  "border border-admin-border bg-transparent text-admin-muted hover:bg-admin-canvas hover:text-admin-ink";
 
 /**
  * Every button the workspace draws, in one table.
  *
- * The named exports below are read off this record rather than written beside it, so a variant
- * cannot exist that `ui.test.ts` does not check for its hover and its focus ring.
+ * Every weight; a size modifier is built from the same parts (`subtleFieldButtonClasses`). The
+ * named exports below are read off this record rather than written beside it, so a variant
+ * cannot exist that `ui.test.ts` does not check for its hover and its focus ring — and the
+ * test runs the same rules over each size modifier.
  *
  * The colours are the refresh's (`docs/design-direction.md`, *Tokens, type and glyphs*):
  *
@@ -382,7 +426,7 @@ const buttonVariants = {
   warning: `${buttonBaseClasses} bg-lab-accent text-lab-paper hover:bg-lab-accent-hover`,
   destructive: `${buttonBaseClasses} bg-lab-error text-lab-paper hover:bg-lab-error-hover`,
   destructiveOutline: `${buttonBaseClasses} border border-lab-error-border bg-transparent text-lab-error hover:bg-lab-error-tint`,
-  subtle: `${smallButtonBaseClasses} border border-admin-border bg-transparent text-admin-muted hover:bg-admin-canvas hover:text-admin-ink`,
+  subtle: `${smallButtonBaseClasses} ${subtleColourClasses}`,
   destructiveSubtle: `${smallButtonBaseClasses} border border-lab-error-border bg-transparent text-lab-error hover:bg-lab-error-tint`,
 } as const;
 
@@ -398,7 +442,15 @@ export const warningButtonClasses = buttonVariants.warning;
 export const destructiveButtonClasses = buttonVariants.destructive;
 export const destructiveOutlineButtonClasses = buttonVariants.destructiveOutline;
 export const subtleButtonClasses = buttonVariants.subtle;
+
 export const destructiveSubtleButtonClasses = buttonVariants.destructiveSubtle;
+
+/**
+ * The subtle button at the height of the control it stands beside — a chip list's *Add value*
+ * next to its input — so the two are one height, top-aligned and therefore level. The subtle
+ * weight's colours, hover and ring, on the control's floor rather than the small button's.
+ */
+export const subtleFieldButtonClasses = `${controlHeightClasses} ${smallButtonShapeClasses} ${subtleColourClasses}`;
 
 /**
  * A primary action that cannot proceed: dashed, quiet, reachable, and never pressable.

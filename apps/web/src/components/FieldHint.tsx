@@ -153,8 +153,17 @@ function ExtraLine({
  * control two names; leaving it stacked puts two label typographies in one card. Asking it to
  * draw itself as a row is the third answer, and the default keeps every other caller as it was.
  */
-export function FieldHint({ arrangement = "stacked", ...props }: FieldHintProps) {
-  return arrangement === "row" ? <Field {...props} /> : <StackedFieldHint {...props} />;
+export function FieldHint({
+  arrangement = "stacked",
+  labelHidden,
+  labelId,
+  ...props
+}: FieldHintProps) {
+  return arrangement === "row" ? (
+    <Field {...props} />
+  ) : (
+    <StackedFieldHint labelHidden={labelHidden} labelId={labelId} {...props} />
+  );
 }
 
 type FieldHintProps = {
@@ -195,6 +204,18 @@ type FieldHintProps = {
   hintDescribes?: boolean;
   /** `"row"` draws this field as a `Field`. See `FieldHint` for the one case it is for. */
   arrangement?: Arrangement;
+  /**
+   * Stacked only: the label names the control for a reader and is not drawn, because a legend
+   * right above already labels it on screen — `ChipListField`'s, where "Values" over "New
+   * value" was two labels for one control. A row always draws its label.
+   */
+  labelHidden?: boolean;
+  /**
+   * Stacked only: the label's `id`, for a control named by more than its label — the chip
+   * list's input, named "Values New value" by its legend and this label together, so the name
+   * starts with the words drawn over it (WCAG 2.5.3).
+   */
+  labelId?: string;
   children: ReactElement<ControlProps>;
 };
 
@@ -209,6 +230,8 @@ function StackedFieldHint({
   extraId: givenExtraId,
   optional = false,
   hintDescribes,
+  labelHidden = false,
+  labelId,
   children,
 }: Omit<FieldHintProps, "arrangement">) {
   const { controlId, hintId, extraId, control } = useBoundControl(children, {
@@ -220,7 +243,7 @@ function StackedFieldHint({
 
   return (
     <div className={fieldLabelClasses}>
-      <label htmlFor={controlId}>
+      <label id={labelId} htmlFor={controlId} className={labelHidden ? "sr-only" : undefined}>
         {label}
         {optional ? " (optional)" : null}
       </label>

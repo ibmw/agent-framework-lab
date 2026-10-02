@@ -8,9 +8,11 @@ import {
   buttonIcon,
   buttonVariantClasses,
   chipClasses,
+  controlHeightClasses,
   destructiveButtonClasses,
   type FilterChipKind,
   fieldControlClasses,
+  fieldLabelClasses,
   fieldRowClasses,
   fieldRowControlClasses,
   fieldRowHintClasses,
@@ -36,6 +38,7 @@ import {
   searchFieldIconClasses,
   searchFieldRowClasses,
   searchFieldWrapClasses,
+  subtleFieldButtonClasses,
   textAreaClasses,
   validationMessageClasses,
 } from "./ui";
@@ -48,6 +51,12 @@ import {
  * ring fails here rather than shipping on one page nobody looked at.
  */
 const variants = Object.entries(buttonVariantClasses);
+
+/**
+ * Every weight, and every size modifier built from the same parts: the subtle button at a
+ * field's height is not a row of the table, so the rules every row obeys are run over it too.
+ */
+const drawn: Array<[string, string]> = [...variants, ["subtleField", subtleFieldButtonClasses]];
 
 describe("button variants", () => {
   it("offers every weight the workspace draws", () => {
@@ -63,7 +72,7 @@ describe("button variants", () => {
     ]);
   });
 
-  it.each(variants)("%s reacts to a pointer", (_name, classes) => {
+  it.each(drawn)("%s reacts to a pointer", (_name, classes) => {
     expect(classes).toMatch(/(^|\s)hover:/);
   });
 
@@ -79,26 +88,26 @@ describe("button variants", () => {
     expect(focusRingClasses).toContain("focus-visible:outline-lab-primary");
   });
 
-  it.each(variants)("%s draws a ring for a keyboard reader", (_name, classes) => {
+  it.each(drawn)("%s draws a ring for a keyboard reader", (_name, classes) => {
     expect(classes).toMatch(/(^|\s)focus-visible:outline-2(\s|$)/);
     expect(classes).toMatch(/(^|\s)focus-visible:outline-offset-2(\s|$)/);
     expect(classes).toMatch(/(^|\s)focus-visible:outline-lab-primary(\s|$)/);
   });
 
-  it.each(variants)("%s says what a disabled press means", (_name, classes) => {
+  it.each(drawn)("%s says what a disabled press means", (_name, classes) => {
     expect(classes).toContain("disabled:cursor-not-allowed");
   });
 
   // A press in flight is `aria-disabled`, not `disabled`, so it keeps focus (ADR 0065); it
   // must still look unavailable, exactly as a natively disabled one does.
-  it.each(variants)("%s fades a press in flight as it fades a disabled one", (_name, classes) => {
+  it.each(drawn)("%s fades a press in flight as it fades a disabled one", (_name, classes) => {
     for (const state of ["disabled", "aria-disabled"]) {
       expect(classes).toMatch(new RegExp(`(^|\\s)${state}:opacity-55(\\s|$)`));
       expect(classes).toMatch(new RegExp(`(^|\\s)${state}:cursor-not-allowed(\\s|$)`));
     }
   });
 
-  it.each(variants)("%s leaves room beside the label for a glyph", (_name, classes) => {
+  it.each(drawn)("%s leaves room beside the label for a glyph", (_name, classes) => {
     expect(classes).toMatch(/(^|\s)gap-/);
   });
 
@@ -512,6 +521,24 @@ describe("the width of a field", () => {
     expect(composed).toContain("../routes/OrderEditorPage.tsx: w-32");
     expect(composed).not.toContain("../routes/OrderEditorPage.tsx: w-20");
     expect(composed).toContain("../routes/ExperimentResultsPage.tsx: w-auto min-w-[130px] flex-1");
+  });
+});
+
+describe("a field and what stands beside it", () => {
+  it("packs a stacked field at the top, so a stretched grid cell never moves its control", () => {
+    expect(fieldLabelClasses.split(" ")).toContain("content-start");
+  });
+
+  it("draws the button beside a field at the field's own height", () => {
+    expect(fieldControlClasses.split(" ")).toContain(controlHeightClasses);
+    expect(idControlClasses.split(" ")).toContain(controlHeightClasses);
+    expect(subtleFieldButtonClasses.split(" ")).toContain(controlHeightClasses);
+    expect(subtleFieldButtonClasses).not.toMatch(/(^|\s)min-h-8(\s|$)/);
+    // The subtle weight's colours, hover and ring all the same.
+    for (const part of ["border-admin-border", "text-admin-muted", "hover:bg-admin-canvas"]) {
+      expect(subtleFieldButtonClasses).toContain(part);
+    }
+    expect(subtleFieldButtonClasses).toContain(focusRingClasses);
   });
 });
 
