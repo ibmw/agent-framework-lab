@@ -1,7 +1,7 @@
 # Project plan — the record of what was delivered
 
 Status: history — closed 2026-09-20; Milestone 8 appended 2026-09-28, Milestone 9 2026-09-29,
-Milestone 10 2026-10-01.
+Milestone 10 2026-10-01, Milestone 11 2026-10-02.
 **Read `docs/PLAN.md` for the delivery rules, the vocabulary and the open work.** This file holds
 what that document carried before it was compressed to open work only: the narrative of the
 implementation state as it stood, and Milestones 0 to 7 as they were planned and delivered,
@@ -10,8 +10,9 @@ roadmap's own account of them, kept because it says why the milestones came in t
 Nothing here is edited any more, save that a milestone delivered since is appended after
 Milestone 7, verbatim as `docs/PLAN.md` carried it: Milestone 8 on 2026-09-28, whose plan is
 `docs/history/PLAN-UX-2026-09-20.md`, Milestone 9 on 2026-09-29, whose plan is
-`docs/history/PLAN-UX-2026-09-28.md`, and Milestone 10 on 2026-10-01, whose plan is
-`docs/history/PLAN-UX-2026-09-29.md`.
+`docs/history/PLAN-UX-2026-09-28.md`, Milestone 10 on 2026-10-01, whose plan is
+`docs/history/PLAN-UX-2026-09-29.md`, and Milestone 11 on 2026-10-02, whose plan is
+`docs/history/PLAN-UX-2026-10-02.md`.
 
 The last section is the walk through delivered milestones that `docs/decisions-and-next-step.md`
 carried under *Recommended next steps* until the same date.
@@ -1198,6 +1199,20 @@ already has, without a backend or contract change. `docs/PLAN-UX.md` is the auth
 scope, order and checks. ADR 0074, written with its first slice, records the pattern, which
 supersedes *A saved row opens where it stands* for the lists it converts. Acceptance is that
 plan's.
+
+## Milestone 11 — A product's images are files the shop holds
+
+Replace the written media reference with an image the shop holds: uploaded by dropping a file,
+browsing for one or picking one from the shop's library, stored under its hash and never
+overwritten, so a published version and a snapshot keep the bytes they were frozen with. A shop
+that never published can be deleted with its draft, orders, tickets, scenarios and images, and
+the seed ships real images. The operator asked for it on 2 October 2026. Unlike Milestones 9 and
+10 it moves the backend: a store behind an application port, a table and its migration, typed
+settings, a dependency, routes and their contract, each shipped with its consumer under the
+delivery rules above. `docs/PLAN-UX.md` is the authority for its scope, order and checks. ADR
+0076 records the store, the reference and the narrowing of what a shop draft write accepts inside
+`v1` on the operator's decision, superseding ADR 0013's deferral of binary media; ADR 0077
+records the exception to ADR 0060 for a shop that never published. Acceptance is that plan's.
 
 ## Historical POC milestones
 

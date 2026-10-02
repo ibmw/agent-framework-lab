@@ -126,21 +126,7 @@ consistently.
 | 8 — The workspace becomes the prototype | Two modes with their rails, the top bar, creation as a page, the overview, documents, settings in three zones, the model connection, and the behaviour the prototype specifies everywhere. | ADR 0052–0072, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-09-20.md` |
 | 9 — Every page is one of three templates | One editor side panel, header and card, field rows and lists everywhere; Tickets as an index, a create page and an editor; the indexes and History finished on the index template. | ADR 0073, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-09-28.md` |
 | 10 — A list is edited in the form below it | Shop details' method list shared, and the lists the editors edit with a form drawn on it: an order's lines and events, a profile's addresses, background and hidden facts, an identity's guidance, a product's options, media, attributes and reviews, the tone-of-voice guidelines, a template's parameters. | ADR 0074, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-09-29.md` |
-| **11 — A product's images are files the shop holds** | **Open.** A product's images uploaded by drop, the operating system's picker or the shop's own library, named by their file, stored by their content and never overwritten, replaced on their item and drawn wherever they are listed; a shop that never published deleted with everything it holds; the seed shipping real images. | slices in `docs/PLAN-UX.md` |
-
-## Milestone 11 — A product's images are files the shop holds
-
-Replace the written media reference with an image the shop holds: uploaded by dropping a file,
-browsing for one or picking one from the shop's library, stored under its hash and never
-overwritten, so a published version and a snapshot keep the bytes they were frozen with. A shop
-that never published can be deleted with its draft, orders, tickets, scenarios and images, and
-the seed ships real images. The operator asked for it on 2 October 2026. Unlike Milestones 9 and
-10 it moves the backend: a store behind an application port, a table and its migration, typed
-settings, a dependency, routes and their contract, each shipped with its consumer under the
-delivery rules above. `docs/PLAN-UX.md` is the authority for its scope, order and checks. ADR
-0076 records the store, the reference and the narrowing of what a shop draft write accepts inside
-`v1` on the operator's decision, superseding ADR 0013's deferral of binary media; ADR 0077
-records the exception to ADR 0060 for a shop that never published. Acceptance is that plan's.
+| 11 — A product's images are files the shop holds | A product's images uploaded by drop, the operating system's picker or the shop's own library, named by their file, stored by their content and never overwritten, replaced on their item and drawn wherever they are listed; a shop that never published deleted with everything it holds; the seed shipping real images. | ADR 0076–0077, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-10-02.md` |
 
 ## Deferred decision triggers
 
