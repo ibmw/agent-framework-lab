@@ -277,8 +277,7 @@ export const REMOVAL_FINDINGS = {
   // domain/shop.py
   product_without_variant:
     "It is the product's last variant, and the shop is refused at publication while a product has none.",
-  product_without_media:
-    "It is the product's last media reference, which the publish gate warns about.",
+  product_without_media: "It is the product's last image, which the publish gate warns about.",
   shop_without_product:
     "It is the shop's last product, and a shop that sells nothing is refused at publication.",
   shop_without_fulfilment_method:

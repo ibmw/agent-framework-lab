@@ -38,7 +38,7 @@ from capability_lab.infrastructure.repositories import (
     shop_repository,
     ticket_repository,
 )
-from shop_factories import publishable_shop
+from shop_factories import saved_shop
 from workspace_factories import (
     PLACED_AT,
     AdvancingClock,
@@ -329,9 +329,7 @@ def test_a_ticket_frozen_against_an_older_shop_version_is_an_actionable_finding(
     workspace.mutations.publish(workspace.mutation_block_id)
 
     # A second shop version lands between the ticket's publication and the scenario's.
-    workspace.shops.replace_draft(
-        workspace.shop_id, replace(publishable_shop(), faq=publishable_shop().faq)
-    )
+    workspace.shops.replace_draft(workspace.shop_id, replace(saved_shop(), faq=saved_shop().faq))
     workspace.shops.publish(workspace.shop_id)
 
     scenario_id = author(workspace)

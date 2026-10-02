@@ -137,11 +137,10 @@ that never published can be deleted with its draft, orders, tickets, scenarios a
 the seed ships real images. The operator asked for it on 2 October 2026. Unlike Milestones 9 and
 10 it moves the backend: a store behind an application port, a table and its migration, typed
 settings, a dependency, routes and their contract, each shipped with its consumer under the
-delivery rules above. `docs/PLAN-UX.md` is the authority for its scope, order and checks. Its
-first slice, 40a, writes ADR 0076 with its code, superseding ADR 0013's deferral of binary media
-and the two sentences of `docs/product-direction.md` that defer it, and narrowing what a shop
-draft write accepts inside `v1` on the operator's decision; Slice 42 writes ADR 0077, the
-exception to ADR 0060 for a shop that never published. Acceptance is that plan's.
+delivery rules above. `docs/PLAN-UX.md` is the authority for its scope, order and checks. ADR
+0076 records the store, the reference and the narrowing of what a shop draft write accepts inside
+`v1` on the operator's decision, superseding ADR 0013's deferral of binary media; Slice 42 writes
+ADR 0077, the exception to ADR 0060 for a shop that never published. Acceptance is that plan's.
 
 ## Deferred decision triggers
 

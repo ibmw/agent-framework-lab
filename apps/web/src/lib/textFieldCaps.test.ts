@@ -155,7 +155,6 @@ const CONTROLS: Record<string, Cap | { forwards: string } | { none: string }> = 
   "ProductEditorPage.tsx · rowEdit.fields.sku": "SLUG_MAX_LENGTH",
   'ProductEditorPage.tsx · variant.price?.amount ?? ""': { none: "an amount, `MONEY_PATTERN`" },
   "ProductEditorPage.tsx · amount": { none: "an amount, `MONEY_PATTERN`" },
-  "ProductEditorPage.tsx · form.fields.reference": "TEXT_MAX_LENGTH",
   "ProductEditorPage.tsx · form.fields.altText": "LABEL_MAX_LENGTH",
   "ProductEditorPage.tsx · form.fields.label": "LABEL_MAX_LENGTH",
   "ProductEditorPage.tsx · form.fields.value": "LABEL_MAX_LENGTH",
@@ -418,8 +417,7 @@ const RULES: Record<string, { cap: Cap; typed: readonly string[] } | { notTyped:
     typed: ["ProductEditorPage.tsx · ChipListField New choice"],
   },
   "domain/shop.py · media reference": {
-    cap: "TEXT_MAX_LENGTH",
-    typed: ["ProductEditorPage.tsx · form.fields.reference"],
+    notTyped: "an image's reference is the one its upload returned, never typed (ADR 0076)",
   },
   "domain/shop.py · media alt text": {
     cap: "LABEL_MAX_LENGTH",

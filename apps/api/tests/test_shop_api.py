@@ -55,7 +55,9 @@ PRODUCT: dict[str, Any] = {
             "price": {"amount": "249.00", "currency": "EUR"},
         },
     ],
-    "media": [{"reference": "media/alpine-ocean.jpg", "alt_text": "Ocean Blue, front"}],
+    # No media: a draft write takes only an image the shop holds (ADR 0076), which
+    # `test_shop_media_api.py` uploads before naming it.
+    "media": [],
     "attributes": [
         {
             "key": "waterproof-rating",

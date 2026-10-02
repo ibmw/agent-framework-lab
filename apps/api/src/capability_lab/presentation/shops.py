@@ -160,7 +160,11 @@ class AttributeSchema(StrictApiModel):
 
 
 class MediaReferenceSchema(StrictApiModel):
-    reference: Body = Field(description="URL or path metadata; managed upload is deferred.")
+    reference: Body = Field(
+        description="The image this entry shows, as `asset:sha256:<64 lowercase hex>` naming an "
+        "image the shop holds (`uploadShopMedia`). A draft write refuses any other reference "
+        "with `media_not_uploaded`; a stored version may still hold a written one, which reads."
+    )
     alt_text: Label
 
     @classmethod

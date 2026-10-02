@@ -32,12 +32,13 @@ import { PrimaryAction, RefusalLine } from "./PrimaryAction";
  * read run-on. A detail may be drawn rather than written — an option's values as the chips
  * frame 2c draws — and stays one line of the item.
  *
- * An entry whose name *is* its key — a media reference, a template's parameter — draws the
- * name in monospace (`monospace`) and no second key beside it (`id` left out).
+ * An entry whose name *is* its key — a template's parameter, a media entry's written reference —
+ * draws the name in monospace (`monospace`) and no second key beside it (`id` left out).
  *
  * `lead` stands before the name, as `EntryCard`'s does, for a control the list keeps on each
  * entry that is neither Edit nor Remove and reads first: the default guideline's radio. It is
- * the list's control, never the form's (ADR 0072), so it stays free while the form edits.
+ * the list's control, never the form's (ADR 0072), so it stays free while the form edits. A
+ * product's image is the one lead that is not a control: its 48px thumbnail (ADR 0076).
  */
 export function ListItem({
   name,

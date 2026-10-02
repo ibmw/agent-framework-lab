@@ -2,15 +2,17 @@ from collections.abc import Generator
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from capability_lab.application.definition_resolution import PublishedVersionExistsError
+from capability_lab.application.shop_media import MediaType, ShopMediaAsset
 from capability_lab.application.shop_payload import shop_content_fingerprint
 from capability_lab.application.shops import (
+    MediaNotUploadedError,
     ShopNotFoundError,
     ShopNotPublishableError,
     ShopService,
@@ -20,6 +22,7 @@ from capability_lab.application.shops import (
 )
 from capability_lab.domain.definitions import DefinitionType
 from capability_lab.domain.shop import (
+    MediaReference,
     ShopLogo,
     ShopLogoBackground,
     ShopMark,
@@ -34,6 +37,7 @@ from capability_lab.infrastructure.database import (
 )
 from capability_lab.infrastructure.repositories import (
     PersistedDefinitionIntegrityError,
+    SqlAlchemyShopMediaRepository,
     shop_repository,
 )
 from shop_factories import (
@@ -44,6 +48,7 @@ from shop_factories import (
     identity,
     product,
     publishable_shop,
+    saved_shop,
     variant,
 )
 
@@ -67,7 +72,9 @@ def session(tmp_path: Path) -> Generator[Session, None, None]:
 
 @pytest.fixture
 def service(session: Session) -> ShopService:
-    return ShopService(shop_repository(session), AdvancingClock())
+    return ShopService(
+        shop_repository(session), AdvancingClock(), SqlAlchemyShopMediaRepository(session)
+    )
 
 
 def test_a_new_shop_starts_as_one_incomplete_draft(service: ShopService) -> None:
@@ -84,7 +91,7 @@ def test_listing_shops_projects_draft_identity_and_published_provenance(
 ) -> None:
     first = service.create_shop(identity())
     service.create_shop(identity(name="Second", slug="second"))
-    service.replace_draft(first.definition.id, publishable_shop())
+    service.replace_draft(first.definition.id, saved_shop())
     service.publish(first.definition.id)
 
     summaries = service.list_shops()
@@ -117,7 +124,7 @@ def test_publishing_is_refused_while_the_draft_has_gate_errors(service: ShopServ
 
 def test_publishing_freezes_the_draft_content_and_its_fingerprint(service: ShopService) -> None:
     record = service.create_shop(identity())
-    payload = publishable_shop()
+    payload = saved_shop()
     service.replace_draft(record.definition.id, payload)
 
     published = service.publish(record.definition.id)
@@ -133,12 +140,12 @@ def test_a_published_version_never_changes_when_the_draft_is_edited(
     service: ShopService,
 ) -> None:
     record = service.create_shop(identity())
-    service.replace_draft(record.definition.id, publishable_shop())
+    service.replace_draft(record.definition.id, saved_shop())
     published = service.publish(record.definition.id)
 
     service.replace_draft(
         record.definition.id,
-        replace(publishable_shop(), products=(product(title="Renamed Jacket"),)),
+        replace(saved_shop(), products=(product(title="Renamed Jacket", media=()),)),
     )
 
     assert service.get_version(record.definition.id, 1) == published
@@ -147,11 +154,11 @@ def test_a_published_version_never_changes_when_the_draft_is_edited(
 
 def test_versions_increase_monotonically_and_list_newest_first(service: ShopService) -> None:
     record = service.create_shop(identity())
-    service.replace_draft(record.definition.id, publishable_shop())
+    service.replace_draft(record.definition.id, saved_shop())
     service.publish(record.definition.id)
     service.replace_draft(
         record.definition.id,
-        replace(publishable_shop(), products=(product(title="Renamed Jacket"),)),
+        replace(saved_shop(), products=(product(title="Renamed Jacket", media=()),)),
     )
     service.publish(record.definition.id)
 
@@ -175,24 +182,26 @@ def test_the_storage_boundary_refuses_to_overwrite_a_published_version(
     Base.metadata.create_all(engine)
     factory = create_session_factory(engine)
     with session_scope(factory) as writing:
-        service = ShopService(shop_repository(writing), AdvancingClock())
+        service = ShopService(
+            shop_repository(writing), AdvancingClock(), SqlAlchemyShopMediaRepository(writing)
+        )
         record = service.create_shop(identity())
-        service.replace_draft(record.definition.id, publishable_shop())
+        service.replace_draft(record.definition.id, saved_shop())
         published = service.publish(record.definition.id)
 
     with pytest.raises(PublishedVersionExistsError), session_scope(factory) as overwriting:
         shop_repository(overwriting).save_version(
             ShopVersionRecord(
                 published=published.published,
-                payload=replace(publishable_shop(), products=(product(title="Rewritten"),)),
+                payload=replace(saved_shop(), products=(product(title="Rewritten", media=()),)),
             )
         )
 
     with session_scope(factory) as reading:
-        stored = ShopService(shop_repository(reading), AdvancingClock()).get_version(
-            record.definition.id, 1
-        )
-    assert stored.payload == publishable_shop()
+        stored = ShopService(
+            shop_repository(reading), AdvancingClock(), SqlAlchemyShopMediaRepository(reading)
+        ).get_version(record.definition.id, 1)
+    assert stored.payload == saved_shop()
 
 
 def test_reading_a_tampered_published_version_is_refused(tmp_path: Path) -> None:
@@ -200,9 +209,11 @@ def test_reading_a_tampered_published_version_is_refused(tmp_path: Path) -> None
     Base.metadata.create_all(engine)
     factory = create_session_factory(engine)
     with session_scope(factory) as writing:
-        service = ShopService(shop_repository(writing), AdvancingClock())
+        service = ShopService(
+            shop_repository(writing), AdvancingClock(), SqlAlchemyShopMediaRepository(writing)
+        )
         record = service.create_shop(identity())
-        service.replace_draft(record.definition.id, publishable_shop())
+        service.replace_draft(record.definition.id, saved_shop())
         service.publish(record.definition.id)
 
     with engine.begin() as connection:
@@ -217,7 +228,9 @@ def test_reading_a_tampered_published_version_is_refused(tmp_path: Path) -> None
         pytest.raises(PersistedDefinitionIntegrityError),
         session_scope(factory) as reading,
     ):
-        ShopService(shop_repository(reading), AdvancingClock()).get_version(record.definition.id, 1)
+        ShopService(
+            shop_repository(reading), AdvancingClock(), SqlAlchemyShopMediaRepository(reading)
+        ).get_version(record.definition.id, 1)
 
 
 def test_the_preview_reports_the_gate_and_the_version_publishing_would_create(
@@ -234,7 +247,7 @@ def test_the_preview_reports_the_gate_and_the_version_publishing_would_create(
         "First published version of Northstar Outfitters"
     ]
 
-    service.replace_draft(record.definition.id, publishable_shop())
+    service.replace_draft(record.definition.id, saved_shop())
     service.publish(record.definition.id)
     unchanged = service.preview_draft(record.definition.id)
 
@@ -249,21 +262,22 @@ def test_the_preview_names_the_catalog_edits_a_publish_would_freeze(
     service: ShopService,
 ) -> None:
     record = service.create_shop(identity())
-    service.replace_draft(record.definition.id, publishable_shop())
+    service.replace_draft(record.definition.id, saved_shop())
     service.publish(record.definition.id)
     service.replace_draft(
         record.definition.id,
         replace(
-            publishable_shop(),
+            saved_shop(),
             products=(
                 product(
+                    media=(),
                     variants=(
                         variant(),
                         variant(
                             sku="NS-ASJ-CH-L",
                             option_values=(("color", "Charcoal"), ("size", "L")),
                         ),
-                    )
+                    ),
                 ),
             ),
         ),
@@ -279,17 +293,21 @@ def test_published_content_survives_a_new_repository_and_session(tmp_path: Path)
     engine = create_database_engine(f"sqlite:///{tmp_path / 'durable.db'}")
     Base.metadata.create_all(engine)
     factory = create_session_factory(engine)
-    payload = publishable_shop()
+    payload = saved_shop()
 
     with session_scope(factory) as writing:
-        service = ShopService(shop_repository(writing), AdvancingClock())
+        service = ShopService(
+            shop_repository(writing), AdvancingClock(), SqlAlchemyShopMediaRepository(writing)
+        )
         record = service.create_shop(identity())
         service.replace_draft(record.definition.id, payload)
         service.publish(record.definition.id)
         shop_id = record.definition.id
 
     with session_scope(factory) as reading:
-        reloaded = ShopService(shop_repository(reading), AdvancingClock()).get_version(shop_id, 1)
+        reloaded = ShopService(
+            shop_repository(reading), AdvancingClock(), SqlAlchemyShopMediaRepository(reading)
+        ).get_version(shop_id, 1)
 
     assert reloaded.payload == payload
     assert reloaded.published.definition == shop_definition_id(shop_id)
@@ -302,9 +320,11 @@ def test_a_version_published_before_logos_existed_still_reads(tmp_path: Path) ->
     Base.metadata.create_all(engine)
     factory = create_session_factory(engine)
     with session_scope(factory) as writing:
-        service = ShopService(shop_repository(writing), AdvancingClock())
+        service = ShopService(
+            shop_repository(writing), AdvancingClock(), SqlAlchemyShopMediaRepository(writing)
+        )
         record = service.create_shop(identity())
-        service.replace_draft(record.definition.id, publishable_shop())
+        service.replace_draft(record.definition.id, saved_shop())
         service.publish(record.definition.id)
 
     with engine.begin() as connection:
@@ -320,9 +340,9 @@ def test_a_version_published_before_logos_existed_still_reads(tmp_path: Path) ->
         )
 
     with session_scope(factory) as reading:
-        stored = ShopService(shop_repository(reading), AdvancingClock()).get_version(
-            record.definition.id, 1
-        )
+        stored = ShopService(
+            shop_repository(reading), AdvancingClock(), SqlAlchemyShopMediaRepository(reading)
+        ).get_version(record.definition.id, 1)
 
     assert stored.payload == ShopPayload(identity=identity())
     assert stored.payload.logo is None
@@ -338,9 +358,11 @@ def test_a_logo_stored_before_the_colour_was_chosen_still_reads(tmp_path: Path) 
     Base.metadata.create_all(engine)
     factory = create_session_factory(engine)
     with session_scope(factory) as writing:
-        service = ShopService(shop_repository(writing), AdvancingClock())
+        service = ShopService(
+            shop_repository(writing), AdvancingClock(), SqlAlchemyShopMediaRepository(writing)
+        )
         record = service.create_shop(identity())
-        service.replace_draft(record.definition.id, publishable_shop())
+        service.replace_draft(record.definition.id, saved_shop())
         service.publish(record.definition.id)
 
     with engine.begin() as connection:
@@ -355,7 +377,9 @@ def test_a_logo_stored_before_the_colour_was_chosen_still_reads(tmp_path: Path) 
             )
 
     with session_scope(factory) as reading:
-        reader = ShopService(shop_repository(reading), AdvancingClock())
+        reader = ShopService(
+            shop_repository(reading), AdvancingClock(), SqlAlchemyShopMediaRepository(reading)
+        )
         published = reader.get_version(record.definition.id, 1)
         draft = reader.get_draft(record.definition.id)
         preview = reader.preview_draft(record.definition.id)
@@ -392,7 +416,9 @@ def test_a_v2_draft_keeps_its_bytes_unless_its_logo_changes(
     Base.metadata.create_all(engine)
     factory = create_session_factory(engine)
     with session_scope(factory) as writing:
-        record = ShopService(shop_repository(writing), AdvancingClock()).create_shop(identity())
+        record = ShopService(
+            shop_repository(writing), AdvancingClock(), SqlAlchemyShopMediaRepository(writing)
+        ).create_shop(identity())
     with engine.begin() as connection:
         connection.execute(
             text("UPDATE definition_drafts SET payload = json(:payload)"),
@@ -400,16 +426,18 @@ def test_a_v2_draft_keeps_its_bytes_unless_its_logo_changes(
         )
 
     with session_scope(factory) as writing:
-        service = ShopService(shop_repository(writing), AdvancingClock())
+        service = ShopService(
+            shop_repository(writing), AdvancingClock(), SqlAlchemyShopMediaRepository(writing)
+        )
         service.replace_draft(record.definition.id, ShopPayload(identity=identity(), logo=sent))
 
     with engine.connect() as connection:
         document = connection.execute(text("SELECT payload FROM definition_drafts")).scalar_one()
     assert f'"{token}"' in document
     with session_scope(factory) as reading:
-        reread = ShopService(shop_repository(reading), AdvancingClock()).get_draft(
-            record.definition.id
-        )
+        reread = ShopService(
+            shop_repository(reading), AdvancingClock(), SqlAlchemyShopMediaRepository(reading)
+        ).get_draft(record.definition.id)
     assert reread.payload.logo == (V2_LOGO if token == "shop-payload-v2" else sent)
     if token == "shop-payload-v2":
         assert shop_content_fingerprint(reread.payload) == V2_LOGO_FINGERPRINT
@@ -423,19 +451,23 @@ def test_a_logo_edit_mints_a_new_version_that_reads_back(tmp_path: Path) -> None
         mark=ShopMark.TRUCK, background=ShopLogoBackground.OCHRE, mark_colour=ShopMarkColour.WHITE
     )
     with session_scope(factory) as writing:
-        service = ShopService(shop_repository(writing), AdvancingClock())
+        service = ShopService(
+            shop_repository(writing), AdvancingClock(), SqlAlchemyShopMediaRepository(writing)
+        )
         record = service.create_shop(identity())
-        service.replace_draft(record.definition.id, publishable_shop())
+        service.replace_draft(record.definition.id, saved_shop())
         first = service.publish(record.definition.id)
 
-        service.replace_draft(record.definition.id, replace(publishable_shop(), logo=logo))
+        service.replace_draft(record.definition.id, replace(saved_shop(), logo=logo))
         preview = service.preview_draft(record.definition.id)
         assert not preview.matches_latest_published
         assert [change.description for change in preview.changes] == ["Added shop logo"]
         second = service.publish(record.definition.id)
 
     with session_scope(factory) as reading:
-        reader = ShopService(shop_repository(reading), AdvancingClock())
+        reader = ShopService(
+            shop_repository(reading), AdvancingClock(), SqlAlchemyShopMediaRepository(reading)
+        )
         stored = reader.get_version(record.definition.id, 2)
         listed = reader.list_shops()
 
@@ -453,3 +485,104 @@ def test_a_shop_can_be_created_with_its_logo(service: ShopService) -> None:
     record = service.create_shop(identity(), logo)
 
     assert service.get_draft(record.definition.id).payload.logo == logo
+
+
+def _hold_image(session: Session, shop_id: UUID, sha256: str) -> str:
+    """An image the shop holds, claimed through the repository as an upload would claim it."""
+    asset = ShopMediaAsset(
+        shop_id=shop_id,
+        sha256=sha256,
+        content_type=MediaType.PNG,
+        byte_size=512,
+        file_name="ocean-blue-front.png",
+        created_at=datetime(2026, 10, 2, 9, 0, tzinfo=UTC),
+    )
+    claim = SqlAlchemyShopMediaRepository(session).insert(asset)
+    assert claim is not None
+    assert claim.inserted
+    return asset.reference
+
+
+def _with_media(*media: MediaReference) -> ShopPayload:
+    return publishable_shop(products=(product(media=media),))
+
+
+def test_a_draft_write_takes_only_images_the_shop_holds(
+    service: ShopService, session: Session
+) -> None:
+    record = service.create_shop(identity())
+    shop_id = record.definition.id
+    held = _hold_image(session, shop_id, "1a" * 32)
+    other_shop = service.create_shop(identity(name="Aurora", slug="aurora")).definition.id
+    foreign = _hold_image(session, other_shop, "2b" * 32)
+
+    with pytest.raises(MediaNotUploadedError) as refused:
+        service.replace_draft(
+            shop_id,
+            _with_media(
+                MediaReference(held, "Ocean Blue, front"),
+                MediaReference("media/alpine-ocean.jpg", "Written"),
+                MediaReference(foreign, "Another shop's image"),
+            ),
+        )
+
+    assert refused.value.paths == (
+        "products.alpine-shell-jacket.media.media/alpine-ocean.jpg",
+        f"products.alpine-shell-jacket.media.{foreign}",
+    )
+    assert service.get_draft(shop_id).payload == ShopPayload(identity=identity())
+    saved = service.replace_draft(shop_id, _with_media(MediaReference(held, "Ocean Blue, front")))
+    assert saved.payload.products[0].media[0].asset == "1a" * 32
+
+
+def test_a_written_reference_is_refused_even_where_the_stored_draft_holds_it(
+    service: ShopService, session: Session
+) -> None:
+    record = service.create_shop(identity())
+    written = _with_media(MediaReference("media/alpine-ocean.jpg", "Written"))
+    # Saved before the rule existed: the repository takes it, the service never would.
+    shop_repository(session).save_draft(replace(record, payload=written))
+
+    with pytest.raises(MediaNotUploadedError):
+        service.replace_draft(record.definition.id, written)
+
+
+def test_the_gate_holds_media_the_shop_does_not_hold_in_preview_and_publish(
+    service: ShopService, session: Session
+) -> None:
+    record = service.create_shop(identity())
+    shop_id = record.definition.id
+    held = _hold_image(session, shop_id, "3c" * 32)
+    unheld = f"asset:sha256:{'4d' * 32}"
+    shop_repository(session).save_draft(
+        replace(
+            record,
+            payload=_with_media(MediaReference(held, "Held"), MediaReference(unheld, "Unheld")),
+        )
+    )
+
+    preview = service.preview_draft(shop_id)
+    with pytest.raises(ShopNotPublishableError) as refused:
+        service.publish(shop_id)
+
+    expected = (
+        "media_asset_missing",
+        "product Alpine Shell Jacket names an image this shop does not hold",
+        f"products.alpine-shell-jacket.media.{unheld}",
+    )
+    for validation in (preview.validation, refused.value.validation):
+        assert [(issue.code, issue.message, issue.path) for issue in validation.errors] == [
+            expected
+        ]
+
+    service.replace_draft(shop_id, _with_media(MediaReference(held, "Held")))
+    assert service.publish(shop_id).payload.products[0].media[0].reference == held
+
+
+def test_the_refusal_counts_the_entries_it_refuses() -> None:
+    assert str(MediaNotUploadedError(("products.a.media.x",))) == (
+        "every media entry must be an image uploaded to this shop; 1 entry is not"
+    )
+    assert str(MediaNotUploadedError(("products.a.media.x", "products.a.media.y"))) == (
+        "every media entry must be an image uploaded to this shop; 2 entries are not"
+    )

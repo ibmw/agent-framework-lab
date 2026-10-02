@@ -967,3 +967,32 @@ class ModelConnectionModel(Base):
     key_added_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class ShopMediaAssetModel(Base):
+    """A shop's claim on one image it holds, stored under the hash of its bytes (ADR 0076).
+
+    The bytes live in the media root at `shops/{shop_id}/{sha256}`, written once and never
+    overwritten; this row is what serving reads first, so a file no row claims is never served.
+    The primary key `(shop_id, sha256)` makes the same bytes uploaded twice one image, under the
+    file name of the first upload. `file_name` is that original name cleaned into a label, for
+    display only: never a path, never logged. No pixel dimensions are kept.
+    """
+
+    __tablename__ = "shop_media_assets"
+    __table_args__ = (
+        CheckConstraint(
+            "content_type IN ('image/png', 'image/jpeg', 'image/webp')",
+            name="ck_shop_media_assets_content_type_valid",
+        ),
+        CheckConstraint("byte_size > 0", name="ck_shop_media_assets_byte_size_positive"),
+        CheckConstraint("length(sha256) = 64", name="ck_shop_media_assets_sha256_length"),
+        Index("ix_shop_media_assets_shop_created", "shop_id", "created_at"),
+    )
+
+    shop_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(32))
+    byte_size: Mapped[int] = mapped_column(Integer)
+    file_name: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())

@@ -40,10 +40,11 @@ from capability_lab.infrastructure.database import (
     session_scope,
 )
 from capability_lab.infrastructure.repositories import (
+    SqlAlchemyShopMediaRepository,
     shop_repository,
 )
 from definition_factories import customer_identity
-from shop_factories import identity, product, publishable_shop
+from shop_factories import identity, product, saved_shop
 from ticket_factories import message, prior_history
 from workspace_factories import (
     AdvancingClock,
@@ -77,9 +78,11 @@ class Workspace:
 
 
 def seed_workspace(session: Session) -> Workspace:
-    shops = ShopService(shop_repository(session), AdvancingClock())
+    shops = ShopService(
+        shop_repository(session), AdvancingClock(), SqlAlchemyShopMediaRepository(session)
+    )
     shop_id = shops.create_shop(identity()).definition.id
-    shops.replace_draft(shop_id, publishable_shop())
+    shops.replace_draft(shop_id, saved_shop())
     profiles = build_profiles(session)
     profile = profiles.create_profile(customer_identity(), "2024-03-14", shop_id=shop_id)
     profiles.replace_draft(profile.definition.id, profile_with_two_addresses())
@@ -474,8 +477,8 @@ def test_the_titles_are_the_shop_drafts_not_its_published_version(
     publish_shop_and_customer(workspace)
     workspace.shops.replace_draft(
         workspace.shop_id,
-        publishable_shop(
-            products=(product(title="Alpine Shell Jacket II"),),
+        saved_shop(
+            products=(product(title="Alpine Shell Jacket II", media=()),),
             faq=(FaqEntry(id="delivery", question="How fast is delivery?", answer="Two days."),),
         ),
     )
@@ -509,8 +512,8 @@ def test_a_reference_the_shop_draft_no_longer_holds_is_absent_from_the_titled_li
     )
     workspace.shops.replace_draft(
         workspace.shop_id,
-        publishable_shop(
-            products=(product(handle="trailhead-cap", title="Trailhead Cap"),), faq=()
+        saved_shop(
+            products=(product(handle="trailhead-cap", title="Trailhead Cap", media=()),), faq=()
         ),
     )
 

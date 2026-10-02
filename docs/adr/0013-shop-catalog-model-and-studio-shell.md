@@ -1,6 +1,6 @@
 # ADR 0013 — Shop payload schema, publish gate, document persistence, and the Studio shell
 
-Status: accepted — 2026-08-23
+Status: accepted, partially superseded by ADR 0076 (a product's images are uploaded files the shop holds) — 2026-08-23
 
 Implements `docs/PLAN.md` Milestone 1 Slice 2 under ADR 0011 and the lifecycle fixed by ADR 0012.
 Records the first concrete definition payload (`shop-payload-v1`), the publish gate that separates
@@ -43,7 +43,8 @@ bolted on:
   payment methods, fulfilment methods, support guidelines, and named tone-of-voice guidelines with
   at most one default.
 
-Media stores URL/reference metadata only; managed binary upload remains deferred.
+Media stores URL/reference metadata only; managed binary upload remains deferred. (Superseded
+by ADR 0076: a draft write now takes only an image uploaded to the shop.)
 
 The canonical document (`application/shop_payload.py`) is lossless and round-trips back into the
 typed aggregate. It is serialized under the ADR 0007 rules, so a published version's

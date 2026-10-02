@@ -6,6 +6,8 @@ from capability_lab.domain.shop import (
     AttributeType,
     Currency,
     FulfilmentMethod,
+    MediaAssetReference,
+    MediaReference,
     Money,
     PolicyDocument,
     PolicyKind,
@@ -357,3 +359,48 @@ def test_the_variant_findings_hold_for_every_product_status(status: ProductStatu
             "variant NS-ASJ-OB-L is in stock but holds no inventory",
         ),
     }
+
+
+def test_a_media_asset_reference_reads_and_renders_asset_sha256_and_nothing_else() -> None:
+    sha256 = "0f" * 32
+    parsed = MediaAssetReference.parse(f"asset:sha256:{sha256}")
+
+    assert parsed.sha256 == sha256
+    assert parsed.reference == f"asset:sha256:{sha256}"
+    assert MediaAssetReference(sha256).reference == f"asset:sha256:{sha256}"
+    for refused in (
+        "media/alpine-ocean.jpg",
+        "https://cdn.example/alpine.jpg",
+        f"asset:sha256:{sha256.upper()}",
+        f"asset:sha256:{sha256[:-1]}",
+        f"asset:sha256:{sha256}0",
+        f"asset:sha1:{sha256}",
+        f" asset:sha256:{sha256}",
+        "asset:sha256:",
+    ):
+        with pytest.raises(ShopConfigurationError):
+            MediaAssetReference.parse(refused)
+        assert MediaAssetReference.of(refused) is None
+
+
+def test_an_entry_names_its_asset_and_a_written_reference_still_reads() -> None:
+    """A stored version may hold a written reference; it reads, and names no asset."""
+    sha256 = "a1" * 32
+
+    assert MediaReference(f"asset:sha256:{sha256}", "Ocean Blue").asset == sha256
+    written = MediaReference("media/alpine-ocean.jpg", "Ocean Blue")
+    assert written.asset is None
+    assert validate_shop(publishable_shop()).publishable
+
+
+def test_a_product_without_media_is_a_warning_that_says_it_has_no_image() -> None:
+    findings = validate_shop(publishable_shop(products=(product(media=()),)))
+
+    assert findings.publishable
+    assert [(issue.code, issue.message, issue.severity) for issue in findings.warnings] == [
+        (
+            "product_without_media",
+            "product Alpine Shell Jacket has no image",
+            ShopIssueSeverity.WARNING,
+        )
+    ]

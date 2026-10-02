@@ -40,14 +40,15 @@ export const VARIANT_SKU_RULE =
   "Uppercase letters, digits, and hyphens. Follows the handle and chosen options until you edit it; empty it to follow again.";
 
 /**
- * What moving a *saved* entry's key means, for the two entries whose key is one of their own
- * fields rather than a derived ID beside them.
+ * What moving a *saved* variant's SKU means: its key is one of its own fields rather than a
+ * derived ID beside it.
  *
- * `diff_keyed_collection` in `domain/definitions.py` keys a variant on its SKU and a media
- * entry on its reference, so an edit that moves either is reported as a removal and an
- * addition rather than as an update — which is the one place an edit in place cannot promise
- * "one updated field", and so is the one place it says so. Every other entry on these pages
- * has an ID of its own, and edit mode hands it back untouched.
+ * `diff_keyed_collection` in `domain/definitions.py` keys a variant on its SKU, so an edit that
+ * moves it is reported as a removal and an addition rather than as an update — which is the one
+ * place an edit in place cannot promise "one updated field", and so is the one place it says so.
+ * A media entry is keyed on its image's reference too, but its form never moves it: the image
+ * is fixed while the entry is edited (ADR 0076). Every other entry on these pages has an ID of
+ * its own, and edit mode hands it back untouched.
  */
 export const VARIANT_SKU_RENAME_RULE =
   "Uppercase letters, digits, and hyphens. Orders and tools name this variant by its SKU: changing it reads as a removal and an addition against the published version, and orders already placed keep their frozen copy.";
@@ -57,8 +58,36 @@ export function isVariantSku(value: string): boolean {
   return value.length <= SLUG_MAX_LENGTH && new RegExp(`^${REFERENCE_PATTERN}$`).test(value);
 }
 
-export const MEDIA_REFERENCE_RULE =
-  "A URL or path, like media/alpine-shell.jpg. It is what keys this entry: changing it reads as a removal and an addition against the published version.";
+/*
+ * A product's image, as the lab takes one (ADR 0076). The types, the cap and the two refusals are
+ * `application/shop_media.py`'s, character for character — `fieldRules.test.ts` reads them there —
+ * so a file the form refuses before it uploads is refused in the words the lab would have used.
+ */
+
+/** The three types the lab stores, as the file picker's `accept` names them. */
+export const MEDIA_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+
+/** `Settings.media_max_bytes`'s default: the most bytes one image may hold. */
+export const MEDIA_MAX_BYTES = 5 * 1024 * 1024;
+
+/** `MediaTypeUnsupportedError`'s message: what the lab answers a GIF, an SVG or anything else. */
+export const MEDIA_TYPE_RULE = "an image must be a PNG, a JPEG or a WebP file";
+
+/** `media_too_large_message` at the default cap: what the lab answers a larger file. */
+export const MEDIA_TOO_LARGE_RULE = "an image can be at most 5 MiB";
+
+/** The Image field's rule, said under the drop zone. */
+export const MEDIA_IMAGE_RULE =
+  "A PNG, JPEG or WebP image of at most 5 MiB. It is uploaded to this shop as soon as you choose it, and stays with the shop.";
+
+/**
+ * `media_asset_missing` in `ShopService._validate`: a publish-gate **error** on an entry whose
+ * reference is not an image the shop holds — a written reference saved before uploads, or an
+ * image the shop no longer holds. The Media card says it on that entry.
+ */
+export function mediaAssetMissingRule(title: string): string {
+  return `product ${title} names an image this shop does not hold`;
+}
 
 /**
  * Why a value longer than the lab keeps is refused, on its field. The field's `maxLength`
@@ -697,12 +726,13 @@ export const GUIDANCE_BODY_RULE = "A note needs its guidance.";
  * The product editor's four forms below a list (`lib/productEntries.ts`, ADR 0074), said after
  * their buttons. Each is one of the rules `domain/shop.py` holds the entry to, though not all of
  * them: the length caps `require_label` and `require_text` enforce are each field's `maxLength`.
- * `OptionDefinition`, `MediaReference`, `TypedAttribute` and `ProductReview` refuse a name, a
- * reference, a label, a value, a unit, an author or a body left empty or only padding
+ * `OptionDefinition`, `MediaReference`, `TypedAttribute` and `ProductReview` refuse a name, an
+ * alt text, a label, a value, a unit, an author or a body left empty or only padding
  * (`require_label`, `require_text`), an option without a value, a key that is not a slug
  * (`require_slug`), and a typed attribute whose value its type does not hold. Two entries of one
- * list sharing a key are refused by `_require_unique`, and two media entries sharing a reference
- * are one key in the draft's change summary. The forms store every text stripped.
+ * list sharing a key are refused by `_require_unique`, and two media entries showing one image
+ * are one key in the draft's change summary. A media entry's image is the one an upload returned,
+ * never typed (ADR 0076). The forms store every text stripped.
  */
 export const OPTION_NAME_RULE = "An option needs a name.";
 
@@ -713,8 +743,8 @@ export const OPTION_NEEDS_VALUE =
 /** An option's or an attribute's key, while it is still asked: once added, it is fixed. */
 export const ENTRY_KEY_RULE = "The key must be lowercase with hyphens.";
 
-/** Why a media entry is refused with no reference: the reference is what keys it. */
-export const MEDIA_NEEDS_REFERENCE = "A media entry needs a reference.";
+/** Why a media entry is refused with no image chosen: the image is what the entry shows. */
+export const MEDIA_NEEDS_IMAGE = "A media entry needs an image.";
 
 export const MEDIA_ALT_TEXT_RULE = "A media entry needs its alt text.";
 

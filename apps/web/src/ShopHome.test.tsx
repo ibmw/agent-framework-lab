@@ -573,7 +573,7 @@ describe("findings on the draft", () => {
         {
           severity: "warning",
           code: "product_without_media",
-          message: "product Alpha has no media reference",
+          message: "product Alpha has no image",
           path: "products.alpha",
         },
       ],
@@ -582,7 +582,7 @@ describe("findings on the draft", () => {
     const findings = within(card("Findings on the draft"));
 
     expect(findings.getByText(/product Alpha has no description/)).toBeVisible();
-    expect(findings.getByText(/product Alpha has no media reference/)).toBeVisible();
+    expect(findings.getByText(/product Alpha has no image/)).toBeVisible();
     expect(findings.queryByRole("link", { name: /Open Alpha/ })).toBeNull();
   });
 

@@ -55,7 +55,6 @@ from capability_lab.domain.shop import (
     Currency,
     FaqEntry,
     FulfilmentMethod,
-    MediaReference,
     Money,
     OptionDefinition,
     PaymentMethod,
@@ -230,16 +229,6 @@ def _alpine_shell_jacket() -> Product:
                 price=_eur("249.00"),
             ),
         ),
-        media=(
-            MediaReference(
-                reference="media/alpine-shell-ocean-blue.jpg",
-                alt_text="Alpine Shell Jacket in Ocean Blue, hood up",
-            ),
-            MediaReference(
-                reference="media/alpine-shell-detail-seams.jpg",
-                alt_text="Taped seam detail on the shoulder",
-            ),
-        ),
         attributes=(
             TypedAttribute(
                 key="waterproof-rating",
@@ -310,12 +299,6 @@ def _fjord_base_layer() -> Product:
                 price=_eur("89.00"),
             ),
         ),
-        media=(
-            MediaReference(
-                reference="media/fjord-base-layer-slate.jpg",
-                alt_text="Fjord Merino Base Layer in Slate",
-            ),
-        ),
         attributes=(
             TypedAttribute(
                 key="fabric-weight",
@@ -367,12 +350,6 @@ def _harbour_dry_bag() -> Product:
                 availability=VariantAvailability.OUT_OF_STOCK,
                 stock_quantity=0,
                 price=_eur("45.00"),
-            ),
-        ),
-        media=(
-            MediaReference(
-                reference="media/harbour-dry-bag-sand.jpg",
-                alt_text="Harbour Dry Bag 20L in Sand, rolled closed",
             ),
         ),
         attributes=(

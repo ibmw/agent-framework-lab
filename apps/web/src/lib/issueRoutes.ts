@@ -106,6 +106,12 @@ const SHOP_SECTIONS: Readonly<Record<string, { label: string; path: string }>> =
  * which is the whole of *where the path names one, the entry in view*: a path that names an
  * entry opens on it, and a path that names only the section opens on the section.
  *
+ * A finding about one of a product's images — `media_asset_missing`, at
+ * `products.{handle}.media.{reference}` — is grouped on the product all the same, and lands on
+ * the editor's Media card (`#media`), which says the same sentence on the entry it is about
+ * (ADR 0076). A group's *Open* is its first finding's, and the gate writes a product's own path
+ * before its images' and its images' before its variants'.
+ *
  * A handle the draft no longer holds resolves to nothing rather than to a product editor that
  * would draw "Product not found": the draft this reads is the same one the gate validated, so
  * this can only happen to a reader whose findings are older than their draft.
@@ -116,16 +122,17 @@ export function shopIssueEntries(
 ): (path: string) => IssueEntry | null {
   const base = `/shops/${shopId}`;
   return (path: string) => {
-    const [root, handle] = path.split(".");
+    const [root, handle, collection] = path.split(".");
     if (root === "products" && handle !== undefined) {
       const product = products.find((candidate) => candidate.handle === handle);
       if (product === undefined) {
         return null;
       }
+      const card = collection === "media" ? "#media" : "";
       return {
         key: `products.${handle}`,
         label: productTitle(product),
-        to: `${base}/products/${encodeURIComponent(handle)}`,
+        to: `${base}/products/${encodeURIComponent(handle)}${card}`,
       };
     }
     const section = SHOP_SECTIONS[root];

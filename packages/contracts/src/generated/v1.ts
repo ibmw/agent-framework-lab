@@ -284,6 +284,41 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/media": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the images a shop holds, newest first */
+    get: operations["listShopMedia"];
+    put?: never;
+    /** Upload an image the shop holds, stored once under the hash of its bytes */
+    post: operations["uploadShopMedia"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/media/{sha256}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Serve one image the shop holds, as its stored type */
+    get: operations["getShopMedia"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/shops/{shop_id}/orders": {
     parameters: {
       query?: never;
@@ -3713,12 +3748,18 @@ export interface components {
     MediaReferenceSchema: {
       /**
        * Reference
-       * @description URL or path metadata; managed upload is deferred.
+       * @description The image this entry shows, as `asset:sha256:<64 lowercase hex>` naming an image the shop holds (`uploadShopMedia`). A draft write refuses any other reference with `media_not_uploaded`; a stored version may still hold a written one, which reads.
        */
       reference: string;
       /** Alt Text */
       alt_text: string;
     };
+    /**
+     * MediaType
+     * @description The three image types the lab stores, told by their first bytes and nothing else.
+     * @enum {string}
+     */
+    MediaType: "image/png" | "image/jpeg" | "image/webp";
     /**
      * MemoryMode
      * @description How much of a run the agent is allowed to remember.
@@ -5692,6 +5733,44 @@ export interface components {
      * @enum {string}
      */
     ShopMarkColour: "white" | "ink";
+    /**
+     * ShopMediaAssetSchema
+     * @description One image a shop holds.
+     */
+    ShopMediaAssetSchema: {
+      /**
+       * Reference
+       * @description What a product's media entry names this image by: `asset:sha256:<hex>`.
+       */
+      reference: string;
+      /**
+       * Sha256
+       * @description The SHA-256 of the stored bytes, which serve the image at `/shops/{shop_id}/media/{sha256}`.
+       */
+      sha256: string;
+      /** @description The type the image's first bytes say. */
+      content_type: components["schemas"]["MediaType"];
+      /** Byte Size */
+      byte_size: number;
+      /**
+       * File Name
+       * @description The original file name of the first upload of these bytes, cleaned into a label for display. Never a path.
+       */
+      file_name: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /** ShopMediaListResponse */
+    ShopMediaListResponse: {
+      /**
+       * Media
+       * @description The shop's images, newest first.
+       */
+      media: components["schemas"]["ShopMediaAssetSchema"][];
+    };
     /**
      * ShopOrderResponse
      * @description One authored order, its findings, and the statuses it may still move to.
@@ -7801,6 +7880,179 @@ export interface operations {
         };
       };
       /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listShopMedia: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopMediaListResponse"];
+        };
+      };
+      /** @description The shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid shop identifier */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  uploadShopMedia: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "multipart/form-data": {
+          /**
+           * Format: binary
+           * @description One PNG, JPEG or WebP image, told by its first bytes.
+           */
+          file: string;
+        };
+      };
+    };
+    responses: {
+      /** @description The shop already held these bytes; the image as first uploaded */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopMediaAssetSchema"];
+        };
+      };
+      /** @description The image is stored, and the shop now holds it */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopMediaAssetSchema"];
+        };
+      };
+      /** @description The shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description No Content-Length was declared */
+      411: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The image is larger than the lab stores (`media_too_large`) */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not a PNG, a JPEG or a WebP image (`media_type_unsupported`) */
+      415: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The request holds no file */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getShopMedia: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description The SHA-256 of the image's bytes, as 64 lowercase hexadecimal digits. */
+        sha256: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The image's bytes, as the type they were stored as */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "image/png": string;
+          "image/jpeg": string;
+          "image/webp": string;
+        };
+      };
+      /** @description The shop holds no image under this hash, or it is malformed */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid shop identifier */
       422: {
         headers: {
           [name: string]: unknown;

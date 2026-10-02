@@ -62,6 +62,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemySandboxRepository,
     SqlAlchemySandboxSnapshotRepository,
     SqlAlchemyShopDirectory,
+    SqlAlchemyShopMediaRepository,
     SqlAlchemyToolEventRepository,
     agent_configuration_repository,
     customer_profile_repository,
@@ -173,7 +174,7 @@ def build_services(
         experiments, objective_block_repository(session), judgements
     )
     return SeedServices(
-        shops=ShopService(shop_repository(session), clock),
+        shops=ShopService(shop_repository(session), clock, SqlAlchemyShopMediaRepository(session)),
         profiles=CustomerProfileService(
             customer_profile_repository(session),
             attachments,

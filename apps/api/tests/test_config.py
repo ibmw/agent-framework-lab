@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import SecretStr, ValidationError
 
@@ -51,3 +53,23 @@ def test_a_provider_key_that_was_actually_set_survives_untouched() -> None:
 
     assert configured.openai_api_key is not None
     assert configured.openai_api_key.get_secret_value() == key
+
+
+def test_the_media_root_and_the_cap_have_defaults_and_their_own_variables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AGENT_LAB_MEDIA_ROOT", raising=False)
+    monkeypatch.delenv("AGENT_LAB_MEDIA_MAX_BYTES", raising=False)
+    defaults = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
+    assert defaults.media_root == Path("var/media")
+    assert defaults.media_max_bytes == 5 * 1024 * 1024
+
+    monkeypatch.setenv("AGENT_LAB_MEDIA_ROOT", "/srv/lab/media")
+    monkeypatch.setenv("AGENT_LAB_MEDIA_MAX_BYTES", "1048576")
+    configured = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
+    assert configured.media_root == Path("/srv/lab/media")
+    assert configured.media_max_bytes == 1048576
+
+    monkeypatch.setenv("AGENT_LAB_MEDIA_MAX_BYTES", "0")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)  # pyright: ignore[reportCallIssue]

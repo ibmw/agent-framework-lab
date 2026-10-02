@@ -3,6 +3,7 @@
 import logging
 from collections.abc import Generator, Mapping
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
@@ -11,6 +12,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from capability_lab.application.canonical_json import CanonicalValue, canonical_json_bytes
+from capability_lab.application.definition_authoring import DefinitionVersionRecord
 from capability_lab.application.sandbox_tool_contracts import (
     CATALOG_PRODUCT,
     CATALOG_SEARCH,
@@ -33,8 +35,11 @@ from capability_lab.application.sandbox_tools import (
     ToolResult,
 )
 from capability_lab.application.sandboxes import SandboxNotFoundError, SandboxRecord
+from capability_lab.application.shop_media import MediaType, ShopMediaAsset
+from capability_lab.application.shop_payload import shop_content_fingerprint
+from capability_lab.domain.definitions import DefinitionId, DefinitionType, publish_draft
 from capability_lab.domain.order_fixture import FrozenShippingAddress, OrderFixturePayload
-from capability_lab.domain.shop import PolicyDocument, PolicyKind
+from capability_lab.domain.shop import MediaReference, PolicyDocument, PolicyKind
 from capability_lab.domain.ticket import TicketOrigin, TicketOriginKind
 from capability_lab.infrastructure.database import (
     Base,
@@ -42,11 +47,18 @@ from capability_lab.infrastructure.database import (
     create_session_factory,
     session_scope,
 )
+from capability_lab.infrastructure.repositories import (
+    SqlAlchemyShopMediaRepository,
+    shop_repository,
+)
 from capability_lab.presentation.tools import ToolCallResponse
-from shop_factories import publishable_shop
+from shop_factories import product, publishable_shop, saved_shop
 from workspace_factories import (
+    SEED,
     Workspace,
+    author,
     build_sandboxes,
+    build_snapshots,
     build_tools,
     cloned_arm,
     frozen_starting_state,
@@ -156,6 +168,87 @@ def test_a_product_page_question_resolves_this_product_through_the_catalog(
 
 
 # -- the catalog ------------------------------------------------------------
+
+
+def test_the_catalog_still_returns_a_written_reference_a_published_version_holds(
+    session: Session, workspace: Workspace
+) -> None:
+    """A version frozen before uploads keeps its written reference, and a tool reads it as is.
+
+    The version is written through the repository, as one published before the write rule
+    would have been: the service no longer saves such a draft, and its gate would refuse it.
+    """
+    repository = shop_repository(session)
+    record = repository.get_draft(
+        DefinitionId(definition_type=DefinitionType.SHOP, id=workspace.shop_id)
+    )
+    assert record is not None
+    written = (MediaReference("media/alpine-ocean.jpg", "Ocean Blue, front"),)
+    payload = replace(
+        record.payload, products=(replace(record.payload.products[0], media=written),)
+    )
+    repository.save_version(
+        DefinitionVersionRecord(
+            published=publish_draft(
+                record.draft,
+                latest_published_version=None,
+                pinned_scope=None,
+                pinned_references=(),
+                content_fingerprint=shop_content_fingerprint(payload),
+                published_at=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+            ),
+            payload=payload,
+        )
+    )
+    # `publish_prerequisites` without the shop, whose v1 is the one written above.
+    workspace.profiles.publish(workspace.customer_id)
+    workspace.tickets.publish_ticket(workspace.shop_id, workspace.ticket_id)
+    workspace.objectives.publish(workspace.read_block_id)
+    workspace.mutations.publish(workspace.mutation_block_id)
+    scenario_id = author(workspace)
+    version = workspace.scenarios.publish_scenario(workspace.shop_id, scenario_id)
+    snapshot = build_snapshots(session).materialize(
+        workspace.shop_id, scenario_id, version.published.version, seed=SEED
+    )
+    arm = build_sandboxes(session).clone(workspace.shop_id, snapshot.snapshot_id, "Arm A")
+
+    detail = data(call(session, arm, CATALOG_PRODUCT, handle=PRODUCT_HANDLE))
+
+    assert detail["media"] == [
+        {"reference": "media/alpine-ocean.jpg", "alt_text": "Ocean Blue, front"}
+    ]
+
+
+def test_the_catalog_returns_an_uploaded_images_reference_as_it_is(
+    session: Session, workspace: Workspace
+) -> None:
+    """An image reaches a tool as the reference string the version froze, and nothing more."""
+    sha256 = "5e" * 32
+    claim = SqlAlchemyShopMediaRepository(session).insert(
+        ShopMediaAsset(
+            shop_id=workspace.shop_id,
+            sha256=sha256,
+            content_type=MediaType.JPEG,
+            byte_size=4096,
+            file_name="ocean-blue-front.jpg",
+            created_at=datetime(2026, 10, 2, 9, 0, tzinfo=UTC),
+        )
+    )
+    assert claim is not None
+    held = claim.asset
+    workspace.shops.replace_draft(
+        workspace.shop_id,
+        publishable_shop(
+            products=(product(media=(MediaReference(held.reference, "Ocean Blue, front"),)),)
+        ),
+    )
+    arm = cloned_arm(session, workspace)
+
+    detail = data(call(session, arm, CATALOG_PRODUCT, handle=PRODUCT_HANDLE))
+
+    assert detail["media"] == [
+        {"reference": f"asset:sha256:{sha256}", "alt_text": "Ocean Blue, front"}
+    ]
 
 
 def test_searching_the_catalog_matches_a_handle_a_title_or_a_category(
@@ -366,7 +459,7 @@ def test_a_tool_reads_the_version_the_snapshot_pinned_not_the_draft_that_moved_o
     workspace.shops.replace_draft(
         workspace.shop_id,
         replace(
-            publishable_shop(),
+            saved_shop(),
             policies=(
                 PolicyDocument(
                     id="shipping",

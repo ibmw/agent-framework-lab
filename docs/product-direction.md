@@ -130,8 +130,9 @@ Use a hybrid extensibility strategy:
 - reserve versioned extension blocks for non-critical metadata.
 
 Do not represent the entire commerce domain as unvalidated JSON or use an unrestricted
-entity-attribute-value model for core business rules. V1 media stores URL/reference metadata;
-managed binary upload and storage are deferred.
+entity-attribute-value model for core business rules. A product's images are files the shop
+holds: uploaded, stored by the hash of their bytes and never overwritten, so a published version
+keeps the images it was frozen with (ADR 0076).
 
 There is no customer-facing storefront in V1. The Studio provides configuration forms and useful
 previews of product and support content.
@@ -322,7 +323,7 @@ V1 proves one complete wrong-shipping-address journey:
 6. evaluate deterministic objectives, execute an LLM judge, and collect quantitative metrics; and
 7. inspect and filter the historical experiment.
 
-V1 does not require a customer-facing storefront, autonomous customer agent, managed image upload,
+V1 does not require a customer-facing storefront, autonomous customer agent, image processing,
 external commerce integration, multi-user tenancy, global leaderboard, or every possible commerce
 action.
 

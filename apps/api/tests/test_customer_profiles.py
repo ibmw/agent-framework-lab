@@ -35,6 +35,7 @@ from capability_lab.infrastructure.repositories import (
     PersistedDefinitionIntegrityError,
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyShopDirectory,
+    SqlAlchemyShopMediaRepository,
     customer_profile_repository,
     shop_repository,
 )
@@ -70,7 +71,9 @@ def build_service(session: Session) -> CustomerProfileService:
 
 def make_shop(session: Session, slug: str) -> UUID:
     """A real shop, because attachment refuses a shop that does not exist."""
-    service = ShopService(shop_repository(session), AdvancingClock())
+    service = ShopService(
+        shop_repository(session), AdvancingClock(), SqlAlchemyShopMediaRepository(session)
+    )
     return service.create_shop(identity(slug=slug, name=slug.title())).definition.id
 
 

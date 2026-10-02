@@ -50,6 +50,14 @@ export const webReadyUrl = (worker: number): string => `${webOrigin(worker)}/src
 export const databaseUrl = (runId: string, worker: number): string =>
   `sqlite:///${join(tmpdir(), `${DATABASE_FILE_PREFIX}${runId}-w${worker}.db`)}`;
 
+/**
+ * Each worker's own media root, where its API stores the images a spec uploads (ADR 0076).
+ * Named under the run's prefix beside its database, so the teardown that sweeps the one sweeps
+ * the other, and no spec writes into the checkout's `var/media`.
+ */
+export const mediaRoot = (runId: string, worker: number): string =>
+  join(tmpdir(), `${DATABASE_FILE_PREFIX}${runId}-w${worker}-media`);
+
 /** The worker indexes the run declares a stack for. */
 export const stacks = (): number[] => Array.from({ length: WORKER_COUNT }, (_, index) => index);
 

@@ -49,6 +49,11 @@ it, the turn, the framework, and the published tool name and version. No free-fo
 leaves the process, a span's name is decided from its kind rather than passed in as text, and
 an exception's message is never recorded — only its type.
 
+An uploaded image is logged by its hash, its type and its size, and nothing else. Its original
+file name is a label the operator chose and may say anything, so it is never logged, never a span
+attribute and never echoed in an error body; it reaches only the image's own record and the
+listing that names it (ADR 0076).
+
 For local POC visualization, start `infra/phoenix/compose.yaml`, set
 `AGENT_LAB_OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:6006/v1/traces`, and open
 `http://localhost:6006`. The HTTP endpoint must include `/v1/traces`. Leaving the setting unset

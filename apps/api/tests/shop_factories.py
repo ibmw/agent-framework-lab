@@ -1,5 +1,6 @@
 """Shared shop fixtures for the domain, payload, service, and API test modules."""
 
+from dataclasses import replace
 from decimal import Decimal
 
 from capability_lab.domain.shop import (
@@ -114,6 +115,25 @@ def publishable_shop(**overrides: object) -> ShopPayload:
     }
     fields.update(overrides)
     return ShopPayload(**fields)  # type: ignore[arg-type]
+
+
+def without_media(payload: ShopPayload) -> ShopPayload:
+    """`payload` as a draft write accepts it without an upload: no product carries media.
+
+    `product()` and `publishable_shop()` keep their written reference byte for byte, because
+    the recorded fingerprints below are taken over them; a stored version still reads it. Only
+    a *write* refuses it (ADR 0076), so a suite saving through `ShopService` saves this, or
+    uploads first and names the reference the upload returned.
+    """
+    return replace(
+        payload,
+        products=tuple(replace(entry, media=()) for entry in payload.products),
+    )
+
+
+def saved_shop(**overrides: object) -> ShopPayload:
+    """`publishable_shop()` as a save through the service writes it: without media."""
+    return without_media(publishable_shop(**overrides))
 
 
 # ADR 0070. Both constants were taken from the codec as it stood before the logo existed

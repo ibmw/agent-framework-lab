@@ -10,7 +10,7 @@ import {
   ATTRIBUTE_VALUE_RULE,
   ENTRY_KEY_RULE,
   MEDIA_ALT_TEXT_RULE,
-  MEDIA_NEEDS_REFERENCE,
+  MEDIA_NEEDS_IMAGE,
   OPTION_NAME_RULE,
   OPTION_NEEDS_VALUE,
   REVIEW_AUTHOR_RULE,
@@ -111,41 +111,40 @@ describe("the option form's refusal", () => {
   });
 });
 
-const MEDIA: MediaFields = { reference: "media/front.jpg", altText: "Front" };
+const FRONT = `asset:sha256:${"a".repeat(64)}`;
+const BACK = `asset:sha256:${"b".repeat(64)}`;
+const NAMES: Record<string, string> = { [FRONT]: "front.jpg", [BACK]: "back.jpg" };
+const nameOf = (reference: string) => NAMES[reference] ?? reference;
+
+const MEDIA: MediaFields = { reference: FRONT, altText: "Front" };
 
 describe("the media form's refusal", () => {
-  it("names the first of the reference and the alt text broken, for every combination", () => {
+  it("names the first of the image and the alt text broken, for every combination", () => {
     expectFirstBrokenRefused(
       MEDIA,
       ["reference", "altText"],
-      { reference: "  ", altText: " " },
-      { reference: MEDIA_NEEDS_REFERENCE, altText: MEDIA_ALT_TEXT_RULE },
-      (fields) => mediaRefusal(fields, ["media/back.jpg"], null),
+      { reference: "", altText: " " },
+      { reference: MEDIA_NEEDS_IMAGE, altText: MEDIA_ALT_TEXT_RULE },
+      (fields) => mediaRefusal(fields, [BACK], null, nameOf),
     );
   });
 
-  it("refuses a reference another entry holds, as the lab would store it, and not its own", () => {
-    const taken = ["media/front.jpg", "media/back.jpg"];
-    expect(mediaRefusal({ ...MEDIA, reference: " media/back.jpg " }, taken, null)).toEqual({
+  it("refuses an image another entry shows, named as the list names it, and not its own", () => {
+    const taken = [FRONT, BACK];
+    expect(mediaRefusal({ ...MEDIA, reference: BACK }, taken, null, nameOf)).toEqual({
       field: "reference",
-      reason: "media/back.jpg is already a media reference of this product.",
+      reason: "back.jpg is already an image of this product.",
     });
-    expect(mediaRefusal(MEDIA, taken, "media/front.jpg")).toBeNull();
-    expect(
-      mediaRefusal({ ...MEDIA, reference: "media/back.jpg" }, taken, "media/front.jpg"),
-    ).toEqual({
-      field: "reference",
-      reason: "media/back.jpg is already a media reference of this product.",
-    });
+    expect(mediaRefusal(MEDIA, taken, FRONT, nameOf)).toBeNull();
     // Said before the alt text, which is asked after it.
-    expect(mediaRefusal({ reference: "media/back.jpg", altText: "" }, taken, null)?.field).toBe(
+    expect(mediaRefusal({ reference: BACK, altText: "" }, taken, null, nameOf)?.field).toBe(
       "reference",
     );
   });
 
-  it("stores both texts stripped", () => {
-    expect(mediaEntry({ reference: " media/front.jpg\n", altText: " Front " })).toEqual({
-      reference: "media/front.jpg",
+  it("stores the alt text stripped and the reference as the upload returned it", () => {
+    expect(mediaEntry({ reference: FRONT, altText: " Front " })).toEqual({
+      reference: FRONT,
       alt_text: "Front",
     });
   });

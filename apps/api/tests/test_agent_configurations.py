@@ -29,9 +29,13 @@ from capability_lab.infrastructure.database import (
     create_session_factory,
     session_scope,
 )
-from capability_lab.infrastructure.repositories import shop_repository, support_identity_repository
+from capability_lab.infrastructure.repositories import (
+    SqlAlchemyShopMediaRepository,
+    shop_repository,
+    support_identity_repository,
+)
 from definition_factories import publishable_identity, support_role
-from shop_factories import identity, publishable_shop
+from shop_factories import identity, saved_shop
 from workspace_factories import AdvancingClock, build_agent_configurations
 
 WRITE_TOOL = "orders.propose_address_change"
@@ -57,9 +61,11 @@ class Lab:
 
 
 def seed_lab(session: Session, *, publish_identity: bool = True) -> Lab:
-    shops = ShopService(shop_repository(session), AdvancingClock())
+    shops = ShopService(
+        shop_repository(session), AdvancingClock(), SqlAlchemyShopMediaRepository(session)
+    )
     shop_id = shops.create_shop(identity()).definition.id
-    shops.replace_draft(shop_id, publishable_shop())
+    shops.replace_draft(shop_id, saved_shop())
     shops.publish(shop_id)
 
     identities = SupportIdentityService(support_identity_repository(session), AdvancingClock())
@@ -236,8 +242,8 @@ def test_the_preview_resolves_every_variable_against_the_chosen_shop(lab: Lab) -
     configuration_id = author(lab)
     values = resolved(lab, configuration_id)
 
-    assert values["shop.name"] == publishable_shop().identity.name
-    assert values["shop.tone_of_voice"] == publishable_shop().tone_of_voice_guidelines[0].name
+    assert values["shop.name"] == saved_shop().identity.name
+    assert values["shop.tone_of_voice"] == saved_shop().tone_of_voice_guidelines[0].name
     assert values["support_identity.role"] == publishable_identity().role.title
 
 
@@ -376,7 +382,7 @@ def test_a_preview_shop_offers_no_guideline_that_lives_only_in_its_draft(lab: La
     """The draft's second guideline is exactly the override that fails at experiment setup."""
     lab.shops.replace_draft(
         lab.shop_id,
-        publishable_shop(
+        saved_shop(
             tone_of_voice_guidelines=(
                 ToneOfVoiceGuideline(
                     id="warm", name="Warm and precise", guidance="Be kind.", is_default=True
@@ -392,9 +398,11 @@ def test_a_preview_shop_offers_no_guideline_that_lives_only_in_its_draft(lab: La
 
 
 def test_a_shop_that_was_never_published_offers_no_tone_of_voice(session: Session) -> None:
-    shops = ShopService(shop_repository(session), AdvancingClock())
+    shops = ShopService(
+        shop_repository(session), AdvancingClock(), SqlAlchemyShopMediaRepository(session)
+    )
     shop_id = shops.create_shop(identity()).definition.id
-    shops.replace_draft(shop_id, publishable_shop())
+    shops.replace_draft(shop_id, saved_shop())
     configurations = build_agent_configurations(session)
 
     option = next(

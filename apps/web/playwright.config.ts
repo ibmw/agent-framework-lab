@@ -4,6 +4,7 @@ import {
   apiOrigin,
   apiPort,
   databaseUrl,
+  mediaRoot,
   stacks,
   WORKER_COUNT,
   webCacheDir,
@@ -31,6 +32,7 @@ const stack = (worker: number): Server[] => [
     env: {
       AGENT_LAB_ENVIRONMENT: "test",
       AGENT_LAB_DATABASE_URL: databaseUrl(runId, worker),
+      AGENT_LAB_MEDIA_ROOT: mediaRoot(runId, worker),
       AGENT_LAB_FRONTEND_ORIGIN: webOrigin(worker),
       AGENT_LAB_TELEMETRY_HASH_SALT: "playwright-test-only-salt",
     },

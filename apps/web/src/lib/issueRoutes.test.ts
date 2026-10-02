@@ -137,8 +137,12 @@ function gateCodes(): GateCode[] {
 }
 
 const GATE_CODES = gateCodes();
-const SHOP_MODULE = join("domain", "shop.py");
-const SHOP_GATES = GATE_CODES.filter((gate) => gate.module === SHOP_MODULE);
+/**
+ * The shop's gate is `validate_shop` and the one finding only its service can raise —
+ * `media_asset_missing`, which needs the shop's images to answer (ADR 0076).
+ */
+const SHOP_MODULES = [join("domain", "shop.py"), join("application", "shops.py")];
+const SHOP_GATES = GATE_CODES.filter((gate) => SHOP_MODULES.includes(gate.module));
 const SHOP_CODES = [...new Set(SHOP_GATES.map((gate) => gate.code))].sort();
 
 const PRODUCTS: ProductViewSchema[] = [
@@ -199,6 +203,11 @@ const SHOP_GATE_MAP: Record<string, { path: string; entry: string; to: string }>
     path: "products.alpine-shell-jacket",
     entry: "Alpine Shell Jacket",
     to: PRODUCT_EDITOR,
+  },
+  media_asset_missing: {
+    path: "products.alpine-shell-jacket.media.asset:sha256:0f0f",
+    entry: "Alpine Shell Jacket",
+    to: `${PRODUCT_EDITOR}#media`,
   },
   duplicate_variant_options: {
     path: "products.alpine-shell-jacket",
@@ -319,7 +328,12 @@ describe("the path-to-route map", () => {
    * `variant_path` for one of its variants), because a third would be a shape this map has
    * never seen.
    */
-  const SHOP_PATH_SOURCES = ["path", "variant_path"];
+  const SHOP_PATH_SOURCES = ["path", "variant_path", "media_path"];
+  const COMPOSED_SHAPES: Record<string, RegExp> = {
+    path: /^products\.[^.]+$/,
+    variant_path: /^products\.[^.]+\.variants\.[^.]+$/,
+    media_path: /^products\.[^.]+\.media\..+$/,
+  };
 
   it("reads the shop's own paths rather than guessing at them", () => {
     const literals = SHOP_GATES.filter((gate) => gate.path !== null);
@@ -338,11 +352,7 @@ describe("the path-to-route map", () => {
         `${gate.code} composes its path from ${gate.pathSource}, which this map has not seen`,
       ).toContain(gate.pathSource);
       // And the row's own path is of the shape that identifier builds.
-      expect(SHOP_GATE_MAP[gate.code].path).toMatch(
-        gate.pathSource === "variant_path"
-          ? /^products\.[^.]+\.variants\.[^.]+$/
-          : /^products\.[^.]+$/,
-      );
+      expect(SHOP_GATE_MAP[gate.code].path).toMatch(COMPOSED_SHAPES[gate.pathSource]);
     }
   });
 
@@ -350,7 +360,9 @@ describe("the path-to-route map", () => {
     // The map is the shop's. A ticket, an order or a scenario renders its findings on its own
     // editor, where there is no Open to give — and a root one of them happened to share with
     // the shop would send a reader to a shop surface about a finding that is not the shop's.
-    const foreign = GATE_CODES.filter((gate) => gate.module !== SHOP_MODULE && gate.path !== null);
+    const foreign = GATE_CODES.filter(
+      (gate) => !SHOP_MODULES.includes(gate.module) && gate.path !== null,
+    );
     expect(foreign.length).toBeGreaterThan(20);
     for (const gate of foreign) {
       expect(
@@ -358,6 +370,21 @@ describe("the path-to-route map", () => {
         `${gate.code} (${gate.module}) reaches a shop surface`,
       ).toBeNull();
     }
+  });
+
+  it("lands a finding about one of a product's images on the editor's Media card", () => {
+    const groups = groupFindings(
+      [issue("products.alpine-shell-jacket.media.media/alpine.jpg"), issue("policies")],
+      entryOf,
+    );
+
+    expect(groups[0].entry).toEqual({
+      key: "products.alpine-shell-jacket",
+      label: "Alpine Shell Jacket",
+      to: `${PRODUCT_EDITOR}#media`,
+    });
+    // Still one product: its other findings are grouped with it.
+    expect(entryOf("products.alpine-shell-jacket")?.key).toBe("products.alpine-shell-jacket");
   });
 
   it("groups a product's findings on the product, whichever depth raised them", () => {

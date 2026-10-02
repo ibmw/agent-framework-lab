@@ -4,17 +4,25 @@ import { describe, expect, it } from "vitest";
 // declares it, so the file is what they have to read.
 import agentCapabilities from "../../../../apps/api/src/capability_lab/application/agent_capabilities.py?raw";
 import judgeCapabilities from "../../../../apps/api/src/capability_lab/application/judge_capabilities.py?raw";
+import shopMedia from "../../../../apps/api/src/capability_lab/application/shop_media.py?raw";
+import shopService from "../../../../apps/api/src/capability_lab/application/shops.py?raw";
 import blocksDomain from "../../../../apps/api/src/capability_lab/domain/blocks.py?raw";
 import judgeDomain from "../../../../apps/api/src/capability_lab/domain/judge.py?raw";
 import orderDomain from "../../../../apps/api/src/capability_lab/domain/order_fixture.py?raw";
 import scenarioDomain from "../../../../apps/api/src/capability_lab/domain/scenario.py?raw";
 import shopDomain from "../../../../apps/api/src/capability_lab/domain/shop.py?raw";
+import labSettings from "../../../../apps/api/src/capability_lab/infrastructure/config.py?raw";
 import * as fieldRules from "./fieldRules";
 import {
   CONTEXT_DOCUMENTS_CAP_RULE,
   capCount,
   MAX_ORDER_EVENTS,
+  MEDIA_MAX_BYTES,
+  MEDIA_TOO_LARGE_RULE,
+  MEDIA_TYPE_RULE,
+  MEDIA_TYPES,
   MUTATIONS_CAP_RULE,
+  mediaAssetMissingRule,
   OBJECTIVES_CAP_RULE,
   ORDER_EVENTS_CAP_RULE,
   optionalParameterWithoutDefaultRule,
@@ -519,5 +527,47 @@ describe("every rule this module publishes is imported by a module that ships", 
     );
     const orphans = exportedNames(fieldRulesSource).filter((name) => !consumed.has(name));
     expect(orphans, "exported by lib/fieldRules.ts and imported by nothing").toEqual([]);
+  });
+});
+
+/**
+ * A product's image, as the form refuses a file before it uploads and as the Media card says an
+ * entry the shop does not hold (ADR 0076), pinned to the lab's own source the same way.
+ */
+describe("a product image's sentences, as the Media card repeats them", () => {
+  it("spells an image the shop does not hold exactly as `ShopService._validate` writes it", () => {
+    const rendered = render(messageTemplate(shopService, "media_asset_missing"), {
+      title: "Alpine Shell Jacket",
+    });
+
+    expect(rendered).toContain("names an image this shop does not hold");
+    expect(mediaAssetMissingRule("Alpine Shell Jacket")).toBe(rendered);
+  });
+
+  it("refuses a type in the words `MediaTypeUnsupportedError` answers", () => {
+    const refusal = /class MediaTypeUnsupportedError[\s\S]*?super\(\).__init__\("([^"]*)"\)/.exec(
+      shopMedia,
+    );
+
+    expect(refusal?.[1]).toBe(MEDIA_TYPE_RULE);
+  });
+
+  it("refuses a size in the words `media_too_large_message` answers at the default cap", () => {
+    const template = /def media_too_large_message[\s\S]*?return f"([^"]*)"/.exec(shopMedia)?.[1];
+    // The default is `5 * 1024 * 1024`, which `describe_byte_size` says in whole MiB.
+    expect(/media_max_bytes: int = Field\(default=5 \* 1024 \* 1024/.test(labSettings)).toBe(true);
+    expect(MEDIA_MAX_BYTES).toBe(5 * 1024 * 1024);
+    expect(template).toBeDefined();
+    expect(render(template ?? "", { "describe_byte_size(max_bytes)": "5 MiB" })).toBe(
+      MEDIA_TOO_LARGE_RULE,
+    );
+  });
+
+  it("accepts the three types the lab tells by their first bytes, and no other", () => {
+    const declared = [...shopMedia.matchAll(/^ {4}[A-Z]+ = "(image\/[a-z]+)"$/gm)].map(
+      (match) => match[1],
+    );
+
+    expect(declared).toEqual([...MEDIA_TYPES]);
   });
 });

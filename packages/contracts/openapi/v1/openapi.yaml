@@ -877,6 +877,160 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/media:
+    post:
+      summary: Upload an image the shop holds, stored once under the hash of its bytes
+      operationId: uploadShopMedia
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '201':
+          description: The image is stored, and the shop now holds it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopMediaAssetSchema'
+        '200':
+          description: The shop already held these bytes; the image as first uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopMediaAssetSchema'
+        '404':
+          description: The shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '411':
+          description: No Content-Length was declared
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: The image is larger than the lab stores (`media_too_large`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Not a PNG, a JPEG or a WebP image (`media_type_unsupported`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The request holds no file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: One PNG, JPEG or WebP image, told by its first bytes.
+    get:
+      summary: List the images a shop holds, newest first
+      operationId: listShopMedia
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopMediaListResponse'
+        '404':
+          description: The shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid shop identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/media/{sha256}:
+    get:
+      summary: Serve one image the shop holds, as its stored type
+      operationId: getShopMedia
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: sha256
+        in: path
+        required: true
+        schema:
+          type: string
+          description: The SHA-256 of the image's bytes, as 64 lowercase hexadecimal
+            digits.
+          title: Sha256
+        description: The SHA-256 of the image's bytes, as 64 lowercase hexadecimal
+          digits.
+      responses:
+        '200':
+          description: The image's bytes, as the type they were stored as
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: The shop holds no image under this hash, or it is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid shop identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/shops/{shop_id}/orders:
     get:
       summary: List the authored order fixtures of one shop
@@ -8857,7 +9011,10 @@ components:
           maxLength: 4000
           minLength: 1
           title: Reference
-          description: URL or path metadata; managed upload is deferred.
+          description: The image this entry shows, as `asset:sha256:<64 lowercase
+            hex>` naming an image the shop holds (`uploadShopMedia`). A draft write
+            refuses any other reference with `media_not_uploaded`; a stored version
+            may still hold a written one, which reads.
         alt_text:
           type: string
           maxLength: 200
@@ -8869,6 +9026,15 @@ components:
       - reference
       - alt_text
       title: MediaReferenceSchema
+    MediaType:
+      type: string
+      enum:
+      - image/png
+      - image/jpeg
+      - image/webp
+      title: MediaType
+      description: The three image types the lab stores, told by their first bytes
+        and nothing else.
     MemoryMode:
       type: string
       enum:
@@ -12573,6 +12739,58 @@ components:
       - ink
       title: ShopMarkColour
       description: What a mark or the monogram is drawn in.
+    ShopMediaAssetSchema:
+      properties:
+        reference:
+          type: string
+          title: Reference
+          description: 'What a product''s media entry names this image by: `asset:sha256:<hex>`.'
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Sha256
+          description: The SHA-256 of the stored bytes, which serve the image at `/shops/{shop_id}/media/{sha256}`.
+        content_type:
+          $ref: '#/components/schemas/MediaType'
+          description: The type the image's first bytes say.
+        byte_size:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Byte Size
+        file_name:
+          type: string
+          maxLength: 200
+          title: File Name
+          description: The original file name of the first upload of these bytes,
+            cleaned into a label for display. Never a path.
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - reference
+      - sha256
+      - content_type
+      - byte_size
+      - file_name
+      - created_at
+      title: ShopMediaAssetSchema
+      description: One image a shop holds.
+    ShopMediaListResponse:
+      properties:
+        media:
+          items:
+            $ref: '#/components/schemas/ShopMediaAssetSchema'
+          type: array
+          title: Media
+          description: The shop's images, newest first.
+      additionalProperties: false
+      type: object
+      required:
+      - media
+      title: ShopMediaListResponse
     ShopOrderResponse:
       properties:
         order_id:

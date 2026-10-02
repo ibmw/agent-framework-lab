@@ -465,6 +465,26 @@ export const destructiveSubtleButtonClasses = buttonVariants.destructiveSubtle;
 export const subtleFieldButtonClasses = `${controlHeightClasses} ${smallButtonShapeClasses} ${subtleColourClasses}`;
 
 /**
+ * A product image's drop zone (ADR 0076): a dashed field-sized well the operator drops a file
+ * on, holding the chosen image's thumbnail and name, or "Drop an image here". Dashed because it
+ * is a place to put something rather than a value; pine while a file is dragged over it.
+ */
+export function mediaDropZoneClasses(dragging: boolean): string {
+  return `flex min-h-[72px] flex-wrap items-center gap-3 rounded-[9px] border border-dashed px-3.5 py-3 text-[13.5px] font-normal transition ${
+    dragging
+      ? "border-lab-primary bg-lab-primary/5 text-admin-ink"
+      : "border-admin-field-border bg-admin-surface text-admin-ink-soft"
+  }`;
+}
+
+/** *Browse…* in the drop zone: the visually hidden file input's label, ringed when it has focus. */
+export const mediaBrowseClasses = `${subtleFieldButtonClasses} cursor-pointer border border-admin-quiet-border peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-lab-primary peer-aria-disabled:cursor-not-allowed peer-aria-disabled:opacity-55`;
+
+/** An image the shop holds, as a list's item leads with it and the drop zone shows it: 48px. */
+export const mediaThumbnailClasses =
+  "h-12 w-12 flex-none rounded-md border border-admin-border bg-admin-canvas object-cover";
+
+/**
  * A primary action that cannot proceed: dashed, quiet, reachable, and never pressable.
  *
  * `docs/design-direction.md` states the rule — *A blocked primary action says why*: dashed,

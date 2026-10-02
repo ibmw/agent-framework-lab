@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the application as built — 2026-09-20.
+Status: the application as built — 2026-10-02.
 
 Read `docs/product-direction.md` first. This document states the structure, the binding rules and
 the shape of each boundary, with the ADR that reasoned it out; it does not repeat the reasoning.
@@ -61,7 +61,7 @@ permission for domain code to import infrastructure.
 
 | Area | Holds | Recorded in |
 | --- | --- | --- |
-| Catalog and commerce | versioned shops with catalog, policies, FAQ, tone of voice; shop-scoped order fixtures | ADR 0013, ADR 0015 |
+| Catalog and commerce | versioned shops with catalog, policies, FAQ, tone of voice; a product's images, uploaded files the shop holds by their hash; shop-scoped order fixtures | ADR 0013, ADR 0015, ADR 0076 |
 | Customers and support | versioned customer profiles and support identities on one authoring lifecycle | ADR 0014 |
 | Scenario Studio | versioned tickets; objective and mutation block libraries; the scenario recipe; preview and publish gates | ADR 0016–0018 |
 | Agent configuration | versioned configuration of framework, model, prompt, tools, memory and support identity; the proven-capability catalog | ADR 0024, ADR 0053 |
@@ -258,12 +258,17 @@ PostgreSQL and a durable workflow runtime are in `docs/PLAN.md`.
 | --- | --- |
 | `definition_drafts`, `definition_versions`, `definition_shop_attachments` | every definition and its shop attachments |
 | `shop_order_fixtures` | shop-scoped authored orders with a content fingerprint |
+| `shop_media_assets` | a shop's claim on each image it holds, one row per shop and hash, with its type, size and original file name |
 | `sandbox_snapshots`, `sandboxes`, `sandbox_action_proposals` | frozen starting states, one clone per arm, proposed writes |
 | `experiments`, `experiment_runs` | the experiment document and one row per arm referencing its clone |
 | `experiment_participant_turns`, `experiment_agent_turns`, `experiment_tool_events`, `experiment_mutation_events` | append-only evidence keyed so a turn can never be renumbered; the confirmation is inside the tool result and the state change is the pair of revisions the event carries |
 | `experiment_run_spans` | stored span trees with identifiers, kind, offset and duration only |
 | `experiment_judgements` | stored verdicts, one attempt beside the last |
 | `experiment_derivations`, `experiment_notes`, `experiment_tags` | replay and fork provenance; what an operator concluded |
+
+The media root (`Settings.media_root`) holds the bytes `shop_media_assets` names, at
+`shops/{shop_id}/{sha256}`, written once through `MediaStore` and never overwritten; serving reads
+the row first, so a file no row claims is never served (ADR 0076).
 
 Experiments and judge executions are append-oriented historical evidence. Sandbox state is
 mutable only inside one run and never changes a published definition or a snapshot.

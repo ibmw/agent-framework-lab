@@ -17,7 +17,7 @@ import {
   alreadyTakenMessage,
   ENTRY_KEY_RULE,
   MEDIA_ALT_TEXT_RULE,
-  MEDIA_NEEDS_REFERENCE,
+  MEDIA_NEEDS_IMAGE,
   OPTION_NAME_RULE,
   OPTION_NEEDS_VALUE,
   REVIEW_AUTHOR_RULE,
@@ -27,15 +27,15 @@ import type { ItemRefusal } from "./itemForm";
 import { pythonStrip } from "./pythonText";
 
 /**
- * A product's four lists as the forms below them hold them (ADR 0074): options, media
- * references, typed attributes and reviews. Each has one builder, called by the form's Add and
+ * A product's four lists as the forms below them hold them (ADR 0074): options, images,
+ * typed attributes and reviews. Each has one builder, called by the form's Add and
  * its *Save changes* alike, and one refusal, the first rule the form breaks in the order its
  * fields ask.
  *
  * Where an entry has an identifier of its own — an option key, an attribute key, a review ID —
  * it is the builder's first argument: derived once, when the entry is added, and handed back
- * unchanged by an edit. A media reference has none: its key *is* its reference, which is why it
- * is the one key the form still asks while editing.
+ * unchanged by an edit. A media entry has none: its key *is* the reference of the image it
+ * shows, chosen by an upload and fixed while the entry is edited (ADR 0076).
  */
 
 const blank = (value: string) => pythonStrip(value) === "";
@@ -43,8 +43,8 @@ const blank = (value: string) => pythonStrip(value) === "";
 /** Completes `alreadyTakenMessage` for an option or attribute key the product already holds. */
 export const KEY_TAKEN_PLACE = "in the draft";
 
-/** Completes `alreadyTakenMessage` for a reference another media entry of the product holds. */
-export const MEDIA_TAKEN_PLACE = "a media reference of this product";
+/** Completes `alreadyTakenMessage` for an image another media entry of the product shows. */
+export const MEDIA_TAKEN_PLACE = "an image of this product";
 
 /**
  * A key the form asks while adding: a slug no other entry of the list holds. Once the entry is
@@ -99,8 +99,12 @@ export function optionEntry(key: string, fields: OptionFields): OptionSchema {
   return { key, name: pythonStrip(fields.name), values: fields.values };
 }
 
-// Media references ----------------------------------------------------------------------------
+// Media -------------------------------------------------------------------------------------
 
+/**
+ * The form's fields: the reference of the image chosen — the one an upload returned, or the
+ * entry's own while it is edited — and its alt text.
+ */
 export interface MediaFields {
   reference: string;
   altText: string;
@@ -115,20 +119,24 @@ export function mediaFields(entry: MediaReferenceSchema): MediaFields {
 }
 
 /**
- * The reference — present, and held by no other entry — then the alt text. `editing` is the
- * reference the form was opened on, which its own entry holds and so never collides with.
+ * An image chosen, shown by no other entry of the product, then the alt text. `editing` is the
+ * reference the form was opened on, which its own entry holds and so never collides with;
+ * `nameOf` names the image the way the list does, so the refusal says which one.
  */
 export function mediaRefusal(
   fields: MediaFields,
   taken: readonly string[],
   editing: string | null,
+  nameOf: (reference: string) => string,
 ): ItemRefusal<MediaField> | null {
-  const reference = pythonStrip(fields.reference);
-  if (reference === "") {
-    return { field: "reference", reason: MEDIA_NEEDS_REFERENCE };
+  if (fields.reference === "") {
+    return { field: "reference", reason: MEDIA_NEEDS_IMAGE };
   }
-  if (reference !== editing && taken.includes(reference)) {
-    return { field: "reference", reason: alreadyTakenMessage(reference, MEDIA_TAKEN_PLACE) };
+  if (fields.reference !== editing && taken.includes(fields.reference)) {
+    return {
+      field: "reference",
+      reason: alreadyTakenMessage(nameOf(fields.reference), MEDIA_TAKEN_PLACE),
+    };
   }
   if (blank(fields.altText)) {
     return { field: "altText", reason: MEDIA_ALT_TEXT_RULE };
@@ -137,7 +145,7 @@ export function mediaRefusal(
 }
 
 export function mediaEntry(fields: MediaFields): MediaReferenceSchema {
-  return { reference: pythonStrip(fields.reference), alt_text: pythonStrip(fields.altText) };
+  return { reference: fields.reference, alt_text: pythonStrip(fields.altText) };
 }
 
 // Typed attributes ----------------------------------------------------------------------------

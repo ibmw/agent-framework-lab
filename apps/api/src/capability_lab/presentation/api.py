@@ -162,7 +162,14 @@ from capability_lab.application.scenarios import (
 from capability_lab.application.scenarios import (
     ScenarioVersionNotFoundError as ScenarioDefinitionVersionNotFoundError,
 )
+from capability_lab.application.shop_media import (
+    MediaTooLargeError,
+    MediaTypeUnsupportedError,
+    ShopMediaNotFoundError,
+    ShopMediaService,
+)
 from capability_lab.application.shops import (
+    MediaNotUploadedError,
     ShopNotFoundError,
     ShopNotPublishableError,
     ShopService,
@@ -213,6 +220,7 @@ from capability_lab.infrastructure.database import (
     create_session_factory,
     session_scope,
 )
+from capability_lab.infrastructure.media_store import FilesystemMediaStore
 from capability_lab.infrastructure.model_endpoints import OpenAiProtocolEndpointProbe
 from capability_lab.infrastructure.participants.human import HumanParticipantDriver
 from capability_lab.infrastructure.participants.scripted import ScriptedParticipantDriver
@@ -245,6 +253,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyScenarioGenerationIdempotencyRepository,
     SqlAlchemySessionRepository,
     SqlAlchemyShopDirectory,
+    SqlAlchemyShopMediaRepository,
     SqlAlchemyToolEventRepository,
     agent_configuration_repository,
     customer_profile_repository,
@@ -276,6 +285,7 @@ from capability_lab.presentation.orders import OrderRoutes
 from capability_lab.presentation.sandboxes import SandboxRoutes
 from capability_lab.presentation.scenarios import ScenarioRoutes
 from capability_lab.presentation.seed.runner import SeedRefusedError
+from capability_lab.presentation.shop_media import ShopMediaRoutes
 from capability_lab.presentation.shops import ShopRoutes
 from capability_lab.presentation.snapshots import SandboxSnapshotRoutes
 from capability_lab.presentation.support_identities import SupportIdentityRoutes
@@ -910,6 +920,41 @@ async def _shop_not_found_handler(request: Request, error: Exception) -> JSONRes
         status_code=404,
         code="shop_not_found",
         message=str(error),
+    )
+
+
+async def _media_not_uploaded_handler(request: Request, error: Exception) -> JSONResponse:
+    """A draft write naming media that is not an image the shop holds, at each entry's path."""
+    paths = error.paths if isinstance(error, MediaNotUploadedError) else ()
+    return _error_response(
+        request,
+        status_code=422,
+        code="media_not_uploaded",
+        message=str(error),
+        details=[
+            ValidationIssue(
+                location=path,
+                message="not an image this shop holds; upload it first",
+                type="media_not_uploaded",
+            )
+            for path in paths
+        ],
+    )
+
+
+async def _media_too_large_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(request, status_code=413, code="media_too_large", message=str(error))
+
+
+async def _media_type_unsupported_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=415, code="media_type_unsupported", message=str(error)
+    )
+
+
+async def _shop_media_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="shop_media_not_found", message=str(error)
     )
 
 
@@ -1571,6 +1616,9 @@ def create_app(
     # injectable for the same reason the registries below are: a suite that wants an endpoint
     # to refuse supplies one here rather than reaching into the service.
     credential_cipher = create_credential_cipher(settings)
+    # Where a shop's images are written. Chosen here, as the database is: a suite passes a
+    # root under its own temporary directory, and nothing it runs writes into the checkout.
+    media_store = FilesystemMediaStore(settings.media_root)
     endpoint_probe = model_endpoint_probe or OpenAiProtocolEndpointProbe()
     # The test environment's short-circuit, read once here and passed down rather than
     # re-derived in three factories: it selects each SDK's own offline double *before* the
@@ -1699,6 +1747,10 @@ def create_app(
     application.add_exception_handler(PersistedDefinitionIntegrityError, _internal_error_handler)
     application.add_exception_handler(IdempotencyStateNotFoundError, _internal_error_handler)
     application.add_exception_handler(ShopNotFoundError, _shop_not_found_handler)
+    application.add_exception_handler(MediaNotUploadedError, _media_not_uploaded_handler)
+    application.add_exception_handler(MediaTooLargeError, _media_too_large_handler)
+    application.add_exception_handler(MediaTypeUnsupportedError, _media_type_unsupported_handler)
+    application.add_exception_handler(ShopMediaNotFoundError, _shop_media_not_found_handler)
     application.add_exception_handler(ShopVersionNotFoundError, _shop_version_not_found_handler)
     application.add_exception_handler(DefinitionNotPublishableError, _not_publishable_handler)
     application.add_exception_handler(
@@ -1864,7 +1916,19 @@ def create_app(
 
     def shop_service() -> Generator[ShopService, None, None]:
         with session_scope(factory) as session:
-            yield ShopService(shop_repository(session), clock)
+            yield ShopService(
+                shop_repository(session), clock, SqlAlchemyShopMediaRepository(session)
+            )
+
+    def shop_media_service() -> Generator[ShopMediaService, None, None]:
+        with session_scope(factory) as session:
+            yield ShopMediaService(
+                SqlAlchemyShopMediaRepository(session),
+                media_store,
+                SqlAlchemyShopDirectory(session),
+                clock,
+                max_bytes=settings.media_max_bytes,
+            )
 
     def customer_profile_service() -> Generator[CustomerProfileService, None, None]:
         with session_scope(factory) as session:
@@ -2543,6 +2607,7 @@ def create_app(
     )
 
     ShopRoutes(shop_service).register(router)
+    ShopMediaRoutes(shop_media_service).register(router)
     OrderRoutes(order_service).register(router)
     CustomerProfileRoutes(customer_profile_service).register(router)
     SupportIdentityRoutes(support_identity_service).register(router)

@@ -84,6 +84,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemySandboxRepository,
     SqlAlchemySandboxSnapshotRepository,
     SqlAlchemyShopDirectory,
+    SqlAlchemyShopMediaRepository,
     SqlAlchemyToolEventRepository,
     agent_configuration_repository,
     customer_profile_repository,
@@ -104,7 +105,7 @@ from definition_factories import (
     support_role,
 )
 from judge_factories import publishable_judge
-from shop_factories import identity, publishable_shop
+from shop_factories import identity, saved_shop
 from ticket_factories import message
 
 SEED = 20260825
@@ -502,9 +503,11 @@ def build_scenarios(session: Session) -> ScenarioService:
 
 
 def seed_workspace(session: Session) -> Workspace:
-    shops = ShopService(shop_repository(session), AdvancingClock())
+    shops = ShopService(
+        shop_repository(session), AdvancingClock(), SqlAlchemyShopMediaRepository(session)
+    )
     shop_id = shops.create_shop(identity()).definition.id
-    shops.replace_draft(shop_id, publishable_shop())
+    shops.replace_draft(shop_id, saved_shop())
 
     profiles = build_profiles(session)
     profile = profiles.create_profile(customer_identity(), "2024-03-14", shop_id=shop_id)

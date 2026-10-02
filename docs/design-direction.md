@@ -165,6 +165,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | New experiment's arms and scenario | one select per row naming configuration, version, framework and model together ("cfg-atlas v4 — Pydantic AI · gpt-5-mini"), and the scenario with its version | two selects per row — the record, then its published version — with the framework and model as the row's second line; Arm B's hint adds "Leave it empty to run arm A alone." | a configuration's versions are a read of their own, so one list of every version of every configuration is one read per configuration before the select can open; and the lab runs one arm or two, which a row that could not be emptied would not say (ADR 0064) |
 | The agent-configuration index's name | "Agent configurations" on the lab rail (:4827), the page title (:3229), the links back to the index (:390, :3291), the tour surface (:4637) and the setup-chain step (:4506) | "Agent configs" on the rail entry, the page title, the links back to the index and its tour; the setup-chain step "Agent configuration", with "Open agent configs" as its link | "Agent configurations" wraps onto two lines beside its count in the 216px rail; *Agent configs* is the same word shortened, where *Agent setup* would take the word the shop's setup pages already hold (*Names*). The step names the record kind, as its neighbours Support identity and Judge do, and its link names the index |
 | A template's parameters | read-only items of name, kind and *same-shop* (:607–616), with no way to author one on the editor | items under *Typed parameters* — the name in monospace, the kind and *bound same-shop* beside it, the description, default and binding as the detail — with ↑/↓, the pencil and a trash that asks twice, and one form below, "Add a parameter" / "Edit {name}", that asks the label, kind, description, default and whether it is required — which binds a scenario only while there is no default (ADR 0074) | the parameters are authored on this editor and nowhere else once the block exists — the prototype's editor has no other place to write a description or a default — and ADR 0060 asks twice before one leaves; the order is what a binding follows, so it stays authored and its arrows stay on the item. The row's hint is the slice's own: the prototype's, that the editor refuses a binding outside the scenario's shop, is the card's line already |
+| A product's images | no media list, no file input, no drop zone and no image on the product frame (`Workspace.dc.html` :955–1040), and "No image assets" of the handoff's own iconography (README :237) | the Media card on ADR 0074's pattern: items leading with a 48px thumbnail where ADR 0074 gave the item's `lead` to a control, named by the file name, and a form whose *Image* is a drop zone over a visually hidden file input reached by *Browse…*, which uploads at once and says "Uploading…" or the lab's refusal under the zone | the operator's decision of 2 October 2026 that a product's images are files the shop holds (rule 5: a decision another authority owns); ADR 0076 |
 | A scenario's composed blocks | a row of name, binding line and kind with a one-press ×, and the picker beside a free-text binding input (:3091–3120) | `EntryCard` rows that read each binding back as the object it names, open in place on field rows for the bindings and an objective's severity, with the item's ↑/↓, pencil and a trash that asks twice (ADR 0075), and the picker below a rule | a binding is picked from this shop's own objects and never typed (*Where a set comes from decides the control*); ADR 0060 names composed objectives and mutations among the removals that ask twice; objective order is priority and mutation order the run timeline, both authored |
 
 Georgia on the results' stat numerals landed with the surface that first draws it, the arm cards
@@ -325,11 +326,11 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   stays closed while the list it derives from is loading. Every one stops at the cap the lab's
   rule keeps (`maxLength`, required, swept in `lib/idFieldCaps.test.ts`), and a longer value
   the page wrote or normalized — a reference series past it, an uppercased "ß" — is refused on
-  the field in words. A saved entry's identifier is displayed and never asked; a SKU and a
-  media reference are their own keys and say so. A value that is taken is held on its field and
-  never written, and the page's Save names the field's line; the shop slug is refused on Shop
-  details off the listing the create page reads, and only when the operator changes it (ADR
-  0069).
+  the field in words. A saved entry's identifier is displayed and never asked; a SKU is its own
+  key and says so, and a product image is the one its upload returned, never typed (ADR 0076).
+  A value that is taken is held on its field and never written, and the page's Save names the
+  field's line; the shop slug is refused on Shop details off the listing the create page reads,
+  and only when the operator changes it (ADR 0069).
 - **A text stops where the lab's rule does, and is sent as the lab strips it.** Every control
   that types a text the lab caps carries that rule's `maxLength` — `require_label`'s 200,
   `require_text`'s 4000, a run note's 2000 — swept from the Python's rules and from the
@@ -504,7 +505,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   beside the name and *Make default* on the item, before the pencil, the default never the
   form's answer — its background and its hidden facts; an identity's guidance notes; and a
   product's options — the values as chips on the item and in the form, the key fixed — its
-  media references, whose reference is its own key and stays asked, its typed attributes — the
+  images, each item leading with its 48px thumbnail and named by its file name — with its hash's
+  first eight digits where two share one — the image dropped or browsed for and uploaded at once,
+  then shown and fixed while the alt text is edited (ADR 0076), its typed attributes — the
   type beside the name, the key fixed, the form one unit through a discard — and its reviews,
   named by their ID on their controls; the tone-of-voice guidelines — the default's radio as the
   item's lead, the *shop default* pill beside the name, the ID fixed, the default's way-out line
@@ -554,7 +557,8 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   empty or only spaces, then a country that is not two letters; *Add entry* for a day missing,
   then a note empty; *Add fact* for the fact empty; *Add guidance* for a title empty, then the
   guidance; *Add option* for a name empty, a key not a slug or another option's while adding,
-  then no value; *Add media* for a reference empty or another entry's, then the alt text empty;
+  then no value; *Add media* for no image chosen, then an image another entry shows, then the alt
+  text empty;
   *Add attribute* for a label empty, the key not a slug or another attribute's while adding, a
   value empty or not one its type holds, a measurement's unit, then a choice's choices — none,
   or none its value; *Add review* for an author empty, then the body; *Add tone of voice* for a

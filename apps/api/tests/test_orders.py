@@ -39,11 +39,12 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyShopDirectory,
+    SqlAlchemyShopMediaRepository,
     customer_profile_repository,
     shop_repository,
 )
 from definition_factories import address, customer_identity, publishable_profile
-from shop_factories import identity, publishable_shop
+from shop_factories import identity, saved_shop
 
 PLACED_AT = "2026-08-20T14:55:00.000000Z"
 CAPTURED_AT = "2026-08-21T13:12:00.000000Z"
@@ -114,9 +115,11 @@ def profile_with_two_addresses() -> CustomerProfilePayload:
 
 def seed_workspace(session: Session) -> tuple[UUID, UUID]:
     """A shop with a catalog plus one attached customer, for tests owning their own engine."""
-    shops = ShopService(shop_repository(session), AdvancingClock())
+    shops = ShopService(
+        shop_repository(session), AdvancingClock(), SqlAlchemyShopMediaRepository(session)
+    )
     shop_id = shops.create_shop(identity()).definition.id
-    shops.replace_draft(shop_id, publishable_shop())
+    shops.replace_draft(shop_id, saved_shop())
     profiles = build_profiles(session)
     profile = profiles.create_profile(customer_identity(), "2024-03-14", shop_id=shop_id)
     profiles.replace_draft(profile.definition.id, profile_with_two_addresses())
@@ -330,8 +333,10 @@ def test_a_repriced_variant_never_changes_an_order_that_already_holds_it(
     order_id = create_order(workspace)
     workspace.orders.replace_order(workspace.shop_id, order_id, paid_edit())
 
-    shops = ShopService(shop_repository(session), AdvancingClock())
-    catalog = publishable_shop()
+    shops = ShopService(
+        shop_repository(session), AdvancingClock(), SqlAlchemyShopMediaRepository(session)
+    )
+    catalog = saved_shop()
     product = catalog.products[0]
     variant = product.variants[0]
     from decimal import Decimal
@@ -389,8 +394,10 @@ def test_a_variant_that_only_lost_its_price_keeps_the_order_intact(
     order_id = create_order(workspace)
     workspace.orders.replace_order(workspace.shop_id, order_id, paid_edit())
 
-    shops = ShopService(shop_repository(session), AdvancingClock())
-    catalog = publishable_shop()
+    shops = ShopService(
+        shop_repository(session), AdvancingClock(), SqlAlchemyShopMediaRepository(session)
+    )
+    catalog = saved_shop()
     product = catalog.products[0]
     shops.replace_draft(
         workspace.shop_id,
@@ -495,7 +502,9 @@ def test_an_unknown_shop_is_named_before_an_unknown_order(workspace: Workspace) 
 
 def test_orders_are_scoped_to_their_shop(session: Session, workspace: Workspace) -> None:
     create_order(workspace)
-    shops = ShopService(shop_repository(session), AdvancingClock())
+    shops = ShopService(
+        shop_repository(session), AdvancingClock(), SqlAlchemyShopMediaRepository(session)
+    )
     other_shop = shops.create_shop(identity(slug="aurora", name="Aurora Supply")).definition.id
 
     assert workspace.orders.list_orders(other_shop) == ()

@@ -9,12 +9,18 @@ from uuid import UUID
 from sqlalchemy import (
     CursorResult,
     delete,
+    exists,
     func,
+    literal,
     select,
     update,
 )
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.dml import Insert
+from sqlalchemy.sql.expression import Exists
 
 from capability_lab.application.agent_configurations import AGENT_CONFIGURATION_CODEC
 from capability_lab.application.agent_turns import (
@@ -88,6 +94,7 @@ from capability_lab.application.scenario_generation import (
     GeneratedScenario,
 )
 from capability_lab.application.scenarios import SCENARIO_CODEC
+from capability_lab.application.shop_media import MediaClaim, MediaType, ShopMediaAsset
 from capability_lab.application.shops import SHOP_CODEC
 from capability_lab.application.support_identities import SUPPORT_IDENTITY_CODEC
 from capability_lab.application.tickets import TICKET_CODEC
@@ -160,6 +167,7 @@ from capability_lab.infrastructure.models import (
     SandboxActionProposalModel,
     SandboxModel,
     SandboxSnapshotModel,
+    ShopMediaAssetModel,
     ToolEventModel,
 )
 
@@ -1488,6 +1496,95 @@ class SqlAlchemyDefinitionShopAttachmentRepository:
             .group_by(DefinitionShopAttachmentModel.definition_id)
         ).all()
         return {UUID(row[0]): row[1] for row in rows}
+
+
+def _media_asset(model: ShopMediaAssetModel) -> ShopMediaAsset:
+    return ShopMediaAsset(
+        shop_id=UUID(model.shop_id),
+        sha256=model.sha256,
+        content_type=MediaType(model.content_type),
+        byte_size=model.byte_size,
+        file_name=model.file_name,
+        created_at=model.created_at,
+    )
+
+
+def _shop_draft_exists(shop_id: UUID) -> Exists:
+    return exists().where(
+        DefinitionDraftModel.definition_type == DefinitionType.SHOP.value,
+        DefinitionDraftModel.definition_id == str(shop_id),
+    )
+
+
+def media_claim_statement(asset: ShopMediaAsset, dialect: str) -> Insert:
+    """`INSERT … SELECT … WHERE EXISTS` the draft `ON CONFLICT (shop_id, sha256) DO NOTHING`.
+
+    Spelled per dialect, because `ON CONFLICT` is each dialect's own construct; the two this
+    lab's SQLAlchemy models stay portable to are named, and any other is refused rather than
+    handed SQLite's spelling.
+    """
+    if dialect == "sqlite":
+        upsert = sqlite_insert
+    elif dialect == "postgresql":
+        upsert = postgresql_insert
+    else:
+        raise ValueError(f"no claim statement for the {dialect} dialect")
+    rows = select(
+        literal(str(asset.shop_id)),
+        literal(asset.sha256),
+        literal(asset.content_type.value),
+        literal(asset.byte_size),
+        literal(asset.file_name),
+        literal(asset.created_at, ShopMediaAssetModel.created_at.type),
+    ).where(_shop_draft_exists(asset.shop_id))
+    return (
+        upsert(ShopMediaAssetModel)
+        .from_select(
+            ["shop_id", "sha256", "content_type", "byte_size", "file_name", "created_at"], rows
+        )
+        .on_conflict_do_nothing(index_elements=["shop_id", "sha256"])
+    )
+
+
+class SqlAlchemyShopMediaRepository:
+    """A shop's claim on the images it holds, one row per shop and hash (ADR 0076)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def insert(self, asset: ShopMediaAsset) -> MediaClaim | None:
+        """One conditional statement: claim the image only while the shop's draft stands.
+
+        `INSERT … SELECT … WHERE EXISTS` the draft, so an upload racing the shop's deletion
+        lands nothing rather than a row no shop owns, and `ON CONFLICT DO NOTHING` on the key,
+        so an insert that loses a race on the same hash lands nothing either and the row the
+        key kept — under its first file name — is what the caller reads back.
+
+        Not a savepoint, as `attach` uses: under pysqlite a `SAVEPOINT` opened before any other
+        write *begins* the transaction, and its `RELEASE` then commits the claim on the spot,
+        so a failure later in the request could no longer roll it back (ADR 0076).
+        """
+        statement = media_claim_statement(asset, self._session.get_bind().dialect.name)
+        result = cast(CursorResult[Any], self._session.execute(statement))
+        if result.rowcount == 1:
+            return MediaClaim(asset=asset, inserted=True)
+        # Nothing landed: the shop has no draft, or the key already held this image.
+        if self._session.scalar(select(_shop_draft_exists(asset.shop_id))) is not True:
+            return None
+        held = self.get(asset.shop_id, asset.sha256)
+        return None if held is None else MediaClaim(asset=held, inserted=False)
+
+    def list_for_shop(self, shop_id: UUID) -> tuple[ShopMediaAsset, ...]:
+        models = self._session.scalars(
+            select(ShopMediaAssetModel)
+            .where(ShopMediaAssetModel.shop_id == str(shop_id))
+            .order_by(ShopMediaAssetModel.created_at.desc(), ShopMediaAssetModel.sha256)
+        ).all()
+        return tuple(_media_asset(model) for model in models)
+
+    def get(self, shop_id: UUID, sha256: str) -> ShopMediaAsset | None:
+        model = self._session.get(ShopMediaAssetModel, (str(shop_id), sha256))
+        return None if model is None else _media_asset(model)
 
 
 class SqlAlchemyOrderFixtureRepository:

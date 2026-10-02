@@ -63,6 +63,9 @@ DEFINITION_TABLES = {
 # The lab's own capability rather than a definition or a POC table: where this installation
 # can be pointed, which is the same kind of fact as the database URL (ADR 0052).
 LAB_TABLES = {"model_connections"}
+# A shop's claim on the images it holds (ADR 0076): authoring state of the shop, whose bytes
+# live in the media root the row names.
+MEDIA_TABLES = {"shop_media_assets"}
 POC_TABLES = {
     "action_proposals",
     "customers",
@@ -77,7 +80,7 @@ POC_TABLES = {
     "memory_records",
     "idempotency_records",
 }
-APPLICATION_TABLES = POC_TABLES | DEFINITION_TABLES | LAB_TABLES
+APPLICATION_TABLES = POC_TABLES | DEFINITION_TABLES | LAB_TABLES | MEDIA_TABLES
 
 # One experiment row, for the suites that need two ends of a foreign key rather than a run.
 EXPERIMENT_ROW = """
@@ -1163,3 +1166,79 @@ def test_a_stored_connection_holds_a_key_and_its_date_together(
                 "key_added_at": None,
             },
         )
+
+
+MEDIA_ROW = """
+    INSERT INTO shop_media_assets (
+        shop_id, sha256, content_type, byte_size, file_name, created_at
+    ) VALUES (
+        :shop_id, :sha256, :content_type, 2048, :file_name, '2026-10-02 09:00:00.000000'
+    )
+"""
+
+
+@pytest.mark.migration
+def test_a_shop_holds_one_row_per_image_hash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same bytes uploaded twice are one image: the key refuses a second row."""
+    database_url = f"sqlite:///{tmp_path / 'media.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    row = {
+        "shop_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac021",
+        "sha256": "ab" * 32,
+        "content_type": "image/png",
+        "file_name": "ocean-blue-front.png",
+    }
+    with engine.begin() as connection:
+        connection.execute(text(MEDIA_ROW), row)
+        # The same hash in another shop is that shop's own image.
+        connection.execute(
+            text(MEDIA_ROW), {**row, "shop_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac022"}
+        )
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(text(MEDIA_ROW), {**row, "file_name": "a-second-name.png"})
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(MEDIA_ROW), {**row, "sha256": "cd" * 32, "content_type": "image/gif"}
+        )
+
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM shop_media_assets")) == 2
+
+
+@pytest.mark.migration
+def test_downgrade_refuses_to_drop_a_table_holding_images(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'media-downgrade.db'}"
+    config = alembic_config(database_url, monkeypatch)
+    command.upgrade(config, "head")
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(MEDIA_ROW),
+            {
+                "shop_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac023",
+                "sha256": "ef" * 32,
+                "content_type": "image/webp",
+                "file_name": "harbour-dry-bag-sand.webp",
+            },
+        )
+
+    with pytest.raises(RuntimeError, match="refusing to downgrade shop media assets"):
+        command.downgrade(config, "20260921_0021")
+
+    assert "shop_media_assets" in inspect(engine).get_table_names()
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261002_0022"
+        assert connection.scalar(text("SELECT count(*) FROM shop_media_assets")) == 1
+
+    with engine.begin() as connection:
+        connection.execute(text("DELETE FROM shop_media_assets"))
+    command.downgrade(config, "20260921_0021")
+    assert "shop_media_assets" not in inspect(engine).get_table_names()

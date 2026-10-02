@@ -18,6 +18,8 @@ export function shellListings() {
     http.get("*/api/v1/shops/:shopId/orders", () => HttpResponse.json({ orders: [] })),
     http.get("*/api/v1/shops/:shopId/tickets", () => HttpResponse.json({ tickets: [] })),
     http.get("*/api/v1/shops/:shopId/scenarios", () => HttpResponse.json({ scenarios: [] })),
+    // Not a rail's count: the shop's images, which every product editor's Media card reads.
+    http.get("*/api/v1/shops/:shopId/media", () => HttpResponse.json({ media: [] })),
     http.get("*/api/v1/customer-profiles", () => HttpResponse.json({ profiles: [] })),
     http.get("*/api/v1/support-identities", () => HttpResponse.json({ identities: [] })),
     http.get("*/api/v1/agent-configurations", () => HttpResponse.json({ configurations: [] })),

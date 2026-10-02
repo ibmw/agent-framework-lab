@@ -47,14 +47,32 @@ nothing about what either would spend on a real provider. The run says so itself
 `(offline demo)`, it is tagged `offline-scripted`, and its first note spells it out. Keep that
 qualification on the run if you re-author the seed's copy.
 
+A product's images are files the shop holds (ADR 0076). Their bytes live under the media root,
+`var/media` unless `AGENT_LAB_MEDIA_ROOT` says otherwise, at `shops/{shop_id}/{sha256}`, and the
+database's `shop_media_assets` names which shop holds which; one upload is at most
+`AGENT_LAB_MEDIA_MAX_BYTES`, 5 MiB by default. The two go together: a database without its media
+root serves no image, and a media root without its database holds files nothing names.
+
 It refuses rather than merging. A database that is not at the migration head, or that holds any row
 in a table the story writes — seeded before, or authored by hand — is left untouched, and the tables
-that stopped it are named. To start again, delete the database file and run `make migrate` before
-`make seed`:
+that stopped it are named. To start again, reset the database and the media root together:
+
+1. stop the API and the web server;
+2. delete the database file `AGENT_LAB_DATABASE_URL` names — `var/agent-lab.db` by default — with
+   its `-journal`, `-wal` and `-shm` files;
+3. delete the media root — `var/media` by default;
+4. `make migrate`;
+5. `make seed`, or *The fast path* on `/settings`.
 
 ```sh
-rm -f var/agent-lab.db && make migrate && make seed
+rm -f var/agent-lab.db var/agent-lab.db-journal var/agent-lab.db-wal var/agent-lab.db-shm
+rm -rf var/media
+make migrate && make seed
 ```
+
+Run it once when a change says so. Since product images became uploads, a draft write refuses a
+media reference that is not an image the shop holds, so a lab whose shops still carry the written
+references of before is reset rather than migrated (ADR 0076).
 
 The same seed is a button, on `/settings` under *The fast path* (ADR 0047). It posts to
 `/api/v1/lab-seed`, which awaits the function the command awaits and is subject to both refusals
@@ -94,8 +112,8 @@ There are two stacks, and they never share a port or a database. The developer s
 `var/agent-lab.db`, and Vite on 5173 proxying to it. The E2E stack is the one `pnpm test:e2e`
 brings up for itself, and it is one stack *per Playwright worker*: worker *n* gets the API on
 `8001 + n` and Vite on `5174 + n`, each API migrated onto its own temporary SQLite file named for
-the run and the worker under the system temporary directory, which the run's global teardown
-removes along with any that a killed run left behind. The whole block 8001-8004 and 5174-5177 is
+the run and the worker under the system temporary directory, with a media root of its own beside
+it, both of which the run's global teardown removes along with any that a killed run left behind. The whole block 8001-8004 and 5174-5177 is
 Playwright's, and a worker count of four is what `apps/web/tests/e2e/support/stack.ts` declares
 (two in CI); `docs/testing-strategy.md` says why a worker owns a database rather than sharing one.
 
@@ -129,4 +147,6 @@ the `AGENT_LAB_` settings that point each E2E API at its own temporary database,
 past the proxy to another origin.
 
 Run the suite with the developer stack up and nothing about it should move: same processes on 8000
-and 5173, and `var/agent-lab.db` byte for byte as it was.
+and 5173, `var/agent-lab.db` byte for byte as it was, and nothing new under `var/media`. The API
+suite holds itself to the same: every test stores its images under its own temporary directory,
+and one that leaves a file under the checkout's `var/media` fails.

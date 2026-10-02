@@ -13,6 +13,7 @@ from httpx import ASGITransport, AsyncClient
 
 from capability_lab.application.agent_runtime import SupportAgentRuntimeRegistry
 from capability_lab.application.judge_runtime import JudgeRuntimeRegistry
+from capability_lab.infrastructure.config import get_settings
 from capability_lab.infrastructure.database import (
     Base,
     create_database_engine,
@@ -185,28 +186,44 @@ def ticket_body(order_id: str, **overrides: Any) -> dict[str, Any]:
     return body
 
 
+def media_root(tmp_path: Path) -> Path:
+    """Where `api_client`'s app stores the images uploaded through it."""
+    return tmp_path / "api-media"
+
+
 def api_client(
     tmp_path: Path,
     database_name: str,
     agent_runtimes: SupportAgentRuntimeRegistry | None = None,
     judge_runtimes: JudgeRuntimeRegistry | None = None,
+    media_max_bytes: int | None = None,
+    raise_app_exceptions: bool = True,
 ) -> AsyncClient:
     """One suite's app over its own database file; use it as an async context manager.
 
     `agent_runtimes` is how a test says which frameworks this lab can run, because that is
     composition's decision (`docs/architecture.md`) — a suite proving what happens to an arm
     nothing can run says so here rather than reaching inside the runner. `judge_runtimes`
-    says the same about which providers can score.
+    says the same about which providers can score. `media_max_bytes` lowers the upload cap,
+    so a suite can send a body past it without building megabytes. `raise_app_exceptions`
+    off answers an unhandled failure as the 500 a browser would see, rather than raising it.
     """
     engine = create_database_engine(f"sqlite:///{tmp_path / database_name}")
     Base.metadata.create_all(engine)
+    # The suite's images go under its own temporary directory, never the checkout's `var/`.
+    overrides: dict[str, object] = {"media_root": media_root(tmp_path)}
+    if media_max_bytes is not None:
+        overrides["media_max_bytes"] = media_max_bytes
+    settings = get_settings().model_copy(update=overrides)
     return AsyncClient(
         transport=ASGITransport(
             app=create_app(
+                settings,
                 session_factory=create_session_factory(engine),
                 agent_runtimes=agent_runtimes,
                 judge_runtimes=judge_runtimes,
-            )
+            ),
+            raise_app_exceptions=raise_app_exceptions,
         ),
         base_url="http://lab.test",
     )

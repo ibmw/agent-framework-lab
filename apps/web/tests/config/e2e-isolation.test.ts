@@ -85,6 +85,25 @@ describe("the end-to-end configuration", () => {
     expect(new Set(urls).size).toBe(WORKER_COUNT);
   });
 
+  it("gives every worker a media root no other worker can reach", () => {
+    const roots = stacks().map(
+      (worker) =>
+        servers.find((server) => server.name === `api-${worker}`)?.env?.AGENT_LAB_MEDIA_ROOT,
+    );
+    for (const root of roots) {
+      // Under the run's prefix, so the teardown that sweeps the databases sweeps it too, and
+      // never the checkout's `var/media`.
+      expect(root).toContain(DATABASE_FILE_PREFIX);
+      expect(root).not.toContain("var/media");
+    }
+    expect(new Set(roots).size).toBe(WORKER_COUNT);
+  });
+
+  it("sweeps a media root as a directory, which a plain `rm` would refuse", () => {
+    const teardown = readFileSync(join(__dirname, "..", "..", "playwright.teardown.ts"), "utf8");
+    expect(teardown).toMatch(/\brm\(join\(directory, entry\), \{[^}]*\brecursive: true\b[^}]*\}\)/);
+  });
+
   it.each(
     servers.filter((server) => server.name?.startsWith("web-")).map((s) => [s.name, s] as const),
   )("gives %s's browser no API origin that would bypass that frontend", (_name, web) => {

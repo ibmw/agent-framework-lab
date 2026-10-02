@@ -8,6 +8,8 @@ import type {
 } from "@agent-lab/contracts";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { describeApiError } from "../api/client";
+import { listShopMedia, shopMediaUrl, uploadShopMedia } from "../api/shops";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipList, ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
@@ -21,6 +23,7 @@ import {
   ListItem,
   RemoveButton,
 } from "../components/ItemList";
+import { MediaDropZone } from "../components/MediaDropZone";
 import { PrimaryAction } from "../components/PrimaryAction";
 import { ProductDeleteConfirm } from "../components/ProductDeleteConfirm";
 import {
@@ -58,9 +61,10 @@ import {
   isVariantSku,
   KEBAB_PATTERN,
   LABEL_MAX_LENGTH,
-  MEDIA_REFERENCE_RULE,
+  MEDIA_IMAGE_RULE,
   MONEY_PATTERN,
   MONEY_RULE,
+  mediaAssetMissingRule,
   OPTION_VALUES_RULE,
   PRODUCT_CATEGORY_RULE,
   PRODUCT_DESCRIPTION_RULE,
@@ -84,6 +88,14 @@ import {
   useFocusAfterCommit,
   useItemForm,
 } from "../lib/itemForm";
+import {
+  assetOf,
+  libraryOf,
+  localMediaRefusal,
+  mediaFacts,
+  mediaNames,
+  type ShopMediaLibrary,
+} from "../lib/media";
 import {
   type AttributeFields,
   attributeEntry,
@@ -142,6 +154,7 @@ import {
   editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
+  mediaThumbnailClasses,
   outlineButtonClasses,
   surfaceClasses,
   tableCellClasses,
@@ -1426,21 +1439,31 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
 }
 
 const MEDIA_WORDS: ItemFormWords = {
-  form: "Media references",
-  entry: "a media reference",
+  form: "Media",
+  entry: "an image",
   record: "draft",
 };
 
+/** What the Media card's upload says while one is in flight, and when nothing is. */
+const UPLOADING = "Uploading…";
+
 /**
- * The product's media references, as items, and the one form that adds one or edits the one
- * chosen (ADR 0074). A reference is its own key, which nothing else names, so it stays asked
- * while editing; one another entry holds is refused after the buttons, with the field marked,
- * because two entries sharing it are one key in the draft's change summary.
+ * The product's images, as items, and the one form that adds one or edits the one chosen
+ * (ADR 0074, ADR 0076). An image is dropped on the form or browsed for, uploaded to the shop at
+ * once and chosen; the entry's alt text is what an edit changes, because the image is the entry's
+ * key and fixed once it is added. Each item leads with its 48px thumbnail and is named by its
+ * file name — with its hash's first eight digits where two entries share one — read from the
+ * shop's images (`listShopMedia`), which also give the type and the size its detail says.
  */
 function MediaCard({ product, onChange }: EditorProps) {
   const media = product.media;
   const ids = media.map((entry) => entry.reference);
-  const nameOf = (reference: string) => reference;
+  const { shopId, discarding } = useShopWorkspace();
+  const [library, setLibrary] = useState<ShopMediaLibrary>(() => libraryOf([]));
+  const [libraryRead, setLibraryRead] = useState(false);
+  const names = mediaNames(media, library);
+  const nameOf = (reference: string) =>
+    names.get(reference) ?? mediaNames([{ reference, alt_text: "" }], library).get(reference) ?? "";
   const form = useItemForm<MediaFields>({
     blank: BLANK_MEDIA,
     ids,
@@ -1448,22 +1471,83 @@ function MediaCard({ product, onChange }: EditorProps) {
     nameOf,
     formOf: (reference) =>
       mediaFields(media.find((entry) => entry.reference === reference) as MediaReferenceSchema),
-    typedOf: (fields) => fields.reference,
+    typedOf: (fields) => (fields.reference === "" ? fields.altText : nameOf(fields.reference)),
   });
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
   // was read off the draft the discard threw away.
-  const { discarding } = useShopWorkspace();
   const removal = useRemoval(product.key, discarding);
   const editButtons = useEditButtons();
   const focusAfterCommit = useFocusAfterCommit();
-  const referenceInput = useRef<HTMLInputElement>(null);
+  const altTextInput = useRef<HTMLInputElement>(null);
   const reasonId = useId();
-  const refusal = mediaRefusal(form.fields, ids, form.editing);
+  const [upload, setUpload] = useState({ running: false, summary: "", refused: false });
+  const refusal = mediaRefusal(form.fields, ids, form.editing, nameOf);
   const marked = form.dirty ? refusal : null;
+  const location = useLocation();
+  const cardRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    listShopMedia(shopId, controller.signal)
+      .then((listing) => {
+        setLibrary(libraryOf(listing.media));
+        setLibraryRead(true);
+      })
+      .catch(() => {
+        // Unread, the items keep their hashes as names and say nothing they cannot know.
+      });
+    return () => controller.abort();
+  }, [shopId]);
+
+  // A finding about one of this product's images opens the editor on this card (`issueRoutes`).
+  useEffect(() => {
+    if (location.hash === "#media") {
+      cardRef.current?.scrollIntoView?.({ block: "start" });
+    }
+  }, [location.hash]);
+
+  // A form emptied — added, cancelled, opened on another entry, or taken away under it — says
+  // nothing of an upload any more, and an upload still in flight is no longer this form's.
+  const session = form.session;
+  const sessionRef = useRef(session);
+  useEffect(() => {
+    sessionRef.current = session;
+    setUpload({ running: false, summary: "", refused: false });
+  }, [session]);
+
+  async function choose(file: File) {
+    const refused = localMediaRefusal(file);
+    if (refused !== null) {
+      setUpload({ running: false, summary: refused, refused: true });
+      return;
+    }
+    // The filling of the form this upload is for: a result that comes back to another — an Edit
+    // pressed, a Cancel — is the shop's image still, and never that form's choice.
+    const startedIn = sessionRef.current;
+    setUpload({ running: true, summary: UPLOADING, refused: false });
+    try {
+      const asset = await uploadShopMedia(shopId, file);
+      setLibrary((held) => new Map(held).set(asset.sha256, asset));
+      if (sessionRef.current !== startedIn) {
+        return;
+      }
+      form.update({ reference: asset.reference });
+      setUpload({ running: false, summary: `${asset.file_name} uploaded`, refused: false });
+    } catch (error) {
+      if (sessionRef.current !== startedIn) {
+        return;
+      }
+      setUpload({
+        running: false,
+        summary: describeApiError(error, "The image could not be uploaded."),
+        refused: true,
+      });
+    }
+  }
 
   function submit() {
-    if (refusal !== null) {
+    if (refusal !== null || upload.running) {
       return;
     }
     const editing = form.editing;
@@ -1475,40 +1559,44 @@ function MediaCard({ product, onChange }: EditorProps) {
           media: media.map((item) => (item.reference === editing ? entry : item)),
         });
       }
-      // The reference is the entry's key, so the Edit to hand focus back to is the one the
-      // entry is under now.
-      focusAfterCommit(() => editButtons.get(form.dirty ? entry.reference : editing));
+      focusAfterCommit(() => editButtons.get(editing));
     } else {
       onChange({ ...product, media: [...media, entry] });
     }
     form.reset();
   }
 
+  const chosenSha = assetOf(form.fields.reference);
+  const chosen =
+    chosenSha === null
+      ? null
+      : { url: shopMediaUrl(shopId, chosenSha), fileName: nameOf(form.fields.reference) };
+
   return (
-    <Card
-      title="Media references"
-      description="URL or path metadata only — managed binary upload is deferred."
-    >
+    <Card title="Media" ref={cardRef}>
       <FieldRows>
-        <FieldGroup label="References">
+        <FieldGroup label="Images">
           <div className="grid gap-2">
             {media.length > 0 ? (
               <ul className="flex flex-col gap-2">
                 {media.map((entry) => {
+                  const name = names.get(entry.reference) ?? entry.reference;
+                  const sha256 = assetOf(entry.reference);
+                  const asset = sha256 === null ? undefined : library.get(sha256);
                   const drop = () =>
                     onChange({
                       ...product,
                       media: media.filter((item) => item.reference !== entry.reference),
                     });
-                  const notice = `Removed the media reference ${entry.reference} from the draft.`;
+                  const notice = `Removed the image ${name} from the draft.`;
                   if (removal.isArmed(entry.reference)) {
                     return (
                       <ConfirmRemove
                         key={entry.reference}
                         as="li"
-                        title={`Remove the media reference ${entry.reference}?`}
+                        title={`Remove the image ${name}?`}
                         consequence={consequenceOf(
-                          "The reference and its alt text leave the product; the file it points at is not this lab's and is not touched.",
+                          "The image and its alt text leave the product; the image stays with the shop.",
                           findingClauses([media.length === 1 && "product_without_media"]),
                           "Nothing is written until you save the draft, and a published shop version keeps it.",
                         )}
@@ -1517,24 +1605,48 @@ function MediaCard({ product, onChange }: EditorProps) {
                       />
                     );
                   }
+                  // A written reference, or an image the shop does not hold, is what the gate
+                  // refuses: the item says so in the gate's words once the shop's images are read.
+                  const unheld = libraryRead && asset === undefined;
                   return (
                     <ListItem
                       key={entry.reference}
-                      name={entry.reference}
-                      monospace
-                      detail={entry.alt_text}
+                      name={name}
+                      monospace={sha256 === null}
+                      lead={
+                        // Only an image the shop holds is drawn: any other would be a broken
+                        // image beside the gate's sentence, which says what is wrong.
+                        asset === undefined ? undefined : (
+                          <img
+                            src={shopMediaUrl(shopId, asset.sha256)}
+                            alt={entry.alt_text}
+                            className={mediaThumbnailClasses}
+                          />
+                        )
+                      }
+                      detail={
+                        <>
+                          {entry.alt_text}
+                          {asset === undefined ? null : ` · ${mediaFacts(asset)}`}
+                          {unheld ? (
+                            <span className={`block ${validationMessageClasses}`}>
+                              {mediaAssetMissingRule(product.title)}
+                            </span>
+                          ) : null}
+                        </>
+                      }
                       editing={form.editing === entry.reference}
                     >
                       <EditButton
-                        name={entry.reference}
+                        name={name}
                         buttonRef={editButtons.ref(entry.reference)}
                         onEdit={() => {
                           form.begin(entry.reference, mediaFields(entry));
-                          focusAfterCommit(() => referenceInput.current);
+                          focusAfterCommit(() => altTextInput.current);
                         }}
                       />
                       <RemoveButton
-                        name={entry.reference}
+                        name={name}
                         entryKey={entry.reference}
                         removal={removal}
                         notice={notice}
@@ -1545,7 +1657,7 @@ function MediaCard({ product, onChange }: EditorProps) {
                 })}
               </ul>
             ) : (
-              <p className="text-[13px] text-admin-muted">No media reference yet.</p>
+              <p className="text-[13px] text-admin-muted">No image yet.</p>
             )}
             <RemovalNotice removal={removal} />
           </div>
@@ -1559,20 +1671,22 @@ function MediaCard({ product, onChange }: EditorProps) {
           onSubmit={submit}
           onCancel={() => cancelEdit(form, focusAfterCommit, editButtons)}
         >
-          <FieldHint label="Reference" hint={MEDIA_REFERENCE_RULE}>
-            <input
-              maxLength={TEXT_MAX_LENGTH}
-              ref={referenceInput}
-              className={`${fieldControlClasses} w-full`}
-              value={form.fields.reference}
-              placeholder="media/alpine-shell.jpg"
-              {...refusedProps(marked, "reference", reasonId)}
-              onChange={(event) => form.update({ reference: event.target.value })}
-            />
-          </FieldHint>
+          <MediaDropZone
+            label="Image"
+            hint={MEDIA_IMAGE_RULE}
+            chosen={chosen}
+            fixed={form.editing !== null}
+            uploading={upload.running}
+            status={upload.summary}
+            refused={upload.refused}
+            invalid={marked?.field === "reference"}
+            describedBy={reasonId}
+            onFile={(file) => void choose(file)}
+          />
           <FieldHint label="Alt text">
             <input
               maxLength={LABEL_MAX_LENGTH}
+              ref={altTextInput}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.altText}
               {...refusedProps(marked, "altText", reasonId)}

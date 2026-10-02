@@ -27,6 +27,7 @@ export function ActionStatus({
   report,
   note,
   noteId,
+  regionId,
 }: {
   /** The region's name, which is what a reader — and a test — finds it by. */
   label: string;
@@ -35,11 +36,19 @@ export function ActionStatus({
   note: string;
   /** The id the pressed button's `aria-describedby` names while the action runs. */
   noteId?: string;
+  /** The region's own `id`, for a control described by what the region says — a refusal. */
+  regionId?: string;
 }) {
   const shown = report.rows.length > 0 || report.summary !== "";
   return (
     <div className={shown ? "grid gap-1.5" : undefined}>
-      <div role="status" aria-label={label} aria-atomic="true" className="grid gap-1.5">
+      <div
+        id={regionId}
+        role="status"
+        aria-label={label}
+        aria-atomic="true"
+        className="grid gap-1.5"
+      >
         {report.rows.length > 0 ? (
           <ul className="overflow-hidden rounded-[9px] border border-admin-border">
             {report.rows.map((row) => {

@@ -1,16 +1,20 @@
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, event
+from sqlalchemy import delete, event, select
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
 from capability_lab.application.canonical_state import fingerprint_initial_state
 from capability_lab.application.experiment_annotations import ExperimentTagConflictError
 from capability_lab.application.ports import OrderWriteTransientError
 from capability_lab.application.scenario_generation import create_retail_profile_kernel
+from capability_lab.application.shop_media import MediaClaim, MediaType, ShopMediaAsset
+from capability_lab.application.shops import ShopService
 from capability_lab.domain.entities import Customer, Persona
 from capability_lab.infrastructure.clock import SystemClock
 from capability_lab.infrastructure.database import (
@@ -21,6 +25,7 @@ from capability_lab.infrastructure.database import (
 )
 from capability_lab.infrastructure.models import (
     CustomerModel,
+    DefinitionDraftModel,
     ExperimentModel,
     ExperimentNoteModel,
     ExperimentTagModel,
@@ -28,6 +33,7 @@ from capability_lab.infrastructure.models import (
     OrderModel,
     PersonaModel,
     ProductModel,
+    ShopMediaAssetModel,
 )
 from capability_lab.infrastructure.repositories import (
     GeneratedScenarioConflictError,
@@ -37,7 +43,11 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyGeneratedScenarioRepository,
     SqlAlchemyOrderRepository,
     SqlAlchemyPersonaRepository,
+    SqlAlchemyShopMediaRepository,
+    media_claim_statement,
+    shop_repository,
 )
+from shop_factories import identity
 
 
 def database_url(tmp_path: Path) -> str:
@@ -463,3 +473,134 @@ def test_an_annotation_belongs_to_a_run_that_exists(tmp_path: Path) -> None:
             )
         )
         session.flush()
+
+
+def _shop_with_a_draft(factory: sessionmaker[Session]) -> UUID:
+    with session_scope(factory) as session:
+        return (
+            ShopService(
+                shop_repository(session), FixedClock(), SqlAlchemyShopMediaRepository(session)
+            )
+            .create_shop(identity())
+            .definition.id
+        )
+
+
+def _asset(shop_id: UUID, file_name: str, minute: int) -> ShopMediaAsset:
+    return ShopMediaAsset(
+        shop_id=shop_id,
+        sha256="ab" * 32,
+        content_type=MediaType.PNG,
+        byte_size=2048,
+        file_name=file_name,
+        created_at=datetime(2026, 10, 2, 9, minute, tzinfo=UTC),
+    )
+
+
+def test_two_uploads_of_one_image_racing_leave_one_row_and_both_read_it(
+    tmp_path: Path,
+) -> None:
+    """`ON CONFLICT DO NOTHING`: the insert that loses lands nothing and reads the row that won.
+
+    The second session opens before the first commits and inserts after it has, which is the
+    shape a race takes on SQLite's single writer. The loser's insert conflicts on the key, does
+    nothing, raises nothing, and reads back the winner's row — under its file name — inside its
+    own still-usable transaction.
+    """
+    engine = create_database_engine(database_url(tmp_path))
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    shop_id = _shop_with_a_draft(factory)
+    winner = _asset(shop_id, "ocean-blue-front.png", 0)
+    loser = _asset(shop_id, "same-bytes-other-name.png", 1)
+
+    with session_scope(factory) as late:
+        late_repository = SqlAlchemyShopMediaRepository(late)
+        with session_scope(factory) as early:
+            assert SqlAlchemyShopMediaRepository(early).insert(winner) == MediaClaim(
+                asset=winner, inserted=True
+            )
+        held = late_repository.insert(loser)
+        # The loser's session is still usable after the refused insert.
+        listed = late_repository.list_for_shop(shop_id)
+
+    # The loser is told the row was already there, under the winner's file name.
+    assert held == MediaClaim(asset=winner, inserted=False)
+    assert listed == (winner,)
+    with session_scope(factory) as session:
+        rows = session.scalars(select(ShopMediaAssetModel)).all()
+    assert [(row.shop_id, row.file_name) for row in rows] == [
+        (str(shop_id), "ocean-blue-front.png")
+    ]
+
+
+def test_an_image_for_a_shop_whose_draft_is_gone_lands_nothing(tmp_path: Path) -> None:
+    engine = create_database_engine(database_url(tmp_path))
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    shop_id = _shop_with_a_draft(factory)
+    with session_scope(factory) as session:
+        session.execute(delete(DefinitionDraftModel))
+
+    with session_scope(factory) as session:
+        assert SqlAlchemyShopMediaRepository(session).insert(_asset(shop_id, "a.png", 0)) is None
+        assert SqlAlchemyShopMediaRepository(session).insert(_asset(uuid4(), "b.png", 0)) is None
+
+    with session_scope(factory) as session:
+        assert session.scalars(select(ShopMediaAssetModel)).all() == []
+
+
+def test_a_shops_images_are_listed_newest_first_and_read_only_by_that_shop(
+    tmp_path: Path,
+) -> None:
+    engine = create_database_engine(database_url(tmp_path))
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    shop_id = _shop_with_a_draft(factory)
+    older = _asset(shop_id, "older.png", 0)
+    newer = replace(_asset(shop_id, "newer.jpg", 5), sha256="cd" * 32, content_type=MediaType.JPEG)
+
+    with session_scope(factory) as session:
+        repository = SqlAlchemyShopMediaRepository(session)
+        repository.insert(older)
+        repository.insert(newer)
+
+    with session_scope(factory) as session:
+        repository = SqlAlchemyShopMediaRepository(session)
+        assert repository.list_for_shop(shop_id) == (newer, older)
+        assert repository.get(shop_id, older.sha256) == older
+        assert repository.get(uuid4(), older.sha256) is None
+        assert repository.list_for_shop(uuid4()) == ()
+
+
+def test_an_image_already_held_is_not_claimed_again_once_the_draft_is_gone(
+    tmp_path: Path,
+) -> None:
+    """A no-op insert re-checks the draft: a row left behind is no claim for a shop that went."""
+    engine = create_database_engine(database_url(tmp_path))
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    shop_id = _shop_with_a_draft(factory)
+    with session_scope(factory) as session:
+        claim = SqlAlchemyShopMediaRepository(session).insert(_asset(shop_id, "a.png", 0))
+        assert claim is not None and claim.inserted
+    with session_scope(factory) as session:
+        session.execute(delete(DefinitionDraftModel))
+
+    with session_scope(factory) as session:
+        again = SqlAlchemyShopMediaRepository(session).insert(_asset(shop_id, "a.png", 1))
+
+    assert again is None
+
+
+def test_the_claim_is_spelled_for_postgresql_and_refused_for_an_unknown_dialect() -> None:
+    asset = _asset(uuid4(), "a.png", 0)
+
+    compiled = str(media_claim_statement(asset, "postgresql").compile(dialect=postgresql.dialect()))
+    sqlite_sql = str(media_claim_statement(asset, "sqlite").compile(dialect=sqlite.dialect()))
+
+    assert "ON CONFLICT (shop_id, sha256) DO NOTHING" in compiled
+    assert "WHERE EXISTS" in compiled
+    assert "ON CONFLICT (shop_id, sha256) DO NOTHING" in sqlite_sql
+    with pytest.raises(ValueError, match="mysql"):
+        media_claim_statement(asset, "mysql")

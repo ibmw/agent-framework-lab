@@ -232,9 +232,60 @@ class TypedAttribute:
             )
 
 
+_MEDIA_ASSET_PREFIX = "asset:sha256:"
+_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+
+
+def is_sha256_hex(value: object) -> bool:
+    """Whether a value is a SHA-256 digest as this lab writes one: 64 lowercase hex digits."""
+    return isinstance(value, str) and _SHA256_PATTERN.fullmatch(value) is not None
+
+
+@dataclass(frozen=True, slots=True)
+class MediaAssetReference:
+    """An image the shop holds, named by the SHA-256 of its bytes (ADR 0076).
+
+    Rendered as `asset:sha256:<64 lowercase hex>`, the one spelling a draft write accepts as
+    a media reference. Because the hash is inside the reference, a version's content
+    fingerprint covers the bytes of every image it names.
+    """
+
+    sha256: str
+
+    def __post_init__(self) -> None:
+        if not is_sha256_hex(self.sha256):
+            raise ShopConfigurationError(
+                "a media asset hash must be 64 lowercase hexadecimal digits"
+            )
+
+    @property
+    def reference(self) -> str:
+        return f"{_MEDIA_ASSET_PREFIX}{self.sha256}"
+
+    @classmethod
+    def parse(cls, reference: str) -> MediaAssetReference:
+        """Read `asset:sha256:<hex>`, refusing anything else."""
+        if not reference.startswith(_MEDIA_ASSET_PREFIX):
+            raise ShopConfigurationError("a media asset reference must start with asset:sha256:")
+        return cls(sha256=reference.removeprefix(_MEDIA_ASSET_PREFIX))
+
+    @classmethod
+    def of(cls, reference: str) -> MediaAssetReference | None:
+        """The asset a reference names, or none for a written reference."""
+        try:
+            return cls.parse(reference)
+        except ShopConfigurationError:
+            return None
+
+
 @dataclass(frozen=True, slots=True)
 class MediaReference:
-    """URL or path metadata only; managed binary upload is deferred."""
+    """One image of a product and the alt text that describes it.
+
+    The reference is any text here, so a stored version holding a written reference still
+    reads; a draft write accepts only `asset:sha256:<hex>` naming an image the shop holds,
+    which is the application's rule (ADR 0076).
+    """
 
     reference: str
     alt_text: str
@@ -242,6 +293,12 @@ class MediaReference:
     def __post_init__(self) -> None:
         _require_text(self.reference, "media reference")
         _require_label(self.alt_text, "media alt text")
+
+    @property
+    def asset(self) -> str | None:
+        """The hash of the image this entry names, or none for a written reference."""
+        parsed = MediaAssetReference.of(self.reference)
+        return None if parsed is None else parsed.sha256
 
 
 @dataclass(frozen=True, slots=True)
@@ -717,7 +774,7 @@ def _validate_product(product: Product, payload: ShopPayload) -> list[ShopIssue]
         issues.append(
             _warning(
                 "product_without_media",
-                f"product {product.title} has no media reference",
+                f"product {product.title} has no image",
                 path,
             )
         )

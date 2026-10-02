@@ -4,6 +4,8 @@ import type {
   ShopIdentitySchema,
   ShopListResponse,
   ShopLogoSchema,
+  ShopMediaAssetSchema,
+  ShopMediaListResponse,
   ShopPayloadSchema,
   ShopPreviewResponse,
   ShopVersionListResponse,
@@ -88,4 +90,31 @@ export async function getShopVersion(
   return read<ShopVersionResponse>(
     await fetch(shopsPath(`/${encodeURIComponent(shopId)}/versions/${version}`), { signal }),
   );
+}
+
+/**
+ * Upload one image to the shop (ADR 0076). The body is a `FormData` with the file under
+ * `file`, and no `Content-Type` is set here: the browser writes the multipart boundary itself,
+ * and the `Content-Length` the lab refuses an oversized upload by.
+ */
+export async function uploadShopMedia(shopId: string, file: File): Promise<ShopMediaAssetSchema> {
+  const body = new FormData();
+  body.append("file", file);
+  return read<ShopMediaAssetSchema>(
+    await fetch(shopsPath(`/${encodeURIComponent(shopId)}/media`), { method: "POST", body }),
+  );
+}
+
+export async function listShopMedia(
+  shopId: string,
+  signal?: AbortSignal,
+): Promise<ShopMediaListResponse> {
+  return read<ShopMediaListResponse>(
+    await fetch(shopsPath(`/${encodeURIComponent(shopId)}/media`), { signal }),
+  );
+}
+
+/** Where an image the shop holds is served, for an `<img src>`. */
+export function shopMediaUrl(shopId: string, sha256: string): string {
+  return shopsPath(`/${encodeURIComponent(shopId)}/media/${encodeURIComponent(sha256)}`);
 }

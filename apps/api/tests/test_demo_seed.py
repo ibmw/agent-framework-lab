@@ -439,7 +439,9 @@ def test_the_seeded_shop_carries_the_content_the_studio_screens_read(
     shop = services.shops.get_version(seeded.shop_id, 1).payload
 
     assert len(shop.products) >= 3
-    assert all(product.variants and product.media for product in shop.products)
+    # No media until the seed stores its images through the upload service: a written
+    # reference is refused on write (ADR 0076), and `product_without_media` only warns.
+    assert all(product.variants for product in shop.products)
     assert content.SHIPPING_POLICY_ID in {policy.id for policy in shop.policies}
     assert len(shop.faq) >= 3
     assert len(shop.support_guidelines) >= 2

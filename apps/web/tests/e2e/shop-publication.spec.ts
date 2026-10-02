@@ -12,6 +12,15 @@ function card(page: Page, name: string) {
   return page.getByRole("region", { name });
 }
 
+/**
+ * An 8×8 pine square as a PNG, built here rather than committed: the lab tells its type by
+ * these first bytes, and the browser draws it, so the thumbnail is shown to load.
+ */
+const PINE_SQUARE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGOQTXLEihiGlgQAuNYwAearz7oAAAAASUVORK5CYII=",
+  "base64",
+);
+
 async function saveDraft(page: Page) {
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
@@ -128,6 +137,26 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await variants.getByLabel("Color", { exact: true }).selectOption("Charcoal");
   await variants.getByLabel("Size", { exact: true }).selectOption("L");
   await variants.getByRole("button", { name: "Add variant" }).click();
+
+  // Its image, browsed for with the system's picker and uploaded to the shop at once
+  // (ADR 0076): the item is named by the file and leads with the image the lab serves.
+  const media = card(page, "Media");
+  await media.getByLabel("Browse…").setInputFiles({
+    name: "ocean-blue-front.png",
+    mimeType: "image/png",
+    buffer: PINE_SQUARE_PNG,
+  });
+  await expect(media.getByRole("group", { name: "Image", exact: true })).toContainText(
+    "ocean-blue-front.png",
+  );
+  await media.getByLabel("Alt text", { exact: true }).fill("Ocean Blue, front");
+  await media.getByRole("button", { name: "Add media" }).click();
+  await expect(media.getByRole("button", { name: "Edit ocean-blue-front.png" })).toBeVisible();
+  const thumbnail = media.getByRole("img", { name: "Ocean Blue, front" });
+  await expect(thumbnail).toBeVisible();
+  await expect
+    .poll(() => thumbnail.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBe(8);
   await saveDraft(page);
 
   // Publish the whole shop, then read the frozen version back. The operator reads what
@@ -156,6 +185,8 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await expect(frozen.getByText("Charcoal · L")).toBeVisible();
   await expect(frozen.getByText("249.00 CHF").first()).toBeVisible();
   await expect(frozen.getByText("249.00 EUR").first()).toBeVisible();
+  // The version froze the image by its hash, the reference a draft write takes.
+  await expect(page.getByText(/^asset:sha256:[0-9a-f]{64}$/)).toBeVisible();
 
   // PLAN-UX Slice 7, read on Slice 16's surface. One word of a three-paragraph policy is
   // wrong. The operator opens the policy from the Documents table — a page now, not a row —

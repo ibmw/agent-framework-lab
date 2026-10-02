@@ -1,7 +1,8 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LOCAL_TELEMETRY_HASH_SALT = "agent-lab-local-only"
@@ -56,6 +57,16 @@ class Settings(BaseSettings):
     (ADR 0052). It is what keeps a fresh checkout, CI and an unattended seed working with no
     settings page ever opened.
     """
+
+    media_root: Path = Path("./var/media")
+    """Where a shop's uploaded images are stored, as `shops/{shop_id}/{sha256}` (ADR 0076).
+
+    The database names what the root holds: a row of `shop_media_assets` per image, which
+    serving reads first. Reset the two together (`docs/development.md`).
+    """
+
+    media_max_bytes: int = Field(default=5 * 1024 * 1024, gt=0)
+    """The most bytes one uploaded image may hold: 5 MiB unless the environment says less."""
 
     openai_model: Literal["gpt-5-mini"] = "gpt-5-mini"
     otel_exporter_otlp_endpoint: str | None = None

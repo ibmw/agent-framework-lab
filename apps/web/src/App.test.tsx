@@ -1,6 +1,7 @@
 import type {
   ShopDraftResponse,
   ShopListResponse,
+  ShopMediaAssetSchema,
   ShopPayloadSchema,
   ShopPreviewResponse,
   ShopVersionListResponse,
@@ -23,7 +24,9 @@ import {
   ENTRY_KEY_RULE,
   LABEL_MAX_LENGTH,
   MEDIA_ALT_TEXT_RULE,
-  MEDIA_NEEDS_REFERENCE,
+  MEDIA_NEEDS_IMAGE,
+  MEDIA_TYPE_RULE,
+  mediaAssetMissingRule,
   OPTION_NAME_RULE,
   OPTION_NEEDS_VALUE,
   PRODUCT_CATEGORY_RULE,
@@ -64,6 +67,25 @@ import { expectRunsOpenOnARow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
+
+/** An image the shop holds, as `listShopMedia` and `uploadShopMedia` answer it (ADR 0076). */
+function shopImage(
+  sha256: string,
+  fileName: string,
+  overrides: Partial<ShopMediaAssetSchema> = {},
+): ShopMediaAssetSchema {
+  return {
+    reference: `asset:sha256:${sha256}`,
+    sha256,
+    content_type: "image/jpeg",
+    byte_size: 12_800,
+    file_name: fileName,
+    created_at: "2026-10-02T09:00:00Z",
+    ...overrides,
+  };
+}
+
+const HOOD_UP = shopImage("0f".repeat(32), "alpine-shell.jpg");
 
 function precedes(earlier: HTMLElement, later: HTMLElement): boolean {
   return Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -123,7 +145,7 @@ const READY_CONTENT: ShopDraftResponse["content"] = {
           price: null,
         },
       ],
-      media: [{ reference: "media/alpine-shell.jpg", alt_text: "Hood up in the rain" }],
+      media: [{ reference: HOOD_UP.reference, alt_text: "Hood up in the rain" }],
       attributes: [
         {
           key: "waterproofing",
@@ -238,6 +260,18 @@ type SavedShopPayload = ShopPayloadSchema;
 
 let savedDrafts: SavedShopPayload[] = [];
 
+/** The shop's images `listShopMedia` answers with. */
+let shopImages: ShopMediaAssetSchema[] = [HOOD_UP];
+
+/**
+ * What the next upload answers, and every upload's `Content-Type`. The body is not read: the
+ * suite's `File` is jsdom's, which Node's multipart encoder writes as an empty part named
+ * "blob", so a test says which image the lab stored rather than having it read off the bytes.
+ */
+let uploadAnswer: () => Response | Promise<Response> = () =>
+  HttpResponse.json(shopImage("c3".repeat(32), "ocean-blue-front.png"), { status: 201 });
+let uploads: string[] = [];
+
 function lastSaved(): SavedShopPayload {
   const payload = savedDrafts.at(-1);
   if (!payload) {
@@ -264,6 +298,11 @@ const server = setupServer(
     return HttpResponse.json(draft(currentContent));
   }),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft/preview`, () => HttpResponse.json(currentPreview)),
+  http.get(`*/api/v1/shops/${SHOP_ID}/media`, () => HttpResponse.json({ media: shopImages })),
+  http.post(`*/api/v1/shops/${SHOP_ID}/media`, ({ request }) => {
+    uploads.push(request.headers.get("content-type") ?? "");
+    return uploadAnswer();
+  }),
   http.get(`*/api/v1/shops/${SHOP_ID}/versions`, () => HttpResponse.json(versions)),
   // The overview reads this shop's experiments for its activity card; every other surface in
   // this suite renders inside the same shell and so pays for the handler rather than the read.
@@ -308,6 +347,10 @@ afterEach(() => {
   currentPreview = preview();
   versions = { versions: [] };
   savedDrafts = [];
+  shopImages = [HOOD_UP];
+  uploads = [];
+  uploadAnswer = () =>
+    HttpResponse.json(shopImage("c3".repeat(32), "ocean-blue-front.png"), { status: 201 });
 });
 afterAll(() => server.close());
 
@@ -1562,8 +1605,7 @@ describe("shop workspace", () => {
     // `require_label` (200) or `require_text` (4000) would refuse it.
     const fields: [string, string, number][] = [
       ["Options", "Option name", LABEL_MAX_LENGTH],
-      ["Media references", "Reference", TEXT_MAX_LENGTH],
-      ["Media references", "Alt text", LABEL_MAX_LENGTH],
+      ["Media", "Alt text", LABEL_MAX_LENGTH],
       ["Custom attributes (typed)", "Label", LABEL_MAX_LENGTH],
       ["Custom attributes (typed)", "Value", LABEL_MAX_LENGTH],
       ["Ratings and reviews", "Author", LABEL_MAX_LENGTH],
@@ -1702,7 +1744,7 @@ describe("shop workspace", () => {
     // tools answer with the category, the options, the media and the reviews too.
     expect(screen.getByText("Jackets")).toBeVisible();
     expect(screen.getByText("Ocean Blue")).toBeVisible();
-    expect(screen.getByText("media/alpine-shell.jpg")).toBeVisible();
+    expect(screen.getByText(HOOD_UP.reference)).toBeVisible();
     expect(screen.getByText("Hood up in the rain")).toBeVisible();
     expect(screen.getByText(/“Dry\.” — Camille/)).toBeVisible();
 
@@ -2158,7 +2200,7 @@ describe("the setup checklist beside Shop details", () => {
         {
           severity: "warning",
           code: "product_without_media",
-          message: "product Alpine Shell Jacket has no media reference",
+          message: "product Alpine Shell Jacket has no image",
           path: "products.alpine-shell-jacket",
         },
         {
@@ -2214,7 +2256,7 @@ describe("the setup checklist beside Shop details", () => {
         {
           severity: "warning",
           code: "product_without_media",
-          message: "product Alpha has no media reference",
+          message: "product Alpha has no image",
           path: "products.alpha",
         },
       ],
@@ -2224,7 +2266,7 @@ describe("the setup checklist beside Shop details", () => {
     const panel = await screen.findByRole("region", { name: "Setup checklist" });
     const rest = line(panel, "No blocking findings");
     expect(await within(rest).findByText(/product Alpha has no description/)).toBeVisible();
-    expect(within(rest).getByText(/product Alpha has no media reference/)).toBeVisible();
+    expect(within(rest).getByText(/product Alpha has no image/)).toBeVisible();
     expect(rest).toHaveTextContent("2 warnings");
   });
 
@@ -3073,80 +3115,125 @@ describe("a product's four lists, edited in the form below them", () => {
     });
   });
 
-  describe("media references", () => {
-    const TWO_MEDIA = () => {
+  describe("media", () => {
+    const SEAMS = shopImage("a1".repeat(32), "seams.webp", {
+      content_type: "image/webp",
+      byte_size: 2_048_000,
+    });
+    const OCEAN = shopImage("c3".repeat(32), "ocean-blue-front.png", {
+      content_type: "image/png",
+      byte_size: 900,
+    });
+
+    function png(name = "ocean-blue-front.png", size = 900) {
+      return new File([new Uint8Array(size)], name, { type: "image/png" });
+    }
+
+    function dropOn(zone: HTMLElement, file: File) {
+      fireEvent.dragOver(zone, { dataTransfer: { files: [file] } });
+      fireEvent.drop(zone, { dataTransfer: { files: [file] } });
+    }
+
+    function zoneOf(region: ReturnType<typeof within>) {
+      return region.getByRole("group", { name: "Image" });
+    }
+
+    function uploadStatus(region: ReturnType<typeof within>) {
+      return region.getByRole("status", { name: "Image upload" });
+    }
+
+    it("shows each image as its thumbnail, named by its file name, with its alt text, type and size", async () => {
       currentContent = {
         ...READY_CONTENT,
         products: [
           {
             ...READY_CONTENT.products[0],
             media: [
-              { reference: "media/alpine-shell.jpg", alt_text: "Hood up in the rain" },
-              { reference: "media/alpine-charcoal.jpg", alt_text: "Charcoal, front" },
+              { reference: HOOD_UP.reference, alt_text: "Hood up in the rain" },
+              { reference: SEAMS.reference, alt_text: "Taped seams" },
             ],
           },
         ],
       };
-    };
+      shopImages = [SEAMS, HOOD_UP];
+      const media = await card("Media");
 
-    it("refuses a reference another entry holds after Save changes, the field marked", async () => {
-      const user = userEvent.setup();
-      TWO_MEDIA();
-      const media = await card("Media references");
-
-      await user.click(media.getByRole("button", { name: "Edit media/alpine-shell.jpg" }));
-      const form = within(media.getByRole("group", { name: "Edit media/alpine-shell.jpg" }));
-      const reference = form.getByLabelText("Reference");
-      expect(reference).toHaveFocus();
-      await user.clear(reference);
-      await user.type(reference, "media/alpine-charcoal.jpg");
-
-      const save = form.getByRole("button", { name: "Save changes" });
-      const taken = "media/alpine-charcoal.jpg is already a media reference of this product.";
-      expectRefused(save, taken);
-      expect(
-        save.compareDocumentPosition(refusalElement(save)) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-      expect(reference).toHaveAttribute("aria-invalid", "true");
-      expect((reference.getAttribute("aria-describedby") ?? "").split(" ")).toContain(
-        refusalElement(save).id,
+      await media.findByText("seams.webp", { selector: "span" });
+      const item = itemOf(media, "seams.webp");
+      const thumbnail = within(item).getByRole("img", { name: "Taped seams" });
+      expect(thumbnail).toHaveAttribute("src", `/api/v1/shops/${SHOP_ID}/media/${SEAMS.sha256}`);
+      expect(item).toHaveTextContent("Taped seams · WebP · 2.0 MB");
+      expect(within(item).getByRole("button", { name: "Edit seams.webp" })).toBeVisible();
+      expect(within(item).getByRole("button", { name: "Remove seams.webp" })).toBeVisible();
+      // The thumbnail leads the item, before its name.
+      expect(precedes(thumbnail, within(item).getByText("seams.webp"))).toBe(true);
+      expect(itemOf(media, "alpine-shell.jpg")).toHaveTextContent(
+        "Hood up in the rain · JPEG · 12.5 KB",
       );
-      // Said once, after the buttons, and not a second time on the field.
-      expect(media.getAllByText(taken)).toHaveLength(1);
-      await user.click(save);
-      await submitWithoutPressing(save);
-      expect(media.getAllByRole("button", { name: /^Edit / })).toHaveLength(2);
-      await user.click(form.getByRole("button", { name: "Cancel" }));
-
-      // The add form refuses the same duplicate in the same words.
-      const add = within(media.getByRole("group", { name: "Add a media reference" }));
-      await user.type(add.getByLabelText("Reference"), "media/alpine-charcoal.jpg");
-      await user.type(add.getByLabelText("Alt text"), "Charcoal again");
-      expectRefused(add.getByRole("button", { name: "Add media" }), taken);
-      expect(add.getByLabelText("Reference")).toHaveAttribute("aria-invalid", "true");
-      await user.click(add.getByRole("button", { name: "Add media" }));
-      expect(media.getAllByRole("button", { name: /^Edit / })).toHaveLength(2);
-      expect(savedDrafts).toEqual([]);
+      // The description that deferred uploads is gone, and so is any Reference to type.
+      expect(screen.queryByText(/managed binary upload is deferred/)).toBeNull();
+      expect(media.queryByLabelText("Reference")).toBeNull();
     });
 
-    it("moves a reference where it stands, the reference being its own key", async () => {
-      const user = userEvent.setup();
-      const media = await card("Media references");
-
-      const item = itemOf(media, "media/alpine-shell.jpg");
-      expect(within(item).getByText("media/alpine-shell.jpg", { selector: "span" })).toHaveClass(
-        "font-mono",
-      );
-      expect(within(item).getByText("Hood up in the rain")).toBeVisible();
-      await user.click(within(item).getByRole("button", { name: "Edit media/alpine-shell.jpg" }));
-      const form = within(media.getByRole("group", { name: "Edit media/alpine-shell.jpg" }));
-      await user.clear(form.getByLabelText("Reference"));
-      await user.type(form.getByLabelText("Reference"), " media/alpine-shell-front.jpg ");
-      await user.click(form.getByRole("button", { name: "Save changes" }));
+    it("tells two items of one file name apart by their hashes", async () => {
+      const copy = shopImage("b2".repeat(32), "alpine-shell.jpg");
+      currentContent = {
+        ...READY_CONTENT,
+        products: [
+          {
+            ...READY_CONTENT.products[0],
+            media: [
+              { reference: HOOD_UP.reference, alt_text: "Hood up in the rain" },
+              { reference: copy.reference, alt_text: "Hood down" },
+            ],
+          },
+        ],
+      };
+      shopImages = [copy, HOOD_UP];
+      const media = await card("Media");
 
       expect(
-        media.getByRole("button", { name: "Edit media/alpine-shell-front.jpg" }),
-      ).toHaveFocus();
+        await media.findByRole("button", { name: "Edit alpine-shell.jpg (0f0f0f0f)" }),
+      ).toBeVisible();
+      expect(
+        media.getByRole("button", { name: "Remove alpine-shell.jpg (b2b2b2b2)" }),
+      ).toBeVisible();
+      expect(media.queryByRole("button", { name: "Edit alpine-shell.jpg" })).toBeNull();
+    });
+
+    it("uploads a dropped image at once, chooses it, and adds it with its alt text", async () => {
+      const user = userEvent.setup();
+      let answer: (response: Response) => void = () => {};
+      uploadAnswer = () => new Promise<Response>((resolve) => (answer = resolve));
+      const media = await card("Media");
+      await media.findByRole("button", { name: "Edit alpine-shell.jpg" });
+      const add = within(media.getByRole("group", { name: "Add an image" }));
+      expect(zoneOf(add)).toHaveTextContent("Drop an image here");
+
+      dropOn(zoneOf(add), png());
+
+      await waitFor(() => expect(uploadStatus(add)).toHaveTextContent("Uploading…"));
+      expect(uploads).toHaveLength(1);
+      // The browser wrote the boundary: no Content-Type was set by hand.
+      expect(uploads[0]).toMatch(/^multipart\/form-data; boundary=/);
+      answer(HttpResponse.json(OCEAN, { status: 201 }));
+      await waitFor(() => expect(zoneOf(add)).toHaveTextContent("ocean-blue-front.png"));
+      // Said in the live region, so a reader who dropped it hears it landed.
+      expect(uploadStatus(add)).toHaveTextContent("ocean-blue-front.png uploaded");
+      // Decorative in the zone, where its file name beside it says what it is.
+      expect(zoneOf(add).querySelector("img")).toHaveAttribute(
+        "src",
+        `/api/v1/shops/${SHOP_ID}/media/${OCEAN.sha256}`,
+      );
+      expect(zoneOf(add).querySelector("img")).toHaveAttribute("alt", "");
+
+      await user.type(add.getByLabelText("Alt text"), " Ocean Blue, front ");
+      await user.click(add.getByRole("button", { name: "Add media" }));
+
+      const item = itemOf(media, "ocean-blue-front.png");
+      expect(within(item).getByRole("img", { name: "Ocean Blue, front" })).toBeVisible();
+      expect(item).toHaveTextContent("Ocean Blue, front · PNG · 900 B");
+      expect(zoneOf(add)).toHaveTextContent("Drop an image here");
       await user.click(screen.getByRole("button", { name: "Save draft" }));
       await waitFor(() => expect(savedDrafts).toHaveLength(1));
       const before = unchangedPayload();
@@ -3155,61 +3242,338 @@ describe("a product's four lists, edited in the form below them", () => {
         products: [
           {
             ...before.products[0],
-            media: [{ reference: "media/alpine-shell-front.jpg", alt_text: "Hood up in the rain" }],
+            media: [
+              ...before.products[0].media,
+              { reference: OCEAN.reference, alt_text: "Ocean Blue, front" },
+            ],
           },
         ],
       });
     });
 
-    it("refuses the form with its first rule after Add media, in the order it asks", async () => {
+    it("opens the system's picker from Browse…, a label the keyboard reaches", async () => {
       const user = userEvent.setup();
-      const media = await card("Media references");
+      uploadAnswer = () => HttpResponse.json(OCEAN, { status: 201 });
+      const media = await card("Media");
+      const add = within(media.getByRole("group", { name: "Add an image" }));
 
-      const add = media.getByRole("group", { name: "Add a media reference" });
-      const button = within(add).getByRole("button", { name: "Add media" });
-      expectRefused(button, MEDIA_NEEDS_REFERENCE);
-      expect(within(add).getByLabelText("Reference")).not.toHaveAttribute("aria-invalid");
+      const picker = add.getByLabelText("Browse…");
+      expect(picker).toHaveAttribute("type", "file");
+      expect(picker).toHaveAttribute("accept", "image/png,image/jpeg,image/webp");
+      expect(picker).toHaveClass("sr-only");
+      await user.upload(picker, png());
 
-      await user.click(media.getByRole("button", { name: "Edit media/alpine-shell.jpg" }));
-      const form = media.getByRole("group", { name: "Edit media/alpine-shell.jpg" });
-      await expectRulesInFieldOrder(
-        user,
-        form,
-        within(form).getByRole("button", { name: "Save changes" }),
-        {
-          Reference: { rule: MEDIA_NEEDS_REFERENCE, answer: "media/alpine-shell.jpg" },
-          "Alt text": { rule: MEDIA_ALT_TEXT_RULE, answer: "Hood up in the rain" },
-        },
+      await waitFor(() => expect(zoneOf(add)).toHaveTextContent("ocean-blue-front.png"));
+      expect(uploads).toHaveLength(1);
+    });
+
+    it("says a refusal under the zone, the lab's in its words and the type and cap before any upload", async () => {
+      uploadAnswer = () =>
+        HttpResponse.json(
+          { code: "media_type_unsupported", message: MEDIA_TYPE_RULE, request_id: "r" },
+          { status: 415 },
+        );
+      const media = await card("Media");
+      const add = within(media.getByRole("group", { name: "Add an image" }));
+
+      dropOn(zoneOf(add), new File(["GIF89a"], "spinner.gif", { type: "image/gif" }));
+      expect(uploadStatus(add)).toHaveTextContent(MEDIA_TYPE_RULE);
+      dropOn(
+        zoneOf(add),
+        new File([new Uint8Array(6 * 1024 * 1024)], "huge.jpg", { type: "image/jpeg" }),
       );
+      expect(uploadStatus(add)).toHaveTextContent("an image can be at most 5 MiB");
+      expect(uploads).toEqual([]);
+
+      // A file the browser cannot name is the lab's to judge, and the lab's words are said.
+      dropOn(zoneOf(add), new File(["<svg/>"], "drawing", { type: "" }));
+      await waitFor(() => expect(uploadStatus(add)).toHaveTextContent(MEDIA_TYPE_RULE));
+      expect(uploads).toHaveLength(1);
+      expect(zoneOf(add)).toHaveTextContent("Drop an image here");
+    });
+
+    it("refuses the form after Add media, in the order it asks", async () => {
+      const user = userEvent.setup();
+      const media = await card("Media");
+      await media.findByRole("button", { name: "Edit alpine-shell.jpg" });
+      const add = within(media.getByRole("group", { name: "Add an image" }));
+      const button = add.getByRole("button", { name: "Add media" });
+
+      // Nothing chosen: the image is asked first, and nothing is marked before a change.
+      expectRefused(button, MEDIA_NEEDS_IMAGE);
+      await user.type(add.getByLabelText("Alt text"), "Hood up");
+      expectRefused(button, MEDIA_NEEDS_IMAGE);
+      expect(add.getByLabelText("Browse…")).toHaveAttribute("aria-invalid", "true");
+
+      // The lab already held these bytes: the upload answers the image this product shows.
+      uploadAnswer = () => HttpResponse.json(HOOD_UP, { status: 200 });
+      dropOn(zoneOf(add), png("hood-again.jpg"));
+      const taken = "alpine-shell.jpg is already an image of this product.";
+      await waitFor(() => expectRefused(button, taken));
+      expect(
+        button.compareDocumentPosition(refusalElement(button)) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      uploadAnswer = () => HttpResponse.json(OCEAN, { status: 201 });
+      dropOn(zoneOf(add), png());
+      await waitFor(() => expect(zoneOf(add)).toHaveTextContent("ocean-blue-front.png"));
+      await user.clear(add.getByLabelText("Alt text"));
+      expectRefused(button, MEDIA_ALT_TEXT_RULE);
+      expect(add.getByLabelText("Alt text")).toHaveAttribute("aria-invalid", "true");
+      await user.click(button);
+      await submitWithoutPressing(button);
+      expect(media.getAllByRole("button", { name: /^Edit / })).toHaveLength(1);
+
+      await user.type(add.getByLabelText("Alt text"), "Ocean Blue");
+      expectNotRefused(button);
+      expect(savedDrafts).toEqual([]);
+    });
+
+    it("edits the alt text with the image shown and fixed, and leaves the rest of the draft alone", async () => {
+      const user = userEvent.setup();
+      const media = await card("Media");
+
+      const pencil = await media.findByRole("button", { name: "Edit alpine-shell.jpg" });
+      const item = itemOf(media, "alpine-shell.jpg");
+      await user.click(pencil);
+      const form = within(media.getByRole("group", { name: "Edit alpine-shell.jpg" }));
+      expect(form.getByLabelText("Alt text")).toHaveFocus();
+      expect(zoneOf(form)).toHaveTextContent("alpine-shell.jpg");
+      expect(form.queryByLabelText("Browse…")).toBeNull();
+      expect(item).toHaveAttribute("aria-current", "true");
+
+      await user.clear(form.getByLabelText("Alt text"));
+      await user.type(form.getByLabelText("Alt text"), "Hood up, in the rain");
+      await user.click(form.getByRole("button", { name: "Save changes" }));
+
+      expect(media.getByRole("button", { name: "Edit alpine-shell.jpg" })).toHaveFocus();
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      const before = unchangedPayload();
+      expect(lastSaved()).toStrictEqual({
+        ...before,
+        products: [
+          {
+            ...before.products[0],
+            media: [{ reference: HOOD_UP.reference, alt_text: "Hood up, in the rain" }],
+          },
+        ],
+      });
     });
 
     it("cancels an edit to an empty add form, handing focus back to the Edit", async () => {
       const user = userEvent.setup();
-      const media = await card("Media references");
+      const media = await card("Media");
 
-      const pencil = media.getByRole("button", { name: "Edit media/alpine-shell.jpg" });
+      const pencil = await media.findByRole("button", { name: "Edit alpine-shell.jpg" });
       await user.click(pencil);
       await user.type(media.getByLabelText("Alt text"), " typed");
       await user.click(media.getByRole("button", { name: "Cancel" }));
 
       expect(pencil).toHaveFocus();
-      expect(itemOf(media, "media/alpine-shell.jpg")).not.toHaveAttribute("aria-current");
-      const add = within(media.getByRole("group", { name: "Add a media reference" }));
-      expect(add.getByLabelText("Reference")).toHaveValue("");
+      expect(itemOf(media, "alpine-shell.jpg")).not.toHaveAttribute("aria-current");
+      const add = within(media.getByRole("group", { name: "Add an image" }));
+      expect(zoneOf(add)).toHaveTextContent("Drop an image here");
       expect(add.getByLabelText("Alt text")).toHaveValue("");
       expect(screen.getByText("All changes saved")).toBeInTheDocument();
     });
 
     it("leaves the draft clean when an untouched media entry is saved", async () => {
       const user = userEvent.setup();
-      const media = await card("Media references");
+      const media = await card("Media");
 
-      const pencil = media.getByRole("button", { name: "Edit media/alpine-shell.jpg" });
+      const pencil = await media.findByRole("button", { name: "Edit alpine-shell.jpg" });
       await user.click(pencil);
       await user.click(media.getByRole("button", { name: "Save changes" }));
 
       expect(pencil).toHaveFocus();
       expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    });
+
+    it("asks about a chosen image not yet added, which the shop keeps either way", async () => {
+      const user = userEvent.setup();
+      uploadAnswer = () => HttpResponse.json(OCEAN, { status: 201 });
+      const media = await card("Media");
+      const add = within(media.getByRole("group", { name: "Add an image" }));
+
+      dropOn(zoneOf(add), png());
+      await waitFor(() => expect(zoneOf(add)).toHaveTextContent("ocean-blue-front.png"));
+      await user.click(
+        within(screen.getByLabelText("Shop workspace")).getByRole("link", { name: "Orders" }),
+      );
+
+      const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+      expect(prompt).toHaveTextContent(
+        "The Media form holds “ocean-blue-front.png”, which has not been added to the draft.",
+      );
+      expect(prompt).toHaveTextContent(itemFormReason("an image", "draft"));
+    });
+
+    it("draws no image for an asset the shop does not hold, beside the gate's sentence", async () => {
+      const gone = `asset:sha256:${"d4".repeat(32)}`;
+      currentContent = {
+        ...READY_CONTENT,
+        products: [
+          {
+            ...READY_CONTENT.products[0],
+            media: [{ reference: gone, alt_text: "No longer held" }],
+          },
+        ],
+      };
+      const media = await card("Media");
+
+      const item = itemOf(media, "image d4d4d4d4");
+      await waitFor(() =>
+        expect(item).toHaveTextContent(mediaAssetMissingRule("Alpine Shell Jacket")),
+      );
+      expect(item.querySelector("img")).toBeNull();
+    });
+
+    it("leaves an upload that comes back to another filling of the form out of it", async () => {
+      const user = userEvent.setup();
+      let answer: (response: Response) => void = () => {};
+      uploadAnswer = () => new Promise<Response>((resolve) => (answer = resolve));
+      const media = await card("Media");
+      const pencil = await media.findByRole("button", { name: "Edit alpine-shell.jpg" });
+      const add = within(media.getByRole("group", { name: "Add an image" }));
+
+      dropOn(zoneOf(add), png());
+      await waitFor(() => expect(uploads).toHaveLength(1));
+      // The operator turns to another entry before the upload answers.
+      await user.click(pencil);
+      const form = within(media.getByRole("group", { name: "Edit alpine-shell.jpg" }));
+      // Answered, and given the time to land in whatever form it would land in.
+      await act(async () => {
+        answer(HttpResponse.json(OCEAN, { status: 201 }));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      // The entry being edited keeps its own image, and saving it changes nothing.
+      expect(zoneOf(form)).toHaveTextContent("alpine-shell.jpg");
+      expect(zoneOf(form)).not.toHaveTextContent("ocean-blue-front.png");
+      await user.click(form.getByRole("button", { name: "Save changes" }));
+      expect(screen.getByText("All changes saved")).toBeInTheDocument();
+      expect(media.queryByRole("button", { name: "Edit ocean-blue-front.png" })).toBeNull();
+    });
+
+    it("leaves a refusal that comes back to another filling of the form out of it", async () => {
+      const user = userEvent.setup();
+      let answer: (response: Response) => void = () => {};
+      uploadAnswer = () => new Promise<Response>((resolve) => (answer = resolve));
+      const media = await card("Media");
+      const pencil = await media.findByRole("button", { name: "Edit alpine-shell.jpg" });
+      const add = within(media.getByRole("group", { name: "Add an image" }));
+
+      dropOn(zoneOf(add), png());
+      await waitFor(() => expect(uploads).toHaveLength(1));
+      await user.click(pencil);
+      const form = within(media.getByRole("group", { name: "Edit alpine-shell.jpg" }));
+      await act(async () => {
+        answer(
+          HttpResponse.json(
+            { code: "media_type_unsupported", message: MEDIA_TYPE_RULE, request_id: "r" },
+            { status: 415 },
+          ),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      // The refusal was about the add form's file; the entry being edited hears nothing of it.
+      expect(uploadStatus(form)).toHaveTextContent("");
+      expect(media.queryByText(MEDIA_TYPE_RULE)).toBeNull();
+    });
+
+    it("keeps focus on the picker while it uploads, and says how it went", async () => {
+      const user = userEvent.setup();
+      let answer: (response: Response) => void = () => {};
+      uploadAnswer = () => new Promise<Response>((resolve) => (answer = resolve));
+      const media = await card("Media");
+      const add = within(media.getByRole("group", { name: "Add an image" }));
+      const picker = add.getByLabelText("Browse…");
+
+      await user.upload(picker, png());
+      await waitFor(() => expect(uploadStatus(add)).toHaveTextContent("Uploading…"));
+      expect(picker).toHaveFocus();
+      expect(picker).toBeEnabled();
+      expect(picker).toHaveAttribute("aria-disabled", "true");
+      // A second file, picked or dropped while the first uploads, is not taken.
+      await user.upload(picker, png("second.png"));
+      dropOn(zoneOf(add), png("third.png"));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(uploads).toHaveLength(1);
+      answer(HttpResponse.json(OCEAN, { status: 201 }));
+      await waitFor(() =>
+        expect(uploadStatus(add)).toHaveTextContent("ocean-blue-front.png uploaded"),
+      );
+      expect(uploads).toHaveLength(1);
+      expect(zoneOf(add)).toHaveTextContent("ocean-blue-front.png");
+      expect(picker).toHaveFocus();
+      expect(picker).not.toHaveAttribute("aria-disabled");
+
+      // A refusal is what the picker is described by, so it is heard where the reader is.
+      uploadAnswer = () =>
+        HttpResponse.json(
+          { code: "media_type_unsupported", message: MEDIA_TYPE_RULE, request_id: "r" },
+          { status: 415 },
+        );
+      // Named a PNG by the browser, told otherwise by its first bytes.
+      await user.upload(picker, png("not-really.png"));
+      await waitFor(() => expect(uploadStatus(add)).toHaveTextContent(MEDIA_TYPE_RULE));
+      expect(describedText(picker)).toContain(MEDIA_TYPE_RULE);
+    });
+
+    it("opens on the Media card when a finding about an image sent it there", async () => {
+      const scrolled: Element[] = [];
+      const original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this);
+      };
+      try {
+        renderAt(`${PRODUCT}#media`);
+        const media = await screen.findByRole("region", { name: "Media" });
+        await waitFor(() => expect(scrolled).toContain(media));
+      } finally {
+        Element.prototype.scrollIntoView = original;
+      }
+    });
+
+    it("says the gate's sentence on an entry that is not an image the shop holds", async () => {
+      currentContent = {
+        ...READY_CONTENT,
+        products: [
+          {
+            ...READY_CONTENT.products[0],
+            media: [{ reference: "media/alpine-shell.jpg", alt_text: "Saved before uploads" }],
+          },
+        ],
+      };
+      const media = await card("Media");
+
+      const item = itemOf(media, "media/alpine-shell.jpg");
+      await waitFor(() =>
+        expect(item).toHaveTextContent(mediaAssetMissingRule("Alpine Shell Jacket")),
+      );
+      expect(within(item).queryByRole("img")).toBeNull();
+      expect(
+        within(item).getByRole("button", { name: "Remove media/alpine-shell.jpg" }),
+      ).toBeVisible();
+    });
+
+    it("confirms a removal saying the image stays with the shop", async () => {
+      const user = userEvent.setup();
+      const media = await card("Media");
+
+      await user.click(await media.findByRole("button", { name: "Remove alpine-shell.jpg" }));
+
+      const confirm = media.getByRole("group", { name: "Remove the image alpine-shell.jpg?" });
+      expect(confirm).toHaveTextContent(
+        "The image and its alt text leave the product; the image stays with the shop.",
+      );
+      expect(confirm).toHaveTextContent(
+        "It is the product's last image, which the publish gate warns about.",
+      );
     });
   });
 
@@ -5603,7 +5967,7 @@ describe("removing is deliberate", () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
     const options = within(await screen.findByRole("region", { name: "Options" }));
-    const media = within(screen.getByRole("region", { name: "Media references" }));
+    const media = within(screen.getByRole("region", { name: "Media" }));
 
     // A discard re-reads the draft under the list, so what was armed is not about it any more.
     await user.type(screen.getByLabelText("Description"), " Taped seams.");
@@ -5617,11 +5981,11 @@ describe("removing is deliberate", () => {
 
     // A rename is the same product, held by the same key (ADR 0061), so the confirm stays on
     // the row it was asked about.
-    await user.click(media.getByRole("button", { name: "Remove media/alpine-shell.jpg" }));
-    expect(media.getByRole("group", { name: /Remove the media reference/ })).toBeVisible();
+    await user.click(await media.findByRole("button", { name: "Remove alpine-shell.jpg" }));
+    expect(media.getByRole("group", { name: "Remove the image alpine-shell.jpg?" })).toBeVisible();
     await user.type(screen.getByLabelText("Title"), " Pro");
     expect(screen.getByLabelText("Handle")).toHaveValue("alpine-shell-jacket-pro");
-    expect(media.getByRole("group", { name: /Remove the media reference/ })).toBeVisible();
+    expect(media.getByRole("group", { name: "Remove the image alpine-shell.jpg?" })).toBeVisible();
   });
 
   it("stops saying a variant was removed once Discard has put it back", async () => {
