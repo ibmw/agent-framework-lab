@@ -1637,9 +1637,8 @@ class SqlAlchemyShopMediaRepository:
         so an insert that loses a race on the same hash lands nothing either and the row the
         key kept — under its first file name — is what the caller reads back.
 
-        Not a savepoint, as `attach` uses: under pysqlite a `SAVEPOINT` opened before any other
-        write *begins* the transaction, and its `RELEASE` then commits the claim on the spot,
-        so a failure later in the request could no longer roll it back (ADR 0076).
+        One statement rather than a savepoint, as `attach` uses: it conditions on the draft and
+        absorbs a duplicate in the same write, with no refused insert to recover from (ADR 0076).
         """
         statement = media_claim_statement(asset, self._session.get_bind().dialect.name)
         result = cast(CursorResult[Any], self._session.execute(statement))

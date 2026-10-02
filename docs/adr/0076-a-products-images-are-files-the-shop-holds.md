@@ -49,6 +49,16 @@ decorative because the title beside it names the row; a product with no uploaded
 tile and no placeholder. The catalog reads no listing for it: a draft write takes only images
 the shop holds and nothing removes one while the shop stands.
 
+Amendment: 2026-10-03 — Why the claim is one statement. The paragraph "It is not a savepoint"
+below gave pysqlite's early commit of a first-write savepoint as the reason; ADR 0003's amendment
+of this date removes that early commit, and `attach`'s with it. The statement stays, and its reason
+is now its own: one `INSERT … SELECT … WHERE EXISTS … ON CONFLICT DO NOTHING` checks the shop's
+draft and absorbs a duplicate inside the same write, which holds SQLite's write lock from its
+start, so an upload racing its shop's deletion lands nothing and an upload losing a race on the
+same hash has no refused insert to recover from. A savepoint would need the draft read as a
+separate statement and an `IntegrityError` to roll back to. The claim stays inside the request's
+transaction and is rolled back with it, as the paragraph says.
+
 Supersedes ADR 0013's "Media stores URL/reference metadata only; managed binary upload remains
 deferred" (:46), and the two sentences of `docs/product-direction.md` that deferred managed
 upload. ADR 0070's *Deliberately not here* stands: the shop logo stays a drawn mark.
