@@ -346,6 +346,13 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **Fields side by side stay level.** A stacked field packs at the top of its cell
   (`fieldLabelClasses`), so two fields in one row keep their controls level and one height
   whatever lines sit under either.
+- **A select is the workspace's, not the browser's.** Every `<select>` is drawn from
+  `fieldControlClasses`, whose `select-chevron` takes the native control away
+  (`appearance: none`, so Safari draws the same box) and draws a chevron in `admin-muted` at
+  the right, with the padding it needs; under forced colours, where the chevron would keep its
+  fixed grey against a high-contrast ground, the system's select and arrow come back. A list
+  box (`multiple`, `size`) gets no chevron. `ui.test.ts` sweeps every select to that class
+  (ADR 0069).
 - **A free-text field over a set the draft already uses offers it** as a `<datalist>`, spelled as
   the lab keeps it: the product category offers the other products' categories (ADR 0069).
 - **A reference reads as what it points at.** A ticket's origin product and its suggested

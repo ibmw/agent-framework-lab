@@ -120,6 +120,33 @@
   }
 }
 
+/*
+ * A single-line select's chevron, drawn by the workspace rather than the browser, so Safari's
+ * select is the same box as everyone else's (`fieldControlClasses`, which carries this class
+ * for every control it paints; it applies to a select alone). The stroke is `admin-muted`,
+ * `#6d7175`, which a data URI cannot read from the token — `ui.test.ts` pins the two together.
+ * A list box (`multiple`, `size`) is not a dropdown and gets no chevron. Under forced colours a
+ * `url()` background image is kept but keeps its fixed grey, which a high-contrast ground can
+ * make illegible, so the system's own select and arrow come back instead (ADR 0069).
+ */
+@utility select-chevron {
+  &:is(select):not([multiple], [size]) {
+    appearance: none;
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236d7175' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.75rem center;
+    background-repeat: no-repeat;
+    background-size: 1rem 1rem;
+
+    @media (forced-colors: active) {
+      appearance: auto;
+      /* The control's own `px-3.5`, which the chevron's padding above replaced. */
+      padding-right: 0.875rem;
+      background-image: none;
+    }
+  }
+}
+
 .lab-grid {
   background-color: color-mix(in srgb, var(--color-lab-ink) 4%, var(--color-lab-canvas));
   background-image:

@@ -162,7 +162,7 @@ export const addFormClasses = "grid gap-2 border-t border-admin-border pt-3";
  * one and it is the one drawn: `w-full` almost everywhere, and those two saying otherwise.
  */
 const fieldSurfaceClasses =
-  "rounded-[9px] border border-admin-field-border bg-admin-surface px-3.5 text-admin-ink outline-none transition focus:border-lab-primary focus:ring-[3px] focus:ring-lab-primary/20 aria-invalid:border-lab-error disabled:cursor-not-allowed disabled:opacity-65";
+  "rounded-[9px] border border-admin-field-border bg-admin-surface px-3.5 text-admin-ink outline-none transition focus:border-lab-primary focus:ring-[3px] focus:ring-lab-primary/20 aria-invalid:border-lab-error disabled:cursor-not-allowed disabled:opacity-65 select-chevron";
 
 /**
  * The single-line control's height, the handoff's `min-height:44px`: every control a value is
@@ -179,6 +179,18 @@ export const controlHeightClasses = "min-h-[44px]";
  * `<input type="date">` whose picker glyph is taller than the text beside it, and a control
  * whose value wraps. A fixed height clips all three; a floor lets them grow and holds the
  * target size for a pointer everywhere else.
+ *
+ * **A select draws the workspace's chevron, not the browser's.** `select-chevron` (`styles.css`,
+ * carried by the surface every control shares) applies to a `<select>` alone — this string
+ * also paints inputs — and gives it
+ * `appearance: none`, so Safari draws the same box as every other browser rather than its own
+ * rounded, gradient control, with a chevron in `admin-muted` drawn in its place and the right
+ * padding the chevron needs. A `multiple` or sized select is a list box and gets neither. Under
+ * forced colours a `url()` background image is kept, but in its fixed grey, which the
+ * high-contrast ground can make illegible; so there the select goes back to `appearance: auto`
+ * and the system draws its own arrow in the system's colours. It is here rather than on a
+ * select-only string because every `<select>` in the workspace is already drawn from this one
+ * (`ui.test.ts` holds them to it), and a second class is a second thing to forget.
  */
 export const fieldControlClasses = `box-border ${controlHeightClasses} py-2.5 text-[14.5px] ${fieldSurfaceClasses}`;
 

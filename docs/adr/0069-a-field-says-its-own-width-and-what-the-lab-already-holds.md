@@ -2,6 +2,19 @@
 
 Status: accepted, amended by ADR 0074 (the order line's quantity is `w-full` in the form below the list) — 2026-09-27
 
+Amendment: 2026-10-02 — A select is drawn by the workspace, not the browser. The operator asked
+that Safari's select match the others: Safari draws its own rounded, gradient control whatever
+the surface says, so the shared field surface this record settles carries `select-chevron`
+(`styles.css`), which applies to a `<select>` alone — the same string paints inputs — and
+gives it `appearance: none`, the right padding a chevron needs and a chevron in `admin-muted`
+(4.9:1 on the surface) as an inline SVG, pinned to the token by `ui.test.ts`. On the shared
+surface rather than a select-only string because all 71 selects are already drawn from
+`fieldControlClasses`, and a second class would be one more for the next select to forget;
+`ui.test.ts` sweeps every select to it. A list box (`multiple`, `size`) is not a dropdown and is
+left native. Under forced colours a `url()` background image is kept in its fixed grey, which a
+high-contrast ground can make illegible, so there the select goes back to `appearance: auto`
+and the system's own arrow, with the control's own `px-3.5` restored.
+
 Settles `docs/PLAN-UX.md` Slice 27, the three workspace defects `docs/decisions-and-next-step.md`
 listed as found and not fixed: three fields whose width never reached the screen, a product
 category row with no list of the draft's categories and therefore no hint, and a Shop details

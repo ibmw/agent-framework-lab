@@ -524,6 +524,102 @@ describe("the width of a field", () => {
   });
 });
 
+/**
+ * Every `<select>` in the workspace, as `file: className`, read from the opening tag up to its
+ * first `>` that is not an arrow's.
+ */
+function selectsOf(files: Record<string, string>) {
+  const found: string[] = [];
+  for (const [path, source] of Object.entries(files)) {
+    const code = codeOf(source).replaceAll(/\{\/\*[\s\S]*?\*\/\}/g, "");
+    for (const match of code.matchAll(/<select\b((?:=>|[^>])*)>/g)) {
+      const attributes = match[1];
+      const className = /className=(\{`[^`]*`\}|"[^"]*"|\{[^}]*\})/.exec(attributes)?.[1] ?? "none";
+      const listBox = /\bmultiple\b|\bsize=/.test(attributes) ? " (list box)" : "";
+      found.push(`${path}: ${className}${listBox}`);
+    }
+  }
+  return found;
+}
+
+/** A select drawn from the field control, with nothing after it but its width and its flex. */
+const SELECT_FROM_CONTROL = /: \{`\$\{fieldControlClasses\}((\s+(w|min-w|max-w|flex)-\S+)*)`\}$/;
+
+describe("every select", () => {
+  const selects = selectsOf(
+    Object.fromEntries(Object.entries(sources).filter(([path]) => !path.includes(".test."))),
+  );
+
+  it("found the workspace's selects to sweep", () => {
+    // Asserted first: a pattern that matched nothing would make the cases below pass.
+    expect(selects.length).toBeGreaterThan(60);
+  });
+
+  it("is drawn from the field control and builds no classes of its own", () => {
+    expect(selects.filter((entry) => !SELECT_FROM_CONTROL.test(entry))).toEqual([]);
+  });
+
+  it("is a dropdown, so every one of them draws the chevron", () => {
+    // A list box (`multiple`, `size`) is excluded from the chevron in `styles.css`; there is
+    // none today, and one added is a case for this sweep to name.
+    expect(selects.filter((entry) => entry.endsWith("(list box)"))).toEqual([]);
+  });
+
+  it("reads a select that builds its own classes apart from one drawn from the control", () => {
+    const slot = ["$", "{", "fieldControlClasses", "}"].join("");
+    const found = selectsOf({
+      "a.tsx": [
+        `<select className={\`${slot} w-full\`} onChange={(event) => set(event)}>`,
+        '<select className="rounded border px-2">',
+        `<select multiple className={\`${slot} w-full\`}>`,
+      ].join("\n"),
+    });
+    expect(
+      found.map((entry) => SELECT_FROM_CONTROL.test(entry.replace(" (list box)", ""))),
+    ).toEqual([true, false, true]);
+    expect(found[2]).toMatch(/\(list box\)$/);
+  });
+
+  it("reads past an arrow written before the classes and the list-box flag", () => {
+    // An arrow's `>` is not the tag's: a handler written first must not end the tag there and
+    // hide the classes and `multiple` that follow it.
+    const slot = ["$", "{", "fieldControlClasses", "}"].join("");
+    const found = selectsOf({
+      "a.tsx": `<select onChange={(event) => set(event)} className="rounded border" multiple>`,
+    });
+    expect(found).toEqual(['a.tsx: "rounded border" (list box)']);
+    const drawn = selectsOf({
+      "b.tsx": `<select onChange={(event) => set(event)} className={\`${slot} w-full\`}>`,
+    });
+    expect(drawn.every((entry) => SELECT_FROM_CONTROL.test(entry))).toBe(true);
+  });
+
+  it("draws through the class that takes the browser's select away and draws the chevron", () => {
+    expect(fieldControlClasses.split(" ")).toContain("select-chevron");
+    expect(idControlClasses.split(" ")).toContain("select-chevron");
+    const utility = /@utility select-chevron \{([\s\S]*?)\n\}/.exec(themeSource)?.[1] ?? "";
+    expect(utility).toContain("&:is(select):not([multiple], [size])");
+    expect(utility).toMatch(/appearance: none;/);
+    expect(utility).toMatch(/padding-right: 2\.5rem;/);
+    expect(utility).toMatch(/background-image: url\("data:image\/svg\+xml,/);
+    expect(utility).toMatch(/background-position: right 0\.75rem center;/);
+    // Under forced colours a `url()` image is kept in its fixed grey, which the high-contrast
+    // ground can swallow, so the select goes back to the system's own arrow.
+    expect(utility).toMatch(
+      /@media \(forced-colors: active\) \{\s*appearance: auto;[\s\S]*background-image: none;/,
+    );
+  });
+
+  it("draws its chevron in the muted ink token", () => {
+    const muted = /--color-admin-muted:\s*#([0-9a-f]{6});/.exec(themeSource)?.[1];
+    const stroke = /@utility select-chevron[\s\S]*?stroke='%23([0-9a-f]{6})'/.exec(
+      themeSource,
+    )?.[1];
+    expect(muted).toBeDefined();
+    expect(stroke).toBe(muted);
+  });
+});
+
 describe("a field and what stands beside it", () => {
   it("packs a stacked field at the top, so a stretched grid cell never moves its control", () => {
     expect(fieldLabelClasses.split(" ")).toContain("content-start");
