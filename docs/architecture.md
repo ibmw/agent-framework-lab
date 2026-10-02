@@ -83,6 +83,11 @@ the payload codec and the publish gate are per type; the lifecycle is shared (AD
 definitions are the shop, the customer profile, the support identity, the ticket, the scenario, the
 objective block, the mutation block, the agent configuration and the judge configuration.
 
+A definition is never deleted, with one exception: a shop that never published — and so has no
+ticket or scenario version, no snapshot and no experiment — is deleted whole, its draft, the drafts
+of its tickets and scenarios, its orders, its attachments, its images and their directory, while
+the shop-independent definitions it used stay (ADR 0077).
+
 - Which shops use a shop-independent definition is an unversioned relation in
   `definition_shop_attachments`, never a pinned reference and never part of a fingerprint.
 - An order fixture is shop-scoped authored state with no version of its own, stored with a content
@@ -268,7 +273,8 @@ PostgreSQL and a durable workflow runtime are in `docs/PLAN.md`.
 
 The media root (`Settings.media_root`) holds the bytes `shop_media_assets` names, at
 `shops/{shop_id}/{sha256}`, written once through `MediaStore` and never overwritten; serving reads
-the row first, so a file no row claims is never served (ADR 0076).
+the row first, so a file no row claims is never served (ADR 0076). A shop's directory is removed
+only with a shop that never published, after the commit that removed its rows (ADR 0077).
 
 Experiments and judge executions are append-oriented historical evidence. Sandbox state is
 mutable only inside one run and never changes a published definition or a snapshot.

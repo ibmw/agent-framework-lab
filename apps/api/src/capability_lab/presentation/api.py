@@ -162,6 +162,11 @@ from capability_lab.application.scenarios import (
 from capability_lab.application.scenarios import (
     ScenarioVersionNotFoundError as ScenarioDefinitionVersionNotFoundError,
 )
+from capability_lab.application.shop_deletion import (
+    ShopDeletionService,
+    ShopPublishedError,
+    remove_deleted_shop_files,
+)
 from capability_lab.application.shop_media import (
     MediaTooLargeError,
     MediaTypeUnsupportedError,
@@ -285,6 +290,7 @@ from capability_lab.presentation.orders import OrderRoutes
 from capability_lab.presentation.sandboxes import SandboxRoutes
 from capability_lab.presentation.scenarios import ScenarioRoutes
 from capability_lab.presentation.seed.runner import SeedRefusedError
+from capability_lab.presentation.shop_deletion import ShopDeletionRoutes
 from capability_lab.presentation.shop_media import ShopMediaRoutes
 from capability_lab.presentation.shops import ShopRoutes
 from capability_lab.presentation.snapshots import SandboxSnapshotRoutes
@@ -921,6 +927,11 @@ async def _shop_not_found_handler(request: Request, error: Exception) -> JSONRes
         code="shop_not_found",
         message=str(error),
     )
+
+
+async def _shop_published_handler(request: Request, error: Exception) -> JSONResponse:
+    """A shop that has published is kept whole (ADR 0060, ADR 0077); the message says how many."""
+    return _error_response(request, status_code=409, code="shop_published", message=str(error))
 
 
 async def _media_not_uploaded_handler(request: Request, error: Exception) -> JSONResponse:
@@ -1747,6 +1758,7 @@ def create_app(
     application.add_exception_handler(PersistedDefinitionIntegrityError, _internal_error_handler)
     application.add_exception_handler(IdempotencyStateNotFoundError, _internal_error_handler)
     application.add_exception_handler(ShopNotFoundError, _shop_not_found_handler)
+    application.add_exception_handler(ShopPublishedError, _shop_published_handler)
     application.add_exception_handler(MediaNotUploadedError, _media_not_uploaded_handler)
     application.add_exception_handler(MediaTooLargeError, _media_too_large_handler)
     application.add_exception_handler(MediaTypeUnsupportedError, _media_type_unsupported_handler)
@@ -1929,6 +1941,21 @@ def create_app(
                 clock,
                 max_bytes=settings.media_max_bytes,
             )
+
+    def shop_deletion_service() -> Generator[ShopDeletionService, None, None]:
+        with session_scope(factory) as session:
+            service = ShopDeletionService(
+                SqlAlchemyShopDirectory(session),
+                SqlAlchemyOrderFixtureRepository(session),
+                SqlAlchemyDefinitionShopAttachmentRepository(session),
+                SqlAlchemyShopMediaRepository(session),
+            )
+            yield service
+        # Reached only once `session_scope` has committed: a refusal, a failure or a commit
+        # that raises leaves through the `with` and never gets here, so no file goes while a
+        # row could still name it (ADR 0077).
+        if service.deleted is not None:
+            remove_deleted_shop_files(media_store, service.deleted)
 
     def customer_profile_service() -> Generator[CustomerProfileService, None, None]:
         with session_scope(factory) as session:
@@ -2608,6 +2635,7 @@ def create_app(
 
     ShopRoutes(shop_service).register(router)
     ShopMediaRoutes(shop_media_service).register(router)
+    ShopDeletionRoutes(shop_deletion_service).register(router)
     OrderRoutes(order_service).register(router)
     CustomerProfileRoutes(customer_profile_service).register(router)
     SupportIdentityRoutes(support_identity_service).register(router)

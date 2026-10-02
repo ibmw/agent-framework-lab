@@ -5,6 +5,12 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { SHOP_NAME_RULE } from "./lib/fieldRules";
+import {
+  COUNTING,
+  DELETING_SHOP,
+  PUBLISHED_SHOP_KEPT,
+  SHOP_DELETE_KEEPS,
+} from "./lib/shopDeletion";
 import { cardTitleClasses } from "./lib/ui";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectPublicationPill } from "./test/indexes";
@@ -759,5 +765,369 @@ describe("the logo card's swatches (ADR 0070)", () => {
     expect(logo.getByRole("radio", { name: "White" })).toHaveFocus();
     expect(logo.getByRole("radio", { name: "White" })).toBeChecked();
     expect(logo.queryByText(warning)).toBeNull();
+  });
+});
+
+describe("deleting a shop that never published (ADR 0077)", () => {
+  const NORTHSTAR = SHOP_ID;
+  const HARBOUR = "1b2c3d4e-5f60-4718-9a0b-c1d2e3f4a5b6";
+  const FJORD = "2c3d4e5f-6071-4829-8b1c-d2e3f4a5b6c7";
+  const summary = (shop_id: string, name: string, published: number | null) => ({
+    shop_id,
+    name,
+    slug: name.toLowerCase().replaceAll(" ", "-"),
+    updated_at: "2026-10-02T12:05:00+00:00",
+    latest_published_version: published,
+    published_version_count: published ?? 0,
+    logo: null,
+  });
+
+  let held: ShopListResponse["shops"] = [];
+  let deletes: string[] = [];
+  let reads: string[] = [];
+  let shopReads = 0;
+
+  function serveTheLab(
+    refusal?: { status: number; code: string; message: string },
+    options: {
+      /** What the lab holds once it has refused, as a shop published or deleted elsewhere. */
+      afterRefusal?: (shops: ShopListResponse["shops"]) => ShopListResponse["shops"];
+      /** Holds every delete's answer until it settles. */
+      gate?: Promise<void>;
+    } = {},
+  ) {
+    held = [
+      summary(NORTHSTAR, "Northstar Outfitters", 3),
+      summary(HARBOUR, "Harbour Lane Supply", null),
+      summary(FJORD, "Fjord Supply", null),
+    ];
+    deletes = [];
+    reads = [];
+    shopReads = 0;
+    const rows = (count: number) => Array.from({ length: count }, (_, index) => ({ index }));
+    server.use(
+      http.get("*/api/v1/shops", () => {
+        shopReads += 1;
+        return HttpResponse.json({ shops: held });
+      }),
+      http.delete("*/api/v1/shops/:shopId", async ({ params }) => {
+        deletes.push(String(params.shopId));
+        await options.gate;
+        if (refusal) {
+          held = options.afterRefusal ? options.afterRefusal(held) : held;
+          return HttpResponse.json(
+            { code: refusal.code, message: refusal.message, request_id: "req-1" },
+            { status: refusal.status },
+          );
+        }
+        held = held.filter((shop) => shop.shop_id !== params.shopId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.get("*/api/v1/shops/:shopId/draft", () => {
+        reads.push("draft");
+        return HttpResponse.json({ content: { products: rows(2) } });
+      }),
+      http.get("*/api/v1/shops/:shopId/orders", () => {
+        reads.push("orders");
+        return HttpResponse.json({ orders: rows(1) });
+      }),
+      http.get("*/api/v1/shops/:shopId/tickets", () => {
+        reads.push("tickets");
+        return HttpResponse.json({ tickets: [] });
+      }),
+      http.get("*/api/v1/shops/:shopId/scenarios", () => {
+        reads.push("scenarios");
+        return HttpResponse.json({ scenarios: rows(1) });
+      }),
+      http.get("*/api/v1/shops/:shopId/media", () => {
+        reads.push("media");
+        return HttpResponse.json({ media: rows(3) });
+      }),
+    );
+  }
+
+  const trash = (name: string) => screen.findByRole("button", { name: `Delete ${name}` });
+
+  it("holds a published shop's trash and says why, and offers the others", async () => {
+    serveTheLab();
+    renderShops();
+
+    const kept = await trash("Northstar Outfitters");
+    expect(kept).toBeDisabled();
+    expect(kept).toHaveAttribute("title", PUBLISHED_SHOP_KEPT);
+    expect(kept).toHaveAccessibleDescription(PUBLISHED_SHOP_KEPT);
+    expect(screen.getByText(PUBLISHED_SHOP_KEPT)).toBeVisible();
+    for (const name of ["Harbour Lane Supply", "Fjord Supply"]) {
+      const offered = screen.getByRole("button", { name: `Delete ${name}` });
+      expect(offered).toBeEnabled();
+      expect(offered).toHaveAttribute("title", `Delete ${name}`);
+    }
+    // Nothing is counted until a confirm asks: no row reads what its shop holds.
+    expect(reads).toEqual([]);
+  });
+
+  it("asks in the warm red, counting what goes once when it opens", async () => {
+    serveTheLab();
+    // The draft answers only once the confirm has been seen waiting for it.
+    let answer: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    server.use(
+      http.get("*/api/v1/shops/:shopId/draft", async () => {
+        reads.push("draft");
+        await answered;
+        return HttpResponse.json({ content: { products: [{}, {}] } });
+      }),
+    );
+    const user = userEvent.setup();
+    renderShops();
+
+    await user.click(await trash("Harbour Lane Supply"));
+
+    const confirm = screen.getByRole("group", {
+      name: "Delete Harbour Lane Supply and everything it holds?",
+    });
+    expect(confirm).toHaveFocus();
+    const press = within(confirm).getByRole("button", { name: "Delete it" });
+    expect(press).toBeDisabled();
+    expect(press).toHaveAccessibleDescription(COUNTING);
+    expect(press.className).toContain("bg-lab-error");
+    expect(within(confirm).getByRole("status")).toHaveTextContent(COUNTING);
+    answer();
+    await within(confirm).findByText(
+      "It holds 2 products, 1 order, no ticket, 1 scenario and 3 images, and all of it goes with the shop.",
+    );
+    expect(confirm).toHaveAccessibleDescription(expect.stringContaining(SHOP_DELETE_KEEPS));
+    expect(press).toBeEnabled();
+    expect([...reads].sort()).toEqual(["draft", "media", "orders", "scenarios", "tickets"]);
+
+    await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
+
+    expect(deletes).toEqual([]);
+    expect(screen.getByRole("button", { name: "Delete Harbour Lane Supply" })).toHaveFocus();
+  });
+
+  it("deletes on the second press, takes the row away and leaves focus on the notice", async () => {
+    serveTheLab();
+    const user = userEvent.setup();
+    renderShops();
+    await user.click(await trash("Harbour Lane Supply"));
+    const confirm = screen.getByRole("group", {
+      name: "Delete Harbour Lane Supply and everything it holds?",
+    });
+    const press = within(confirm).getByRole("button", { name: "Delete it" });
+    await waitFor(() => expect(press).toBeEnabled());
+    const listingsBefore = shopReads;
+
+    await user.click(press);
+
+    const notice = await screen.findByText("Deleted Harbour Lane Supply and everything it held.");
+    await waitFor(() => expect(notice).toHaveFocus());
+    expect(deletes).toEqual([HARBOUR]);
+    expect(screen.queryByRole("link", { name: "Harbour Lane Supply" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Fjord Supply" })).toBeVisible();
+    await waitFor(() => expect(shopReads).toBe(listingsBefore + 1));
+  });
+
+  it("deletes on one press when the preference has removed the second", async () => {
+    serveTheLab();
+    window.localStorage.setItem("agent-lab.confirm-before-delete", "false");
+    const user = userEvent.setup();
+    renderShops();
+
+    await user.click(await trash("Fjord Supply"));
+
+    await screen.findByText("Deleted Fjord Supply and everything it held.");
+    expect(deletes).toEqual([FJORD]);
+    expect(reads).toEqual([]);
+    expect(screen.queryByRole("link", { name: "Fjord Supply" })).toBeNull();
+  });
+
+  it("says the lab's refusal and keeps the row", async () => {
+    const message = `shop ${HARBOUR} is kept because it has published 1 version: its versions are what experiments are explained by`;
+    serveTheLab(
+      { status: 409, code: "shop_published", message },
+      {
+        afterRefusal: (shops) =>
+          shops.map((shop) =>
+            shop.shop_id === HARBOUR
+              ? { ...shop, latest_published_version: 1, published_version_count: 1 }
+              : shop,
+          ),
+      },
+    );
+    window.localStorage.setItem("agent-lab.confirm-before-delete", "false");
+    const user = userEvent.setup();
+    renderShops();
+
+    await user.click(await trash("Harbour Lane Supply"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.getByRole("link", { name: "Harbour Lane Supply" })).toBeVisible();
+    expect(screen.queryByText(/everything it held/)).toBeNull();
+    // Published since the listing was read: its trash is held now, so the alert takes focus.
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
+    expect(screen.getByRole("button", { name: "Delete Harbour Lane Supply" })).toBeDisabled();
+  });
+
+  it("hands focus to the alert when the shop was deleted elsewhere", async () => {
+    const message = `shop ${HARBOUR} has no draft`;
+    serveTheLab(
+      { status: 404, code: "shop_not_found", message },
+      { afterRefusal: (shops) => shops.filter((shop) => shop.shop_id !== HARBOUR) },
+    );
+    const user = userEvent.setup();
+    renderShops();
+    await user.click(await trash("Harbour Lane Supply"));
+    const confirm = screen.getByRole("group", {
+      name: "Delete Harbour Lane Supply and everything it holds?",
+    });
+    const press = within(confirm).getByRole("button", { name: "Delete it" });
+    await waitFor(() => expect(press).toBeEnabled());
+
+    await user.click(press);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(message);
+    await waitFor(() =>
+      expect(screen.queryByRole("link", { name: "Harbour Lane Supply" })).toBeNull(),
+    );
+    await waitFor(() => expect(alert).toHaveFocus());
+  });
+
+  it("returns focus to the trash when the refusal leaves it free", async () => {
+    serveTheLab({ status: 500, code: "internal_error", message: "The lab failed." });
+    window.localStorage.setItem("agent-lab.confirm-before-delete", "false");
+    const user = userEvent.setup();
+    renderShops();
+
+    await user.click(await trash("Harbour Lane Supply"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The lab failed.");
+    const again = screen.getByRole("button", { name: "Delete Harbour Lane Supply" });
+    await waitFor(() => expect(again).toHaveFocus());
+    expect(again).toBeEnabled();
+  });
+
+  it("says a count it could not read, and still deletes", async () => {
+    serveTheLab();
+    server.use(
+      http.get("*/api/v1/shops/:shopId/tickets", () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "The tickets could not be read.", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderShops();
+    await user.click(await trash("Harbour Lane Supply"));
+    const confirm = screen.getByRole("group", {
+      name: "Delete Harbour Lane Supply and everything it holds?",
+    });
+
+    await within(confirm).findByText(
+      "What it holds could not be counted: The tickets could not be read.",
+    );
+    const press = within(confirm).getByRole("button", { name: "Delete it" });
+    expect(press).toBeEnabled();
+    await user.click(press);
+
+    await screen.findByText("Deleted Harbour Lane Supply and everything it held.");
+    expect(deletes).toEqual([HARBOUR]);
+  });
+
+  it("holds the row's trash while its delete is in flight, and sends one delete at a time", async () => {
+    let settle: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    serveTheLab(undefined, { gate });
+    window.localStorage.setItem("agent-lab.confirm-before-delete", "false");
+    const user = userEvent.setup();
+    renderShops();
+
+    await user.click(await trash("Harbour Lane Supply"));
+
+    const inFlight = screen.getByRole("button", { name: "Delete Harbour Lane Supply" });
+    await waitFor(() => expect(inFlight).toBeDisabled());
+    expect(inFlight).toHaveAttribute("title", DELETING_SHOP);
+    // Another shop's trash, pressed while the first delete has not answered, sends nothing.
+    await user.click(screen.getByRole("button", { name: "Delete Fjord Supply" }));
+    expect(deletes).toEqual([HARBOUR]);
+
+    settle();
+
+    await screen.findByText("Deleted Harbour Lane Supply and everything it held.");
+    expect(deletes).toEqual([HARBOUR]);
+    expect(screen.getByRole("link", { name: "Fjord Supply" })).toBeVisible();
+  });
+});
+
+describe("the switcher after a shop is deleted (ADR 0077)", () => {
+  const HARBOUR = "1b2c3d4e-5f60-4718-9a0b-c1d2e3f4a5b6";
+  const FJORD = "2c3d4e5f-6071-4829-8b1c-d2e3f4a5b6c7";
+  const LAST_VISITED = "agent-lab.last-visited-shop";
+  let held: ShopListResponse["shops"] = [];
+
+  function serveTwoShops() {
+    held = [
+      {
+        shop_id: HARBOUR,
+        name: "Harbour Lane Supply",
+        slug: "harbour-lane-supply",
+        updated_at: "2026-10-02T12:05:00+00:00",
+        latest_published_version: null,
+        published_version_count: 0,
+        logo: null,
+      },
+      {
+        shop_id: FJORD,
+        name: "Fjord Supply",
+        slug: "fjord-supply",
+        updated_at: "2026-10-02T12:04:00+00:00",
+        latest_published_version: null,
+        published_version_count: 0,
+        logo: null,
+      },
+    ];
+    window.localStorage.setItem("agent-lab.confirm-before-delete", "false");
+    server.use(
+      http.get("*/api/v1/shops", () => HttpResponse.json({ shops: held })),
+      http.delete("*/api/v1/shops/:shopId", ({ params }) => {
+        held = held.filter((shop) => shop.shop_id !== params.shopId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+  }
+
+  it("lists only the shops that remain, and forgets the remembered shop it named", async () => {
+    serveTwoShops();
+    window.localStorage.setItem(LAST_VISITED, HARBOUR);
+    const user = userEvent.setup();
+    const { router } = renderShops();
+
+    await user.click(await screen.findByRole("button", { name: "Delete Harbour Lane Supply" }));
+    await screen.findByText("Deleted Harbour Lane Supply and everything it held.");
+
+    expect(window.localStorage.getItem(LAST_VISITED)).toBeNull();
+    await router.navigate("/lab/judges");
+    await user.click(await screen.findByRole("button", { name: /^Switch shop/ }));
+    const menu = screen.getByRole("menu", { name: "Shops" });
+    expect(within(menu).queryByRole("menuitem", { name: /Harbour Lane Supply/ })).toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: /Fjord Supply/ })).toBeVisible();
+  });
+
+  it("keeps the remembered shop when another one is deleted", async () => {
+    serveTwoShops();
+    window.localStorage.setItem(LAST_VISITED, FJORD);
+    const user = userEvent.setup();
+    renderShops();
+
+    await user.click(await screen.findByRole("button", { name: "Delete Harbour Lane Supply" }));
+    await screen.findByText("Deleted Harbour Lane Supply and everything it held.");
+
+    expect(window.localStorage.getItem(LAST_VISITED)).toBe(FJORD);
   });
 });

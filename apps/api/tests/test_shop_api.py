@@ -446,3 +446,51 @@ async def test_a_logo_outside_the_closed_sets_is_refused_by_the_contract(
 
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
+
+
+async def test_a_never_published_shop_is_deleted_once_and_then_unknown(
+    client: AsyncClient,
+) -> None:
+    """ADR 0077: 204 with no body, and a repeat answers 404 as an order's delete does."""
+    shop_id = (await client.post("/api/v1/shops", json={"identity": IDENTITY})).json()["shop_id"]
+
+    deleted = await client.delete(f"/api/v1/shops/{shop_id}")
+    again = await client.delete(f"/api/v1/shops/{shop_id}")
+
+    assert deleted.status_code == 204
+    assert deleted.content == b""
+    assert again.status_code == 404
+    assert again.json()["code"] == "shop_not_found"
+    assert (await client.get(f"/api/v1/shops/{shop_id}/draft")).status_code == 404
+    assert (await client.get("/api/v1/shops")).json() == {"shops": []}
+
+
+async def test_a_published_shop_is_kept_with_a_409_naming_its_versions(
+    client: AsyncClient,
+) -> None:
+    shop_id = (await client.post("/api/v1/shops", json={"identity": IDENTITY})).json()["shop_id"]
+    await client.put(f"/api/v1/shops/{shop_id}/draft", json={"payload": PAYLOAD})
+    assert (await client.post(f"/api/v1/shops/{shop_id}/versions")).status_code == 201
+    edited = {**PAYLOAD, "products": [{**PRODUCT, "title": "Alpine Shell Jacket II"}]}
+    await client.put(f"/api/v1/shops/{shop_id}/draft", json={"payload": edited})
+    assert (await client.post(f"/api/v1/shops/{shop_id}/versions")).status_code == 201
+
+    refused = await client.delete(f"/api/v1/shops/{shop_id}")
+
+    assert refused.status_code == 409
+    body = refused.json()
+    assert set(body) == {"code", "message", "request_id"}
+    assert body["code"] == "shop_published"
+    assert body["message"] == (
+        f"shop {shop_id} is kept because it has published 2 versions: "
+        "its versions are what experiments are explained by"
+    )
+    assert refused.headers["X-Request-ID"] == body["request_id"]
+    assert (await client.get(f"/api/v1/shops/{shop_id}/draft")).status_code == 200
+
+
+async def test_deleting_a_shop_that_never_existed_is_404(client: AsyncClient) -> None:
+    missing = await client.delete(f"/api/v1/shops/{uuid4()}")
+    assert missing.status_code == 404
+    assert missing.json()["code"] == "shop_not_found"
+    assert (await client.delete("/api/v1/shops/not-a-uuid")).status_code == 422

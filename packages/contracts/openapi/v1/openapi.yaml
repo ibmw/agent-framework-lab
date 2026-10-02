@@ -1031,6 +1031,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}:
+    delete:
+      summary: Delete a shop that never published, with everything it holds
+      description: Removes the shop's draft, the drafts of its tickets and scenarios,
+        its orders, its attachments and its images. The customer profiles, support
+        identities, blocks, agent configurations and judges it used are kept. A shop
+        that has published a version, or that an experiment names, is refused.
+      operationId: deleteShop
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '204':
+          description: Successful Response
+        '404':
+          description: The shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The shop has published a version and is kept (`shop_published`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid shop identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/shops/{shop_id}/orders:
     get:
       summary: List the authored order fixtures of one shop

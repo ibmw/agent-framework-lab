@@ -1,6 +1,6 @@
 # ADR 0060 — Removing is deliberate: the confirm takes the row's place, and a preference can remove it
 
-Status: accepted — 2026-09-23
+Status: accepted, amended by ADR 0077 (a shop that never published can be deleted, with everything it holds) — 2026-09-23
 
 Settles `docs/design-direction.md`'s rule *Removing is deliberate* (`form-decisions.md` 9.2) for
 every Remove, Delete and Detach in the workspace, and the sixth browser preference that governs

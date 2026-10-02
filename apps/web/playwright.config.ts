@@ -20,7 +20,10 @@ import {
 // And it is one stack *per worker* rather than one for the run: `tests/e2e/support/stack.ts`
 // says why. The count below is the same number in both places, which is the whole arrangement —
 // a worker with no stack of its own would have no frontend to drive.
-const runId = randomUUID();
+// Kept in the environment, so the workers — which load this file again — share it rather than
+// minting their own, and a spec can find its worker's media root (`shop-deletion.spec.ts`).
+const runId = process.env.AGENT_LAB_E2E_RUN_ID ?? randomUUID();
+process.env.AGENT_LAB_E2E_RUN_ID = runId;
 
 type Server = Extract<PlaywrightTestConfig["webServer"], readonly unknown[]>[number];
 

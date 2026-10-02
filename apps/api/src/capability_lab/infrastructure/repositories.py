@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.dml import Insert
+from sqlalchemy.sql.dml import Delete, Insert
 from sqlalchemy.sql.expression import Exists
 
 from capability_lab.application.agent_configurations import AGENT_CONFIGURATION_CODEC
@@ -1205,6 +1205,19 @@ class SqlAlchemyDefinitionRepository[PayloadT]:
             updated_at=model.updated_at,
         )
 
+    def draft_exists(self, definition: DefinitionId) -> bool:
+        # A query rather than `Session.get`, which would answer from the identity map a draft
+        # this session loaded before another one deleted it.
+        return (
+            self._session.scalar(
+                select(DefinitionDraftModel.definition_id).where(
+                    DefinitionDraftModel.definition_type == definition.definition_type.value,
+                    DefinitionDraftModel.definition_id == str(definition.id),
+                )
+            )
+            is not None
+        )
+
     def save_draft(self, record: DefinitionDraftRecord[PayloadT]) -> None:
         definition = record.definition
         document = cast("dict[str, object]", self._codec.document(record.payload))
@@ -1393,8 +1406,26 @@ class SqlAlchemyPublishedVersionDirectory:
         return _published_version(model, definition)
 
 
+def _deleted_rows(session: Session, statement: Delete) -> int:
+    """Run a bulk delete and answer how many rows it removed.
+
+    `synchronize_session=False`: these deletes run before anything in the request has loaded
+    the rows they remove, so there is no identity map to bring up to date, and the count is the
+    statement's own rather than one the ORM recomputed.
+    """
+    result = cast(
+        CursorResult[Any],
+        session.execute(statement.execution_options(synchronize_session=False)),
+    )
+    return result.rowcount
+
+
 class SqlAlchemyShopDirectory:
-    """Existence check for a shop, without decoding its whole catalog document."""
+    """A shop's own draft row and the drafts scoped to it, without decoding a catalog document.
+
+    Also the deletes ADR 0077 declares on `definition_drafts`: the shop's own draft, guarded in
+    the statement itself, and the ticket and scenario drafts scoped to it.
+    """
 
     def __init__(self, session: Session) -> None:
         self._session = session
@@ -1408,6 +1439,43 @@ class SqlAlchemyShopDirectory:
                 )
             )
             is not None
+        )
+
+    def delete_unpublished(self, shop_id: UUID) -> bool:
+        """One statement: the shop's draft goes only while nothing has published or run on it.
+
+        The condition is inside the `DELETE`, so under SQLite's single writer a publish or an
+        experiment that committed first makes it false, and one that writes after it finds no
+        draft (ADR 0077).
+        """
+        published = exists().where(
+            DefinitionVersionModel.definition_type == DefinitionType.SHOP.value,
+            DefinitionVersionModel.definition_id == str(shop_id),
+        )
+        experimented = exists().where(ExperimentModel.shop_id == str(shop_id))
+        statement = delete(DefinitionDraftModel).where(
+            DefinitionDraftModel.definition_type == DefinitionType.SHOP.value,
+            DefinitionDraftModel.definition_id == str(shop_id),
+            ~published,
+            ~experimented,
+        )
+        return _deleted_rows(self._session, statement) == 1
+
+    def delete_scoped_to(self, shop_id: UUID) -> int:
+        return _deleted_rows(
+            self._session,
+            delete(DefinitionDraftModel).where(DefinitionDraftModel.shop_id == str(shop_id)),
+        )
+
+    def published_version_count(self, shop_id: UUID) -> int:
+        return (
+            self._session.scalar(
+                select(func.count()).where(
+                    DefinitionVersionModel.definition_type == DefinitionType.SHOP.value,
+                    DefinitionVersionModel.definition_id == str(shop_id),
+                )
+            )
+            or 0
         )
 
 
@@ -1488,6 +1556,15 @@ class SqlAlchemyDefinitionShopAttachmentRepository:
             )
         ).all()
         return frozenset(UUID(row) for row in rows)
+
+    def detach_shop(self, shop_id: UUID) -> int:
+        """Every attachment naming the shop; the definitions themselves are not touched."""
+        return _deleted_rows(
+            self._session,
+            delete(DefinitionShopAttachmentModel).where(
+                DefinitionShopAttachmentModel.shop_id == str(shop_id)
+            ),
+        )
 
     def attachment_counts(self, definition_type: DefinitionType) -> dict[UUID, int]:
         rows = self._session.execute(
@@ -1586,6 +1663,13 @@ class SqlAlchemyShopMediaRepository:
         model = self._session.get(ShopMediaAssetModel, (str(shop_id), sha256))
         return None if model is None else _media_asset(model)
 
+    def delete_for_shop(self, shop_id: UUID) -> int:
+        """Every row the shop holds. The files are removed after the commit, by composition."""
+        return _deleted_rows(
+            self._session,
+            delete(ShopMediaAssetModel).where(ShopMediaAssetModel.shop_id == str(shop_id)),
+        )
+
 
 class SqlAlchemyOrderFixtureRepository:
     """Store one shop's authored orders as canonical `order-fixture-v1` documents.
@@ -1652,6 +1736,12 @@ class SqlAlchemyOrderFixtureRepository:
             raise OrderReferenceExistsError(
                 f"another order in this shop already uses the reference {record.payload.reference}"
             ) from error
+
+    def delete_for_shop(self, shop_id: UUID) -> int:
+        return _deleted_rows(
+            self._session,
+            delete(OrderFixtureModel).where(OrderFixtureModel.shop_id == str(shop_id)),
+        )
 
     def delete(self, shop_id: UUID, order_id: UUID) -> bool:
         model = self._session.get(OrderFixtureModel, (str(shop_id), str(order_id)))

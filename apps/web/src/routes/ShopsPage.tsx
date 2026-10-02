@@ -1,17 +1,20 @@
 import type { ShopLogoViewSchema, ShopSummarySchema, SupportChannel } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
-import { createShop, listShops } from "../api/shops";
+import { createShop, deleteShop, listShops } from "../api/shops";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { RemovalNotice } from "../components/ConfirmRemove";
 import { CreatePage } from "../components/CreatePage";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
+import { RemoveButton } from "../components/ItemList";
 import { LocaleField } from "../components/LocaleField";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { ShopBadge } from "../components/ShopBadge";
+import { ShopDeleteConfirm } from "../components/ShopDeleteConfirm";
 import { ShopLogoCard } from "../components/ShopLogoCard";
 import { ToggleChipGroup } from "../components/ToggleChipGroup";
 import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
@@ -28,11 +31,15 @@ import {
 } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import { currencyForLocale, DEFAULT_LOCALE } from "../lib/locales";
+import { forgetLastVisitedShop, readLastVisitedShop } from "../lib/preferences";
 import { pythonStrip } from "../lib/pythonText";
+import { useRemoval } from "../lib/removal";
 import { shopSlugFromName } from "../lib/shop";
+import { DELETING_SHOP, PUBLISHED_SHOP_KEPT } from "../lib/shopDeletion";
 import {
   accentButtonClasses,
   fieldControlClasses,
+  focusRingClasses,
   formatTimestamp,
   outlineButtonClasses,
   surfaceClasses,
@@ -42,6 +49,10 @@ import {
 import { AppShell } from "../shell/AppShell";
 
 const SUPPORT_CHANNELS = optionsOf(SUPPORT_CHANNEL);
+
+function deletedNotice(shop: ShopSummarySchema): string {
+  return `Deleted ${shop.name} and everything it held.`;
+}
 
 /** A ready-made identity for the form, for an operator who came to see the product rather than
  * to name a shop. It fills the four fields and creates nothing: what gets written is still
@@ -94,8 +105,10 @@ function useShops() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const reload = useCallback(async (signal?: AbortSignal) => {
-    setShops((await listShops(signal)).shops);
+    const listed = (await listShops(signal)).shops;
+    setShops(listed);
     setLoadError(null);
+    return listed;
   }, []);
 
   useEffect(() => {
@@ -114,13 +127,79 @@ function useShops() {
     return () => controller.abort();
   }, [reload]);
 
-  return { shops, loading, loadError };
+  /** Takes one shop out of the listing the page holds, before the read that confirms it. */
+  const drop = useCallback((shopId: string) => {
+    setShops((current) => current.filter((shop) => shop.shop_id !== shopId));
+  }, []);
+
+  return { shops, loading, loadError, reload, drop };
 }
 
 export function ShopsPage() {
-  const { shops, loading, loadError } = useShops();
+  const { shops, loading, loadError, reload, drop } = useShops();
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // One subject — the lab's shops — so no scope: the confirm stands on one row at a time.
+  const removal = useRemoval();
+  const keptLineId = useId();
+  const deleting = useRef(false);
+  // The shop whose delete is in flight: its trash is held meanwhile (ADR 0063), so the row does
+  // not look idle and cannot arm the confirm again.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const alertRef = useRef<HTMLParagraphElement>(null);
+  // Bumped when a refusal leaves no trash to hand focus back to; the alert takes it instead.
+  const [focusAlert, setFocusAlert] = useState(0);
+  useEffect(() => {
+    if (focusAlert > 0) {
+      alertRef.current?.focus();
+    }
+  }, [focusAlert]);
+
+  /**
+   * The delete, once the confirm has been answered (ADR 0077). It is a write, so the notice
+   * waits for it (ADR 0060): the row leaves the listing the page holds, the stored last-visited
+   * shop is forgotten when it named this one, and the listing is read again so the index — and
+   * the switcher the next workspace draws from its own read — says only what remains. A refusal
+   * says the lab's reason over the table and walks the confirm back.
+   */
+  async function remove(shop: ShopSummarySchema): Promise<boolean> {
+    if (deleting.current) {
+      // One delete at a time: a second press while the first is in flight sends nothing.
+      return false;
+    }
+    deleting.current = true;
+    setDeletingId(shop.shop_id);
+    setDeleteError(null);
+    try {
+      await deleteShop(shop.shop_id);
+    } catch (cause: unknown) {
+      setDeleteError(
+        cause instanceof LabApiError ? cause.message : "The shop could not be deleted.",
+      );
+      // What the lab now holds, whichever way the refusal went: a shop published or deleted
+      // elsewhere since this listing was read is drawn as it is.
+      const listed = await reload().catch(() => null);
+      deleting.current = false;
+      setDeletingId(null);
+      // The walk-back returns focus to the trash that asked; a trash now held (the shop was
+      // published) or gone (it was deleted elsewhere) cannot take it, so the alert does.
+      const now = listed?.find((entry) => entry.shop_id === shop.shop_id);
+      if (listed !== null && (now === undefined || now.latest_published_version !== null)) {
+        setFocusAlert((count) => count + 1);
+      }
+      return false;
+    }
+    if (readLastVisitedShop() === shop.shop_id) {
+      forgetLastVisitedShop();
+    }
+    drop(shop.shop_id);
+    deleting.current = false;
+    setDeletingId(null);
+    // Read again for what else moved; the row is already gone, so a failed read changes nothing.
+    void reload().catch(() => undefined);
+    return true;
+  }
 
   // Name or slug, the two the prototype's shops search reads (`Workspace.dc.html`, the
   // `shownShops` filter) and the two this table prints in its first column.
@@ -176,37 +255,91 @@ export function ShopsPage() {
                 <th className={tableHeadClasses}>Shop</th>
                 <th className={tableHeadClasses}>Published</th>
                 <th className={tableHeadClasses}>Draft updated</th>
+                <th className={tableHeadClasses}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {visible.map((shop) => (
-                <tr key={shop.shop_id}>
-                  <td className={tableCellClasses}>
-                    {/* The frame's row (`Workspace.dc.html`:179): the badge, then the name
+              {visible.map((shop) =>
+                removal.isArmed(shop.shop_id) ? (
+                  <ShopDeleteConfirm
+                    key={shop.shop_id}
+                    shopId={shop.shop_id}
+                    name={shop.name}
+                    columns={4}
+                    onConfirm={removal.confirm(() => remove(shop), deletedNotice(shop))}
+                    onKeep={removal.keep}
+                  />
+                ) : (
+                  <tr key={shop.shop_id}>
+                    <td className={tableCellClasses}>
+                      {/* The frame's row (`Workspace.dc.html`:179): the badge, then the name
                         over the slug. The badge is drawn for every shop — its logo, or its
                         initials — so the names start on one line down the column. */}
-                    <div className="flex min-w-0 items-center gap-[11px]">
-                      <ShopBadge name={shop.name} logo={shop.logo} size={30} />
-                      <div className="min-w-0">
-                        <Link
-                          className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                          to={`/shops/${shop.shop_id}`}
-                        >
-                          {shop.name}
-                        </Link>
-                        <div className="text-admin-muted">{shop.slug}</div>
+                      <div className="flex min-w-0 items-center gap-[11px]">
+                        <ShopBadge name={shop.name} logo={shop.logo} size={30} />
+                        <div className="min-w-0">
+                          <Link
+                            className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                            to={`/shops/${shop.shop_id}`}
+                          >
+                            {shop.name}
+                          </Link>
+                          <div className="text-admin-muted">{shop.slug}</div>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className={tableCellClasses}>
-                    <PublicationPill record={shop} />
-                  </td>
-                  <td className={tableCellClasses}>{formatTimestamp(shop.updated_at)}</td>
-                </tr>
-              ))}
+                    </td>
+                    <td className={tableCellClasses}>
+                      <PublicationPill record={shop} />
+                    </td>
+                    <td className={tableCellClasses}>{formatTimestamp(shop.updated_at)}</td>
+                    <td className={tableCellClasses}>
+                      {/* The only place a shop is deleted from (ADR 0077). */}
+                      <span className="flex items-center justify-end">
+                        <RemoveButton
+                          name={shop.name}
+                          label={`Delete ${shop.name}`}
+                          entryKey={shop.shop_id}
+                          removal={removal}
+                          notice={deletedNotice(shop)}
+                          held={
+                            deletingId === shop.shop_id
+                              ? DELETING_SHOP
+                              : shop.latest_published_version !== null
+                                ? PUBLISHED_SHOP_KEPT
+                                : undefined
+                          }
+                          describedBy={keptLineId}
+                          onRemove={() => remove(shop)}
+                        />
+                      </span>
+                    </td>
+                  </tr>
+                ),
+              )}
             </tbody>
           </table>
         )}
+        {/* Said once under the table rather than per row, and named by every held trash. */}
+        {!loading &&
+        !loadError &&
+        visible.some((shop) => shop.latest_published_version !== null) ? (
+          <p id={keptLineId} className="px-4 py-3 text-[13px] text-admin-muted">
+            {PUBLISHED_SHOP_KEPT}
+          </p>
+        ) : null}
+        {deleteError ? (
+          <p
+            ref={alertRef}
+            tabIndex={-1}
+            role="alert"
+            className={`px-4 py-3 text-[13px] text-lab-error ${focusRingClasses}`}
+          >
+            {deleteError}
+          </p>
+        ) : null}
+        <RemovalNotice removal={removal} />
       </section>
     </AppShell>
   );

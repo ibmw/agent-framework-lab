@@ -139,8 +139,8 @@ the seed ships real images. The operator asked for it on 2 October 2026. Unlike 
 settings, a dependency, routes and their contract, each shipped with its consumer under the
 delivery rules above. `docs/PLAN-UX.md` is the authority for its scope, order and checks. ADR
 0076 records the store, the reference and the narrowing of what a shop draft write accepts inside
-`v1` on the operator's decision, superseding ADR 0013's deferral of binary media; Slice 42 writes
-ADR 0077, the exception to ADR 0060 for a shop that never published. Acceptance is that plan's.
+`v1` on the operator's decision, superseding ADR 0013's deferral of binary media; ADR 0077
+records the exception to ADR 0060 for a shop that never published. Acceptance is that plan's.
 
 ## Deferred decision triggers
 

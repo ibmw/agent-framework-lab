@@ -36,6 +36,17 @@ export async function createShop(
   );
 }
 
+/**
+ * Deletes a shop that never published, with everything it holds (ADR 0077). A published shop
+ * is refused with 409 `shop_published`, and an unknown one with 404.
+ */
+export async function deleteShop(shopId: string): Promise<void> {
+  const response = await fetch(shopsPath(`/${encodeURIComponent(shopId)}`), { method: "DELETE" });
+  if (!response.ok) {
+    await read<never>(response);
+  }
+}
+
 export async function getShopDraft(
   shopId: string,
   signal?: AbortSignal,

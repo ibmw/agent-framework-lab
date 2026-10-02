@@ -182,6 +182,20 @@ class ShopService(DefinitionAuthoringService[ShopPayload]):
             raise MediaNotUploadedError(tuple(path for path, _ in refused))
         return super().replace_draft(definition_id, payload)
 
+    def publish(self, definition_id: UUID) -> ShopVersionRecord:
+        """Publish, and refuse a version whose shop was deleted while it was being frozen.
+
+        The draft is read before the version is written, and under SQLite's lazy transactions
+        that read takes no lock: a delete of a never-published shop (ADR 0077) can commit
+        between the two. Once the version is written this transaction holds the write lock, so
+        the draft read again here is the committed truth, and a shop deleted underneath is
+        refused — rolling the version back — rather than left with a version and no draft.
+        """
+        version = super().publish(definition_id)
+        if not self._repository.draft_exists(shop_definition_id(definition_id)):
+            raise ShopNotFoundError(f"shop {definition_id} was deleted while it was publishing")
+        return version
+
     def _held_media(self, definition_id: UUID) -> frozenset[str]:
         return frozenset(asset.sha256 for asset in self._media.list_for_shop(definition_id))
 

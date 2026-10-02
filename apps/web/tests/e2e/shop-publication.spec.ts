@@ -325,4 +325,13 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await expect.poll(() => naturalWidth(stillFrozen)).toBe(8);
   expect(await stillFrozen.getAttribute("src")).toBe(frozenSource);
   await expect(page.getByText("ocean-blue-back.png")).toHaveCount(0);
+
+  // A published shop is kept: its trash on the shops index is held and says why (ADR 0077).
+  await page.goto("/shops");
+  const kept = page.getByRole("button", { name: `Delete Northstar ${unique}` });
+  await expect(kept).toBeDisabled();
+  await expect(kept).toHaveAttribute(
+    "title",
+    "A published shop is kept: its versions are what experiments are explained by.",
+  );
 });

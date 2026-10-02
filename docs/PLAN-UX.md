@@ -46,7 +46,7 @@ The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
 - **No backend change unless the slice says so.** A slice that says so ships its contract, its
   persistence and migration, and its frontend consumer together, as `docs/PLAN.md`'s delivery
   rules require, and its *Checks* line names the backend tests, the migration test and the
-  contract check beside Vitest and Playwright. Slices 42 and 43 say so.
+  contract check beside Vitest and Playwright. Slice 43 says so.
 - **Standing decisions hold.** ADR 0044 refused a stored checklist and ADR 0045 removed the
   derived progress strip; ADR 0049 keeps the tours per surface; ADR 0051 asks about unsaved work
   once; ADR 0052 and ADR 0053 decide the connection and the provider; ADR 0054 decides the two
@@ -83,7 +83,7 @@ Milestone 11's were taken by the operator on 2 October 2026, so that no slice ha
   then everything it holds goes: its draft, its orders, its tickets, its scenarios, and its
   uploaded images with their directory. A published shop cannot be deleted and says why.
   ADR 0060 ("a published shop version and a recorded run are never deletable") and ADR 0019
-  (snapshots are never deleted) stand; Slice 42's ADR records the exception for a shop that
+  (snapshots are never deleted) stand; ADR 0077 records the exception for a shop that
   never published. The delete is offered on the shops index's row and nowhere else.
 - **An image is dropped, browsed for, or picked from the shop's library** — the images already
   uploaded to this shop, reused without uploading them again.
@@ -115,16 +115,14 @@ application, and the verdict on each slice of the 13 September plan — is
 Milestones 8, 9 and 10 are delivered. Their record is the commits and ADR 0052–0074; their goals
 and acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md`,
 `docs/history/PLAN-UX-2026-09-28.md` and `docs/history/PLAN-UX-2026-09-29.md`. Milestone 11's
-first three slices are delivered, and their record is ADR 0076, its amendments for the shop's
-library and for *Replace* and the thumbnails, and their commits; what every later slice stands
-on — the store, the reference, the table, the settings, the routes and their contract, the write
-rule, the gate, the library the form picks from, and the image drawn on the item, the frozen
-version and the catalog — is there. Its two remaining slices run in order, 42 and 43, one
-branch each:
+first four slices are delivered, and their record is ADR 0076, its amendments for the shop's
+library and for *Replace* and the thumbnails, ADR 0077, and their commits; what the last slice
+stands on — the store, the reference, the table, the settings, the routes and their contract, the
+write rule, the gate, the library the form picks from, the image drawn on the item, the frozen
+version and the catalog, and the delete of a shop that never published — is there. Its one
+remaining slice runs on a branch of its own:
 
-- **42** deletes a shop that never published. It needs ADR 0076's store to remove the directory.
-- **43** makes the seed ship real images through ADR 0076's store. It needs nothing else, and
-  may land before 42 if the operator wants the QA lab's images sooner.
+- **43** makes the seed ship real images through ADR 0076's store. It needs nothing else.
 
 ## Milestone 11 — A product's images are files the shop holds
 
@@ -151,104 +149,13 @@ The model every slice builds on, which ADR 0076 records with its reasons:
   byte_size, file_name, created_at)`, unique on `(shop_id, sha256)`, is the shop's claim on them.
   The same bytes uploaded twice are one image, under the file name of the first upload.
 - **Nothing removes a file while its shop stands.** Published versions and snapshots are never
-  changed or deleted (ADR 0012, ADR 0019, ADR 0060); the only removal is Slice 42's delete of a
+  changed or deleted (ADR 0012, ADR 0019, ADR 0060); the only removal is ADR 0077's delete of a
   shop that never published, which takes the whole directory. A file no row claims is never
   served, because serving reads the row first, and goes with its shop's directory.
 - **Only uploads are written.** A draft write whose media reference is not an image the shop
   holds is refused; a stored version's written references still read.
 - **Served as an image and nothing else**, with its stored type, `nosniff`, a sandboxing
   `Content-Security-Policy`, `inline` and `immutable`, and logged by hash, type and size only.
-
-### Slice 42 — A shop that never published can be deleted
-
-The shops index deletes a shop that never published, with its draft, orders, tickets, scenarios
-and images; a published shop is refused and says why.
-
-- [ ] Write ADR 0077 (the next free number after ADR 0076; check `docs/adr/` at branch time) with
-  the slice. It amends ADR 0060 with the lab's first delete of a whole definition: a shop with no
-  published version — and so no ticket or scenario version, no snapshot and no experiment, each of
-  which needs a published shop version (ADR 0012, ADR 0016, ADR 0019) — can be deleted whole. The
-  service checks both conditions the operator named, no published version and no experiment
-  naming the shop. What goes: the shop's draft, the drafts of its tickets and scenarios
-  (`definition_drafts` by `shop_id`), its orders (`shop_order_fixtures`), its attachments
-  (`definition_shop_attachments`), its media rows and its directory. What stays: the
-  shop-independent definitions it had attached — profiles, identities, blocks, configurations and
-  judges. It accepts one risk: a directory whose removal fails after the commit is left behind,
-  holding files no row names, never served, and logged by shop ID. ADR 0060's sentence on a
-  published shop version and ADR 0019 stand.
-- [ ] **Application.** `ShopService` (`application/shops.py:90`) gains `delete_shop(shop_id)` over
-  ports declared in `application/`. Its first write is one conditional statement — delete the
-  shop's draft where no published version of it and no experiment naming it exists — and the rest
-  follow only when that one removed a row; otherwise it answers 404 for an unknown shop and 409
-  `shop_published`, naming how many versions, for a published one. SQLite's single writer orders
-  it against a publish: a publish that commits first makes the delete's condition false, and a
-  publish after it finds no draft. An upload racing it lands no row, because the media insert is
-  conditional on the draft too (ADR 0076). A repeated delete answers 404, as an order's does.
-- [ ] **The directory goes after the commit.** The route's dependency (`presentation/api.py:1866`
-  opens a `session_scope` per service; `infrastructure/database.py:35–42` commits when it exits)
-  gains a deletion dependency that yields the use case inside its own `session_scope` and, after
-  that block has committed, removes the directory of the shop the use case reports deleted through
-  `MediaStore`. Nothing is removed when the scope rolls back.
-- [ ] **Infrastructure.** The repositories in `infrastructure/repositories.py` gain the deletes the
-  ports declare, each on its own tables; no schema change and no migration.
-- [ ] **Route and contract.** `DELETE /api/v1/shops/{shop_id}` (`deleteShop`, 204; 404; 409 with
-  `shop_published`), registered as the order's is (`presentation/orders.py:495–503`); the
-  contract and its types regenerated.
-- [ ] **The shops index** (`ShopsPage.tsx:120`, a row :183) gains a last column holding the trash,
-  "Delete {name}" (ADR 0075, as the catalog's `RemoveButton` with its `label`,
-  `ProductsPage.tsx:298`), the only place a shop is deleted from. On a shop with a published
-  version it is held (`RemoveButton`'s `held`, `components/ItemList.tsx:166–193`; ADR 0063): "A
-  published shop is kept: its versions are what experiments are explained by." The confirm takes
-  the row's place in the warm red (ADR 0075), "Delete {name} and everything it holds?", its
-  consequence counting what goes — products, orders, tickets, scenarios, images — from the shop's
-  listings and `listShopMedia`, read once when the confirm opens and never per row (ADR 0062's
-  rule), and saying "Customers, identities and blocks it used are kept." The preference removes
-  the second press (ADR 0060). After it the row goes and the notice line takes focus.
-- [ ] **The switcher after a delete.** The index reads its listing again (`useShops`,
-  `ShopsPage.tsx:91`). The other shop lists read on mount — the shop workspace's
-  (`refreshShops`, `shell/ShopWorkspace.tsx:69`), the lab's (`shell/LabWorkspace.tsx:125`) and
-  the lab surfaces' (`shell/useLabSurface.ts:22`) — and `/shops` mounts neither mode, so the
-  switcher next drawn lists the shops that remain. The stored last-visited shop is cleared with
-  `forgetLastVisitedShop` (`lib/preferences.ts:79`) when it names the deleted shop, so no surface
-  holds a dead identifier between reads; resolving it against the list (ADR 0054,
-  `useLabSurface.ts:44`) stays the guard for one deleted elsewhere.
-- [ ] `docs/design-direction.md`: *Removing is deliberate* names the shop's delete, and a
-  *Departures* row says the prototype's shops index draws no row action; `docs/architecture.md`
-  says a definition is never deleted except a shop that never published (ADR 0077).
-
-Frames: `Workspace.dc.html` :148–200 (the shops index; a row :178–196, no row action), :3927
-(Settings' "A published shop version and a recorded run are never deletable").
-
-Authority: ADR 0012, ADR 0019, ADR 0054, ADR 0060, ADR 0062, ADR 0063, ADR 0075, ADR 0076.
-
-Departures to record: the shops index's trash, which the prototype does not draw, on the
-operator's decision of 2 October 2026; ADR 0060's exception for a shop that never published, in
-ADR 0077.
-
-Backend change: yes — a use case, repository deletes, a deletion dependency and a route with its
-contract; no migration.
-
-Branch: `feat/delete-unpublished-shop`. Checks: backend — a new `test_shop_deletion.py`: it
-enumerates every mapped table with a `shop_id` column from `Base.metadata` and asserts each holds
-no row for the deleted shop — emptied, or provably empty for a shop that never published
-(`definition_versions`, `sandbox_snapshots`, `sandboxes`, `sandbox_action_proposals`,
-`experiments`, `experiment_runs`) — and still holds the other shop's; the attached profile,
-identity and block kept; a published shop refused; a shop an experiment names refused; a publish
-and a delete racing, one winning; an upload after the delete landing no row; the directory removed
-after the commit and kept when the scope rolls back. `test_shop_api.py` (204, then 404; 409 and
-its body). `test_migrations.py`'s `test_model_metadata_matches_migrated_schema` (:535) unchanged
-and green. Contract — `make check-contracts` and `test_api_contract.py`. Vitest — the shops
-index's tests (`Indexes.test.tsx`, `App.test.tsx`) for the trash held with its reason, the
-confirm and its counts, the preference, the focus after; a new test that after a delete the
-switcher lists the remaining shops and the last-visited shop is forgotten when it was the deleted
-one; `App.test.tsx` *opens on the shops index when the remembered shop is no longer there*
-(:5332). Playwright — a new `shop-deletion.spec.ts`: a shop is created, given an order and an
-image, and deleted from the index through its confirm; and `shop-publication.spec.ts` sees its
-published shop's trash held.
-
-Slice evidence: on the shops index, the operator presses the trash on a shop never published;
-the confirm counts its orders and images; *Delete* takes the row away, the switcher no longer
-offers it, and the shop's media directory is gone. A published shop's trash says why it is kept.
 
 ### Slice 43 — The seed ships real images
 
