@@ -16,9 +16,11 @@ asserted in a docstring.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import socket
 from collections.abc import Iterator
+from importlib import resources
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -39,10 +41,13 @@ from capability_lab.application.sandbox_tool_contracts import (
     TOOL_CONTRACT_VERSIONS,
 )
 from capability_lab.application.sandbox_tools import ToolOutcome
+from capability_lab.application.shop_media import MediaType, media_type_of
+from capability_lab.application.shops import ShopService
 from capability_lab.domain.agent_turn import AgentTurnOutcome
 from capability_lab.domain.blocks import ObjectiveAssessment
 from capability_lab.domain.evaluation import ExperimentStatus, ObjectiveOutcome
 from capability_lab.domain.experiment import ArmAwaiting, ComparisonDimension
+from capability_lab.domain.shop import MediaAssetReference
 from capability_lab.infrastructure import models
 from capability_lab.infrastructure.agents.scripted import INCIDENT_TOOLS, incident_runtimes
 from capability_lab.infrastructure.clock import SystemClock
@@ -54,6 +59,7 @@ from capability_lab.infrastructure.database import (
     session_scope,
 )
 from capability_lab.infrastructure.judges import ControlJudgeRuntime
+from capability_lab.infrastructure.media_store import FilesystemMediaStore
 from capability_lab.infrastructure.telemetry import create_run_tracer, create_telemetry
 from capability_lab.presentation.seed import content
 from capability_lab.presentation.seed.cli import main
@@ -65,6 +71,7 @@ from capability_lab.presentation.seed.runner import (
     DatabaseNotMigratedError,
     default_alembic_config,
     head_revision,
+    occupied_tables,
     run_seed,
 )
 from capability_lab.presentation.seed.services import SeedServices, build_services
@@ -111,9 +118,21 @@ def _database(path: Path, *, stamp: str | None) -> str:
     return url
 
 
+def media_root_for(url: str) -> Path:
+    """The media root beside a suite database, under the test's own temporary directory.
+
+    Beside the file as `var/media` sits beside `var/agent-lab.db`, so a test seeds one lab
+    and never the checkout's `var/media`.
+    """
+    return Path(url.removeprefix("sqlite:///")).parent / "seed-media"
+
+
 def settings_for(url: str) -> Settings:
-    """Declared defaults with the database moved, so no `.env` reaches this suite."""
-    return get_default_settings().model_copy(update={"database_url": url})
+    """Declared defaults with the database and the media root moved, so no `.env` reaches
+    this suite and nothing it seeds lands in the checkout."""
+    return get_default_settings().model_copy(
+        update={"database_url": url, "media_root": media_root_for(url)}
+    )
 
 
 @pytest.fixture
@@ -135,6 +154,8 @@ def read(url: str) -> Iterator[SeedServices]:
             ),
             JudgeRuntimeRegistry({control.provider: control}),
             create_run_tracer(create_telemetry(get_default_settings())),
+            FilesystemMediaStore(media_root_for(url)),
+            media_max_bytes=get_default_settings().media_max_bytes,
         )
     engine.dispose()
 
@@ -439,9 +460,35 @@ def test_the_seeded_shop_carries_the_content_the_studio_screens_read(
     shop = services.shops.get_version(seeded.shop_id, 1).payload
 
     assert len(shop.products) >= 3
-    # No media until the seed stores its images through the upload service: a written
-    # reference is refused on write (ADR 0076), and `product_without_media` only warns.
     assert all(product.variants for product in shop.products)
+    # Every product carries its images, each named by the file it shipped as and the words
+    # it was written with, in the order the Media card lists them.
+    assert {
+        product.handle: [
+            (
+                services.media.open(seeded.shop_id, _hash_of(entry.reference)).asset.file_name,
+                entry.alt_text,
+            )
+            for entry in product.media
+        ]
+        for product in shop.products
+    } == {
+        handle: [(image.file_name, image.alt_text) for image in images]
+        for handle, images in content.PRODUCT_IMAGES.items()
+    }
+    # And each reference is an image the shop holds whose bytes hash to it: the very file
+    # the package ships, stored as the type its first bytes say.
+    for product in shop.products:
+        for entry in product.media:
+            held = services.media.open(seeded.shop_id, _hash_of(entry.reference))
+            assert hashlib.sha256(held.content).hexdigest() == held.asset.sha256
+            assert held.asset.reference == entry.reference
+            image = _shipped(held.asset.file_name)
+            assert held.content == content.image_bytes(image)
+            assert held.asset.content_type is _type_named_by(image.file_name)
+    assert {asset.file_name for asset in services.media.list(seeded.shop_id)} == {
+        image.file_name for image in content.product_images()
+    }
     assert content.SHIPPING_POLICY_ID in {policy.id for policy in shop.policies}
     assert len(shop.faq) >= 3
     assert len(shop.support_guidelines) >= 2
@@ -452,6 +499,46 @@ def test_the_seeded_shop_carries_the_content_the_studio_screens_read(
     assert addresses[content.CURRENT_ADDRESS_ID].is_default
     assert addresses[content.CURRENT_ADDRESS_ID].city == "Lyon"
     assert addresses[content.STALE_ADDRESS_ID].city == "Bordeaux"
+
+
+def _hash_of(reference: str) -> str:
+    parsed = MediaAssetReference.of(reference)
+    assert parsed is not None, f"{reference} is not an image the shop holds"
+    return parsed.sha256
+
+
+def _shipped(file_name: str) -> content.ProductImage:
+    [image] = [image for image in content.product_images() if image.file_name == file_name]
+    return image
+
+
+_EXTENSION_TYPES = {".jpg": MediaType.JPEG, ".png": MediaType.PNG, ".webp": MediaType.WEBP}
+
+
+def _type_named_by(file_name: str) -> MediaType:
+    return _EXTENSION_TYPES[Path(file_name).suffix]
+
+
+SEED_IMAGE_LIMIT = 16 * 1024
+"""What one of the seed's images may weigh: small enough to commit, by the slice's rule."""
+
+
+def test_the_images_the_package_ships_are_the_ones_the_seed_names_and_each_is_storable() -> None:
+    """Read through `importlib.resources`, as an installed seed reads them.
+
+    The directory is enumerated rather than the names, so a file added without being named,
+    or named without being shipped, fails here; and each is held to the lab's own rule —
+    its first bytes a PNG, a JPEG or a WebP agreeing with its extension — and to the size a
+    committed image may have. Between them the four cover every type the lab stores.
+    """
+    shipped = resources.files("capability_lab.presentation.seed").joinpath("images")
+    files = {entry.name: entry.read_bytes() for entry in shipped.iterdir() if entry.is_file()}
+
+    assert set(files) == {image.file_name for image in content.product_images()}
+    for name, data in files.items():
+        assert len(data) < SEED_IMAGE_LIMIT, f"{name} is {len(data)} bytes"
+        assert media_type_of(data) is _type_named_by(name), name
+    assert {media_type_of(data) for data in files.values()} == set(MediaType)
 
 
 # -- what it refuses -----------------------------------------------------------
@@ -465,18 +552,57 @@ async def test_the_seed_refuses_a_database_that_already_holds_one(
     It names what is in the way and changes nothing: the experiment that was already there
     is still the only one, still with its own identifier.
     """
+    stored_before = _files_under(media_root_for(migrated))
+    assert len(stored_before) == len(content.product_images())
+
     with pytest.raises(DatabaseNotEmptyError) as refusal:
         await run_seed(settings_for(migrated), alembic_config=alembic_config)
+
+    # Nothing was uploaded a second time: the same files, and only those.
+    assert _files_under(media_root_for(migrated)) == stored_before
 
     occupied = dict(refusal.value.occupied)
     assert occupied["experiments"] == 1
     assert occupied["definition_versions"] > 0
+    assert occupied["shop_media_assets"] == len(content.product_images())
     assert "delete the database file" in str(refusal.value)
+    # The media root goes with the database, so the refusal names it beside the file.
+    assert f"the media root {media_root_for(migrated)}" in str(refusal.value)
 
     for services in read(migrated):
         page = services.history.history(ExperimentHistoryQuery())
         assert page.total == 1
         assert page.entries[0].record.experiment_id == seeded.experiment_id
+
+
+async def test_a_seed_that_fails_after_its_uploads_leaves_neither_rows_nor_images(
+    migrated: str, alembic_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The rollback takes the rows, and the seed takes the images it wrote with them.
+
+    The next run mints another shop, so a directory the failed run left would never be
+    reclaimed: the seed removes it before the failure reaches the operator, and a rerun
+    holds the seeded shop's directory and nothing else.
+    """
+
+    def refuse(self: ShopService, definition_id: UUID) -> Any:
+        raise RuntimeError("publishing failed")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(ShopService, "publish", refuse)
+        with pytest.raises(RuntimeError, match="publishing failed"):
+            await run_seed(settings_for(migrated), alembic_config=alembic_config)
+
+    engine = create_database_engine(migrated)
+    with session_scope(create_session_factory(engine)) as session:
+        assert occupied_tables(session) == ()
+    engine.dispose()
+    shops = media_root_for(migrated) / "shops"
+    assert not shops.exists() or list(shops.iterdir()) == []
+
+    seeded, _url = await run_seed(settings_for(migrated), alembic_config=alembic_config)
+
+    assert [path.name for path in shops.iterdir()] == [str(seeded.shop_id)]
 
 
 def test_the_tables_the_seed_guards_are_derived_from_the_mapped_schema() -> None:
@@ -597,6 +723,11 @@ async def test_the_seed_runs_the_whole_story_with_the_network_removed(
 
     assert url == migrated
     assert len(seeded.run_ids) == 2
+    # The images went to the temporary media root this run was given, and nowhere else.
+    stored = media_root_for(migrated) / "shops" / str(seeded.shop_id)
+    assert sorted(path.name for path in stored.iterdir()) == sorted(
+        hashlib.sha256(content.image_bytes(image)).hexdigest() for image in content.product_images()
+    )
     # Both arms answered, which is what makes this a test rather than a formality. The
     # runner records an unrecognized exception from a runtime as a failed attempt and moves
     # on (ADR 0026), and a turn counts as delivered whether or not it was ever answered — so
@@ -646,6 +777,15 @@ def test_the_command_says_why_it_refused_and_answers_with_a_failure(
     assert captured.out == ""
     assert "Refusing to seed" in captured.err
     assert "already holds seeded data" in captured.err
+
+
+def _files_under(root: Path) -> dict[str, str]:
+    """Every file under a media root, by its path below the root, with its bytes' hash."""
+    return {
+        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in root.rglob("*")
+        if path.is_file()
+    }
 
 
 def _is_uuid(word: str) -> bool:

@@ -8,6 +8,7 @@ is posted at and asserted to come back untouched with its occupied tables named.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
@@ -22,7 +23,10 @@ from capability_lab.infrastructure.database import (
     create_session_factory,
 )
 from capability_lab.presentation.api import create_app
+from capability_lab.presentation.seed import content
 from capability_lab.presentation.seed.runner import default_alembic_config, head_revision
+
+_TYPES = {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 
 
 @pytest.fixture
@@ -32,9 +36,17 @@ def alembic_config() -> Path:
     return located
 
 
+def _media_root_for(url: str) -> Path:
+    """Beside the suite's database, under the test's own temporary directory."""
+    return Path(url.removeprefix("sqlite:///")).parent / "lab-seed-media"
+
+
 def _settings_for(url: str) -> Settings:
-    """Declared defaults with the database moved, so no `.env` reaches this suite."""
-    return get_default_settings().model_copy(update={"database_url": url})
+    """Declared defaults with the database and the media root moved, so no `.env` reaches
+    this suite and nothing the route seeds lands in the checkout's `var/media`."""
+    return get_default_settings().model_copy(
+        update={"database_url": url, "media_root": _media_root_for(url)}
+    )
 
 
 def _database(path: Path, *, stamp: str | None) -> str:
@@ -90,6 +102,50 @@ async def test_seeding_an_empty_lab_writes_the_demo_and_names_what_it_wrote(
     assert experiment.status_code == 200
 
 
+async def test_the_seeded_catalog_names_images_the_api_serves_as_their_own_type(
+    client: AsyncClient,
+) -> None:
+    """The route stores the seed's images where the app serves them from (ADR 0076).
+
+    Read as a browser reads them: the published version names each image, and the media
+    route answers its bytes — the very file the package ships — under the type its first
+    bytes say. The gate passed, so version 1 exists, and it warns of no product without one.
+    """
+    shop_id = (await client.post("/api/v1/lab-seed")).json()["shop_id"]
+
+    version = await client.get(f"/api/v1/shops/{shop_id}/versions/1")
+    assert version.status_code == 200
+    products = version.json()["content"]["products"]
+    library = (await client.get(f"/api/v1/shops/{shop_id}/media")).json()["media"]
+    file_name_of = {item["reference"]: item["file_name"] for item in library}
+
+    # Each product names the images it was written with, by file and alt text, in order.
+    assert {
+        product["handle"]: [
+            (file_name_of[entry["reference"]], entry["alt_text"]) for entry in product["media"]
+        ]
+        for product in products
+    } == {
+        handle: [(image.file_name, image.alt_text) for image in images]
+        for handle, images in content.PRODUCT_IMAGES.items()
+    }
+
+    # And each is served as the file the package ships, under the type its bytes say.
+    for product in products:
+        for entry in product["media"]:
+            sha256 = entry["reference"].removeprefix("asset:sha256:")
+            response = await client.get(f"/api/v1/shops/{shop_id}/media/{sha256}")
+            assert response.status_code == 200
+            assert hashlib.sha256(response.content).hexdigest() == sha256
+            file_name = file_name_of[entry["reference"]]
+            assert response.content == content.image_bytes(_shipped(file_name))
+            assert response.headers["content-type"] == _TYPES[Path(file_name).suffix]
+
+    preview = (await client.get(f"/api/v1/shops/{shop_id}/draft/preview")).json()
+    assert preview["publishable"] is True
+    assert [issue for issue in preview["issues"] if issue["code"] == "product_without_media"] == []
+
+
 async def test_seeding_a_lab_that_holds_anything_refuses_and_leaves_it_alone(
     client: AsyncClient,
 ) -> None:
@@ -107,6 +163,7 @@ async def test_seeding_a_lab_that_holds_anything_refuses_and_leaves_it_alone(
     assert "already holds seeded data" in message
     assert "definition_drafts" in message
     assert "delete the database file" in message
+    assert "the media root" in message
     # And the refusal is a refusal: what was there before is still there, unmerged.
     assert (await client.get(f"/api/v1/shops/{shop_id}/draft")).status_code == 200
     assert len((await client.get("/api/v1/shops")).json()["shops"]) == 1
@@ -123,6 +180,11 @@ async def test_seeding_a_database_behind_the_migration_head_refuses(tmp_path: Pa
     assert response.json()["code"] == "seed_refused"
     assert "migration head" in response.json()["message"]
     assert _drafts_in(url) == 0
+
+
+def _shipped(file_name: str) -> content.ProductImage:
+    [image] = [image for image in content.product_images() if image.file_name == file_name]
+    return image
 
 
 def _drafts_in(url: str) -> int:

@@ -15,6 +15,7 @@ process is configured for.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from io import BytesIO
 from uuid import UUID
 
 from capability_lab.application.agent_capabilities import (
@@ -135,9 +136,21 @@ async def seed_demo(services: SeedServices) -> DemoSeed:
 
 
 def _shop(services: SeedServices) -> UUID:
+    """The shop, its images uploaded before the draft that names them.
+
+    Each image goes through `ShopMediaService.upload`, the service the upload route calls, and
+    keeps its file name; the draft then names the references the uploads answered, because a
+    draft write refuses media the shop does not hold (ADR 0076).
+    """
     created = services.shops.create_shop(content.shop_identity())
     shop_id = created.definition.id
-    services.shops.replace_draft(shop_id, content.shop_payload())
+    references = {
+        image.file_name: services.media.upload(
+            shop_id, image.file_name, BytesIO(content.image_bytes(image))
+        ).asset.reference
+        for image in content.product_images()
+    }
+    services.shops.replace_draft(shop_id, content.shop_payload(references))
     services.shops.publish(shop_id)
     return shop_id
 

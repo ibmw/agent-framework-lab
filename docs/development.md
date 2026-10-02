@@ -27,12 +27,13 @@ shop and ends at a run with evidence on it — so a freshly migrated database sh
 everywhere.
 
 `make seed` fills it with one complete example: the wrong-address incident, authored end to end and
-driven to completion under both agent frameworks (ADR 0043). It writes a shop with a catalog, policies
-and a voice, the customer and the order the incident is about, the published ticket and recipe, two
-agent configurations differing only in the framework, a published judge, and one finished two-arm
-experiment carrying tool calls, a fired fault, decided objectives, a judge verdict, measured cost, a
-note and three tags. It goes through the same application services the API's routes call, so every
-publish gate and the setup gate apply to it exactly as they apply to an operator.
+driven to completion under both agent frameworks (ADR 0043). It writes a shop with a catalog and its
+images, policies and a voice, the customer and the order the incident is about, the published
+ticket and recipe, two agent configurations differing only in the framework, a published judge,
+and one finished two-arm experiment carrying tool calls, a fired fault, decided objectives, a judge
+verdict, measured cost, a note and three tags. It goes through the same application services the
+API's routes call, so every publish gate and the setup gate apply to it exactly as they apply to
+an operator.
 
 The seed needs no credential and contacts no provider: both arms run their real framework adapters
 against a double at each SDK's own model seam, so the run costs nothing and tells the same story with
@@ -51,11 +52,15 @@ A product's images are files the shop holds (ADR 0076). Their bytes live under t
 `var/media` unless `AGENT_LAB_MEDIA_ROOT` says otherwise, at `shops/{shop_id}/{sha256}`, and the
 database's `shop_media_assets` names which shop holds which; one upload is at most
 `AGENT_LAB_MEDIA_MAX_BYTES`, 5 MiB by default. The two go together: a database without its media
-root serves no image, and a media root without its database holds files nothing names.
+root serves no image, and a media root without its database holds files nothing names. The seed
+stores its four images — flat drawings made for the lab, shipped in the package under
+`presentation/seed/images/` — through the same service an upload uses, so they land in the media
+root the settings name and keep their file names.
 
 It refuses rather than merging. A database that is not at the migration head, or that holds any row
 in a table the story writes — seeded before, or authored by hand — is left untouched, and the tables
-that stopped it are named. To start again, reset the database and the media root together:
+that stopped it are named, beside the media root that goes with them. To start again, reset the
+database and the media root together:
 
 1. stop the API and the web server;
 2. delete the database file `AGENT_LAB_DATABASE_URL` names — `var/agent-lab.db` by default — with
@@ -72,7 +77,9 @@ make migrate && make seed
 
 Run it once when a change says so. Since product images became uploads, a draft write refuses a
 media reference that is not an image the shop holds, so a lab whose shops still carry the written
-references of before is reset rather than migrated (ADR 0076).
+references of before is reset rather than migrated (ADR 0076). A lab seeded before the seed
+shipped images carries none until it is reset: the seed refuses a lab that holds anything rather
+than adding them.
 
 The same seed is a button, on `/settings` under *The fast path* (ADR 0047). It posts to
 `/api/v1/lab-seed`, which awaits the function the command awaits and is subject to both refusals

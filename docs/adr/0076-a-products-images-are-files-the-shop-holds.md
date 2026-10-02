@@ -242,8 +242,8 @@ the frontend's only.
   removal and an addition, because the diff keys an entry by its reference; the published version
   keeps the old hash and the shop keeps its file.
 - The seed (Slice 43) stores its images through `ShopMediaService.upload`, never the route, so the
-  seed reaches the world through application services as ADR 0043 requires. Until then the
-  seed's products carry no media, which `product_without_media` only warns about.
+  seed reaches the world through application services as ADR 0043 requires: four flat drawings
+  shipped in the package, one per type the lab stores, each keeping its file name.
 
 ## Consequences
 

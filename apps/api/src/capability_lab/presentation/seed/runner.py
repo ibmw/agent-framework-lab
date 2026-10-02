@@ -17,6 +17,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -25,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from capability_lab.application.agent_runtime import SupportAgentRuntimeRegistry
 from capability_lab.application.judge_runtime import JudgeRuntimeRegistry
+from capability_lab.application.shop_media import MediaStore
 from capability_lab.infrastructure import models
 from capability_lab.infrastructure.agents.scripted import incident_runtimes
 from capability_lab.infrastructure.clock import SteppingClock
@@ -35,6 +37,7 @@ from capability_lab.infrastructure.database import (
     session_scope,
 )
 from capability_lab.infrastructure.judges import ControlJudgeRuntime
+from capability_lab.infrastructure.media_store import FilesystemMediaStore
 from capability_lab.infrastructure.telemetry import create_run_tracer, create_telemetry
 from capability_lab.presentation.seed.demo import DemoSeed, seed_demo
 from capability_lab.presentation.seed.services import build_services
@@ -104,13 +107,16 @@ class DatabaseNotMigratedError(SeedRefusedError):
 class DatabaseNotEmptyError(SeedRefusedError):
     """The database already holds authored or recorded rows, and none are overwritten."""
 
-    def __init__(self, occupied: tuple[tuple[str, int], ...], database_url: str) -> None:
+    def __init__(
+        self, occupied: tuple[tuple[str, int], ...], database_url: str, media_root: Path
+    ) -> None:
         listing = ", ".join(f"{table} ({rows})" for table, rows in occupied)
         super().__init__(
             f"{database_url} already holds seeded data: {listing}. The seed writes one "
             "complete example into an empty database and never merges with, overwrites or "
             "deletes what is already there. To start again, delete the database file this "
-            "URL points at and run `make migrate` before `make seed`."
+            f"URL points at and the media root {media_root} with it, then run `make migrate` "
+            "before `make seed`."
         )
         self.occupied = occupied
 
@@ -183,6 +189,33 @@ def default_alembic_config() -> Path | None:
     return None
 
 
+class _ShopsWrittenFor:
+    """The media store, recording every shop it is asked to write for.
+
+    So a seed that fails after its uploads can remove what it wrote: the store stays behind
+    its port, and only directories of shops this run created are ever removed.
+    """
+
+    def __init__(self, store: MediaStore) -> None:
+        self._store = store
+        self._shops: list[UUID] = []
+
+    def put(self, shop_id: UUID, sha256: str, content: bytes) -> None:
+        if shop_id not in self._shops:
+            self._shops.append(shop_id)
+        self._store.put(shop_id, sha256, content)
+
+    def open(self, shop_id: UUID, sha256: str) -> bytes | None:
+        return self._store.open(shop_id, sha256)
+
+    def remove_shop(self, shop_id: UUID) -> None:
+        self._store.remove_shop(shop_id)
+
+    def remove_written(self) -> None:
+        for shop_id in self._shops:
+            self._store.remove_shop(shop_id)
+
+
 def _control_judge() -> JudgeRuntimeRegistry:
     control = ControlJudgeRuntime()
     return JudgeRuntimeRegistry({control.provider: control})
@@ -235,24 +268,36 @@ async def run_seed(
         with session_scope(factory) as session:
             occupied = occupied_tables(session)
             if occupied:
-                raise DatabaseNotEmptyError(occupied, database_url)
+                raise DatabaseNotEmptyError(occupied, database_url, settings.media_root)
 
         composition = _compose()
         configured = create_telemetry(settings)
         try:
-            with session_scope(factory) as session:
-                # One session and one transaction for the whole story: a seed that failed
-                # halfway would otherwise leave a partly authored shop behind and then
-                # refuse to run again because the database was no longer empty.
-                seeded = await seed_demo(
-                    build_services(
-                        session,
-                        SteppingClock(DEMO_STARTS_AT),
-                        composition.runtimes,
-                        composition.judges,
-                        create_run_tracer(configured),
+            # Where the API serves a shop's images from, so the seed's are served too
+            # (ADR 0076), and remembering which shops it wrote for.
+            media_store = _ShopsWrittenFor(FilesystemMediaStore(settings.media_root))
+            try:
+                with session_scope(factory) as session:
+                    # One session and one transaction for the whole story: a seed that
+                    # failed halfway would otherwise leave a partly authored shop behind and
+                    # then refuse to run again because the database was no longer empty.
+                    seeded = await seed_demo(
+                        build_services(
+                            session,
+                            SteppingClock(DEMO_STARTS_AT),
+                            composition.runtimes,
+                            composition.judges,
+                            create_run_tracer(configured),
+                            media_store,
+                            media_max_bytes=settings.media_max_bytes,
+                        )
                     )
-                )
+            except BaseException:
+                # The rollback took the shop's rows, and the next run mints another shop
+                # identifier, so nothing would ever reclaim the images this run wrote. Each
+                # shop here was created by this run, so its whole directory is this run's.
+                media_store.remove_written()
+                raise
         finally:
             configured.shutdown()
     finally:

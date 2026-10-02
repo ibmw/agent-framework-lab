@@ -42,6 +42,7 @@ from capability_lab.application.sandbox_tools import SandboxToolService
 from capability_lab.application.sandboxes import SandboxService
 from capability_lab.application.scenario_mutations import ScenarioMutationRuntime
 from capability_lab.application.scenarios import ScenarioService
+from capability_lab.application.shop_media import MediaStore, ShopMediaService
 from capability_lab.application.shops import ShopService
 from capability_lab.application.support_identities import SupportIdentityService
 from capability_lab.application.tickets import TicketService
@@ -83,6 +84,7 @@ class SeedServices:
     """Every service the demo story needs, over one session and one clock."""
 
     shops: ShopService
+    media: ShopMediaService
     profiles: CustomerProfileService
     identities: SupportIdentityService
     orders: OrderFixtureService
@@ -109,12 +111,17 @@ def build_services(
     runtimes: SupportAgentRuntimeRegistry,
     judge_runtimes: JudgeRuntimeRegistry,
     run_tracer: RunTracer,
+    media_store: MediaStore,
+    *,
+    media_max_bytes: int,
 ) -> SeedServices:
     """Compose the whole chain over one session.
 
     One session for the whole seed, and one clock for the runner and the faults that fire
     into it — the same pairing `presentation/api.py` makes, and for the same reason: a fault
-    that read a clock of its own would cost the run it fired into nothing.
+    that read a clock of its own would cost the run it fired into nothing. The media store
+    and its cap are the caller's, as the database is: `run_seed` builds them from the
+    settings it was given, so the seed's images land where the API serves them from.
     """
     published_versions = SqlAlchemyPublishedVersionDirectory(session)
     attachments = SqlAlchemyDefinitionShopAttachmentRepository(session)
@@ -173,8 +180,16 @@ def build_services(
     evaluation = ExperimentEvaluationService(
         experiments, objective_block_repository(session), judgements
     )
+    shop_media = SqlAlchemyShopMediaRepository(session)
     return SeedServices(
-        shops=ShopService(shop_repository(session), clock, SqlAlchemyShopMediaRepository(session)),
+        shops=ShopService(shop_repository(session), clock, shop_media),
+        media=ShopMediaService(
+            shop_media,
+            media_store,
+            SqlAlchemyShopDirectory(session),
+            clock,
+            max_bytes=media_max_bytes,
+        ),
         profiles=CustomerProfileService(
             customer_profile_repository(session),
             attachments,

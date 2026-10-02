@@ -12,7 +12,10 @@ address-book entry, which is the Lyon one the arms redirect to. Changing any of 
 without changing it there leaves both arms asking for something the world does not hold.
 """
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from decimal import Decimal
+from importlib import resources
 from uuid import UUID
 
 from capability_lab.application.agent_capabilities import (
@@ -55,6 +58,7 @@ from capability_lab.domain.shop import (
     Currency,
     FaqEntry,
     FulfilmentMethod,
+    MediaReference,
     Money,
     OptionDefinition,
     PaymentMethod,
@@ -191,7 +195,73 @@ def _eur(amount: str) -> Money:
     return Money(amount=Decimal(amount), currency=Currency.EUR)
 
 
-def _alpine_shell_jacket() -> Product:
+@dataclass(frozen=True, slots=True)
+class ProductImage:
+    """One of the seed's images: the file it ships as, and what it shows in words.
+
+    The file name is also the name the upload keeps, so the editor's Media card names each
+    image by the file it came from (ADR 0076).
+    """
+
+    file_name: str
+    alt_text: str
+
+
+PRODUCT_IMAGES: dict[str, tuple[ProductImage, ...]] = {
+    "alpine-shell-jacket": (
+        ProductImage(
+            file_name="alpine-shell-ocean-blue.jpg",
+            alt_text="Alpine Shell Jacket in Ocean Blue, hood up",
+        ),
+        ProductImage(
+            file_name="alpine-shell-detail-seams.jpg",
+            alt_text="Taped seam detail on the shoulder",
+        ),
+    ),
+    "fjord-merino-base-layer": (
+        ProductImage(
+            file_name="fjord-base-layer-slate.png",
+            alt_text="Fjord Merino Base Layer in Slate",
+        ),
+    ),
+    "harbour-dry-bag-20l": (
+        ProductImage(
+            file_name="harbour-dry-bag-sand.webp",
+            alt_text="Harbour Dry Bag 20L in Sand, rolled closed",
+        ),
+    ),
+}
+"""Each product's images by its handle, in the order its Media card lists them.
+
+Flat drawings made for the lab, with no photograph and no third-party work in them, so their
+licence is the repository's. One JPEG pair, one PNG and one WebP, so the seed stores every
+type the lab accepts through the same service an upload uses.
+"""
+
+
+def product_images() -> tuple[ProductImage, ...]:
+    """Every image the seed ships, in catalog order."""
+    return tuple(image for images in PRODUCT_IMAGES.values() for image in images)
+
+
+def image_bytes(image: ProductImage) -> bytes:
+    """The image's bytes as the package ships them, so an installed seed finds them too."""
+    return (
+        resources.files("capability_lab.presentation.seed")
+        .joinpath("images", image.file_name)
+        .read_bytes()
+    )
+
+
+def _media(handle: str, references: Mapping[str, str]) -> tuple[MediaReference, ...]:
+    """A product's media entries, each naming the image the shop holds for its file."""
+    return tuple(
+        MediaReference(reference=references[image.file_name], alt_text=image.alt_text)
+        for image in PRODUCT_IMAGES[handle]
+    )
+
+
+def _alpine_shell_jacket(references: Mapping[str, str]) -> Product:
     return Product(
         handle="alpine-shell-jacket",
         title="Alpine Shell Jacket",
@@ -229,6 +299,7 @@ def _alpine_shell_jacket() -> Product:
                 price=_eur("249.00"),
             ),
         ),
+        media=_media("alpine-shell-jacket", references),
         attributes=(
             TypedAttribute(
                 key="waterproof-rating",
@@ -269,7 +340,7 @@ def _alpine_shell_jacket() -> Product:
     )
 
 
-def _fjord_base_layer() -> Product:
+def _fjord_base_layer(references: Mapping[str, str]) -> Product:
     return Product(
         handle="fjord-merino-base-layer",
         title="Fjord Merino Base Layer",
@@ -299,6 +370,7 @@ def _fjord_base_layer() -> Product:
                 price=_eur("89.00"),
             ),
         ),
+        media=_media("fjord-merino-base-layer", references),
         attributes=(
             TypedAttribute(
                 key="fabric-weight",
@@ -325,7 +397,7 @@ def _fjord_base_layer() -> Product:
     )
 
 
-def _harbour_dry_bag() -> Product:
+def _harbour_dry_bag(references: Mapping[str, str]) -> Product:
     return Product(
         handle="harbour-dry-bag-20l",
         title="Harbour Dry Bag 20L",
@@ -352,6 +424,7 @@ def _harbour_dry_bag() -> Product:
                 price=_eur("45.00"),
             ),
         ),
+        media=_media("harbour-dry-bag-20l", references),
         attributes=(
             TypedAttribute(
                 key="capacity",
@@ -499,11 +572,19 @@ def _tone_of_voice() -> tuple[ToneOfVoiceGuideline, ...]:
     )
 
 
-def shop_payload() -> ShopPayload:
-    """The whole shop as a publishable draft: catalog, policies, FAQ, and voice."""
+def shop_payload(references: Mapping[str, str]) -> ShopPayload:
+    """The whole shop as a publishable draft: catalog, policies, FAQ, and voice.
+
+    `references` maps each of `product_images()`'s file names to the reference its upload
+    answered, because a draft names only images the shop holds (ADR 0076).
+    """
     return ShopPayload(
         identity=shop_identity(),
-        products=(_alpine_shell_jacket(), _fjord_base_layer(), _harbour_dry_bag()),
+        products=(
+            _alpine_shell_jacket(references),
+            _fjord_base_layer(references),
+            _harbour_dry_bag(references),
+        ),
         faq=_faq(),
         policies=_policies(),
         payment_methods=(
