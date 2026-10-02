@@ -1,7 +1,7 @@
-# UX plan
+# UX plan — a product's images are files the shop holds
 
-Status: no milestone open — 2026-10-01. Open slices only: a slice that lands is removed from this
-file. Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
+Status: proposed — 2026-10-02. Open slices only: a slice that lands is removed from this file.
+Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
 `docs/history/PLAN-UX-2026-09-13.md`; the 20 September plan, whose delivered Milestone 8's goal
 and acceptance criteria are in `docs/history/PLAN-UX-2026-09-20.md`; the 28 September plan,
 whose delivered Milestone 9's are in `docs/history/PLAN-UX-2026-09-28.md`; and the 29 September
@@ -11,7 +11,12 @@ plan, whose delivered Milestone 10's are in `docs/history/PLAN-UX-2026-09-29.md`
 
 `docs/PLAN.md` records what the lab holds; this plan records how the operator's workspace reaches
 the design it was handed on 19 September 2026: the whole-workspace prototype in
-`tmp/design-frames/Workspace.html`, its handoff `README.md`, and `form-decisions.md`. Read, in
+`tmp/design-frames/Workspace.html`, its handoff `README.md`, and `form-decisions.md`. Since
+2 October 2026 it also records how a product's images become files the shop holds — dropped,
+browsed for or picked from the shop's own library, and replaced on their item — and how a shop
+that never published is deleted with everything it holds (Milestone 11). The prototype draws
+neither, so each of those slices writes its departure. Milestone 11 is the first milestone of
+this plan that moves the backend, a contract and a migration. Read, in
 order, `AGENTS.md`, `docs/product-direction.md`, `docs/architecture.md`, `docs/PLAN.md`'s delivery
 rules, `docs/design-direction.md` (its *Authority* section settles which authority governs where the
 prototype, the README and the codebase disagree), then a slice's brief and the ADRs it names.
@@ -35,8 +40,13 @@ The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
   where HTTP participates, Playwright only where a covered journey changes. `make check` and
   `pnpm build` pass before handoff, and `pnpm test:e2e` when the *Checks* line names a spec.
 - **No new UI dependency.** The primitives are the class sets in `lib/ui.ts` and the chrome in
-  `components/WorkspaceChrome.tsx` and `shell/AppShell.tsx`.
-- **No backend change unless the slice says so.** None of the slices below says so.
+  `components/WorkspaceChrome.tsx` and `shell/AppShell.tsx`. A drop zone and the operating
+  system's file picker are the platform's own — `<input type="file">` and the drag events —
+  and Slice 40a's `python-multipart` is the API's dependency, not the UI's.
+- **No backend change unless the slice says so.** A slice that says so ships its contract, its
+  persistence and migration, and its frontend consumer together, as `docs/PLAN.md`'s delivery
+  rules require, and its *Checks* line names the backend tests, the migration test and the
+  contract check beside Vitest and Playwright. Slices 40a, 42 and 43 say so; Slices 40b and 41 do not.
 - **Standing decisions hold.** ADR 0044 refused a stored checklist and ADR 0045 removed the
   derived progress strip; ADR 0049 keeps the tours per surface; ADR 0051 asks about unsaved work
   once; ADR 0052 and ADR 0053 decide the connection and the provider; ADR 0054 decides the two
@@ -67,6 +77,35 @@ Three things the prototype draws are decided outside this plan, so that no slice
   settings zones, and how a timestamp is written and what a reset puts back are ADR 0058;
   confirm-before-delete landed with the confirm it governs (ADR 0060); the logo is ADR 0070.
 
+Milestone 11's were taken by the operator on 2 October 2026, so that no slice has to:
+
+- **Only a shop that never published, and so never ran an experiment, can be deleted** — and
+  then everything it holds goes: its draft, its orders, its tickets, its scenarios, and its
+  uploaded images with their directory. A published shop cannot be deleted and says why.
+  ADR 0060 ("a published shop version and a recorded run are never deletable") and ADR 0019
+  (snapshots are never deleted) stand; Slice 42's ADR records the exception for a shop that
+  never published. The delete is offered on the shops index's row and nowhere else.
+- **An image is dropped, browsed for, or picked from the shop's library** — the images already
+  uploaded to this shop, reused without uploading them again.
+- **Written references are refused outright.** From Slice 40a, every media reference a draft
+  write carries that is not an image the shop holds is refused, whatever the stored draft held.
+  Stored versions and snapshots still read the written references they hold, and
+  `catalog.product` still returns them, because a version is immutable. Narrowing what
+  `PUT /api/v1/shops/{shop_id}/draft` accepts inside `v1` is accepted
+  because the lab is in development and the operator decided it; ADR 0076 records it against
+  `docs/api-and-schema-conventions.md`'s "never silently changes `v1`" (:16). The development
+  database is reset and reseeded when Slice 40a lands, by the steps that slice writes into
+  `docs/development.md`, and once more after Slice 43 to give the QA lab the seed's images.
+- **An image keeps its original file name, for display only.** It names the image on the item
+  and on its controls; it is never a path, never logged and never in telemetry. No pixel
+  dimensions are kept.
+- **An uploaded file is removed only with its shop.** No sweep on save and no button; a file
+  any published version names is kept for as long as the version is, which is forever.
+- **PNG, JPEG and WebP, told by their first bytes, at most 5 MiB** in a typed setting. No SVG
+  and no GIF.
+- **No uploaded logo in this milestone.** ADR 0070's *Deliberately not here* stands for the
+  logo.
+
 The assessment that produced this plan — the prototype read screen by screen against the
 application, and the verdict on each slice of the 13 September plan — is
 `docs/history/PLAN-UX-2026-09-13.md`.
@@ -75,8 +114,496 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Milestones 8, 9 and 10 are delivered. Their record is the commits and ADR 0052–0074; their goals
 and acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md`,
-`docs/history/PLAN-UX-2026-09-28.md` and `docs/history/PLAN-UX-2026-09-29.md`. No UX milestone
-is open: the next one is planned here, under the rules above, when the operator asks for it.
+`docs/history/PLAN-UX-2026-09-28.md` and `docs/history/PLAN-UX-2026-09-29.md`. Milestone 11
+runs its five slices in order, 40a, 40b, 41, 42 and 43, one branch each:
+
+- **40a goes first.** It lays down what every later slice stands on — the store, the reference,
+  the table and its migration, the settings, the upload, list and serve routes with their
+  contract, the write rule and the gate, and ADR 0076 — with the Media card that consumes them.
+- **40b** gives the form the shop's library to pick from, so an image is reused across products
+  without uploading it again.
+- **41** gives the item *Replace* and draws the image wherever a reference is shown today. It is
+  the frontend's only.
+- **42** deletes a shop that never published. It needs 40a's store to remove the directory and
+  nothing of 40b or 41.
+- **43** makes the seed ship real images through 40a's store. It needs only 40a, and may land
+  before 40b, 41 and 42 if the operator wants the QA lab's images sooner.
+
+## Milestone 11 — A product's images are files the shop holds
+
+### Goal
+
+An operator giving a product an image drags a file onto the form, browses for one, or picks one
+the shop already holds, and sees it — on the item, in the library, on the frozen version and in
+the catalog — rather than typing a path to a file nothing serves. Every image is a file the shop
+holds, stored by its content and never overwritten, so a published version and a snapshot keep
+the exact bytes they were frozen with. An image is replaced on its item without retyping its alt
+text. A shop that never published can be deleted, and its images go with it. The seed ships real
+images. The operator asked for it on 2 October 2026, as a replacement of every media attachment
+rather than a second way beside the old one.
+
+The model every slice builds on, which ADR 0076 records with its reasons:
+
+- **The reference stays a string.** A media entry is still `{reference, alt_text}`
+  (`MediaReference`, `domain/shop.py:236–244`; `MediaReferenceSchema`, `openapi.yaml:8853`), and
+  an uploaded image's reference is `asset:sha256:<64 lowercase hex>`. The payload's shape and its
+  token (`application/shop_payload.py:63–65`) do not move, and `catalog.product`
+  (`application/sandbox_tool_views.py:141–143`) returns the same `{reference, alt_text}`.
+- **Storage is content-addressed.** The bytes live at `${media_root}/shops/{shop_id}/{sha256}`,
+  written once and never overwritten; a row of `shop_media_assets(shop_id, sha256, content_type,
+  byte_size, file_name, created_at)`, unique on `(shop_id, sha256)`, is the shop's claim on them.
+  The same bytes uploaded twice are one image, under the file name of the first upload.
+- **Nothing removes a file while its shop stands.** Published versions and snapshots are never
+  changed or deleted (ADR 0012, ADR 0019, ADR 0060); the only removal is Slice 42's delete of a
+  shop that never published, which takes the whole directory. A file no row claims is never
+  served, because serving reads the row first, and goes with its shop's directory.
+- **Only uploads are written.** A draft write whose media reference is not an image the shop
+  holds is refused; a stored version's written references still read.
+- **Served as an image and nothing else**, with its stored type, `nosniff`, a sandboxing
+  `Content-Security-Policy`, `inline` and `immutable`, and logged by hash, type and size only.
+
+### Slice 40a — An image is dropped or browsed for, stored, and shown on its item
+
+A product's media entry is an image the shop holds, dropped on the form or browsed for with the
+operating system's picker, and its item shows it.
+
+- [ ] Write ADR 0076 (the next free number when this plan was written; check `docs/adr/` at
+  branch time) with the slice. It records the store and its never-overwrite mechanism; the
+  reference `asset:sha256:<hex>` and why the payload token does not move (the shape is
+  unchanged, and the hash inside the reference makes a version's content fingerprint cover its
+  images' bytes); that nothing removes a file but the delete of a shop that never published, and
+  that an unclaimed file is harmless; written references refused outright on write and still read
+  from a stored version, and that narrowing `PUT /api/v1/shops/{shop_id}/draft` inside `v1` is
+  accepted because the lab is in development and the operator decided it — the answer to
+  `docs/api-and-schema-conventions.md`'s "never silently changes `v1`" (:16); the original file
+  name kept for display only, and how it is cleaned; the three types told by their first bytes,
+  the cap, and why not SVG (it carries script) or GIF; the serving headers; the hash as the
+  upload's idempotency key, as the confirmation is ADR 0022's, so the route asks for no
+  `Idempotency-Key` (`docs/api-and-schema-conventions.md`:11); why Slice 40a and 40b are two
+  slices; *Replace* as an upload followed by a swap of the entry's reference that keeps its alt
+  text (Slice 41); and the seed storing its images through the same service (Slice 43). It
+  supersedes ADR 0013's "managed binary upload remains deferred" (:46), and
+  `docs/product-direction.md`'s two sentences that defer it (:133–134, :325) are rewritten with
+  it. ADR 0070's uploaded logo stays out.
+- [ ] **Domain.** `domain/shop.py` gains a pure `MediaAssetReference` that renders and parses
+  `asset:sha256:<hex>` and refuses anything else, and `MediaReference.asset`, the hash or `None`
+  for a written reference. `MediaReference` (:236) still takes any text, so a stored version
+  reads; its docstring ("managed binary upload is deferred") goes. Uniqueness per product
+  (:331–333) and the diff's key (:918–926) are unchanged. `product_without_media`'s sentence
+  (:720, "has no media reference") becomes "has no image", and so do its mirrors: the removal
+  finding in `lib/removal.ts:280` ("It is the product's last media reference…") and the MSW
+  fixtures that quote it (`App.test.tsx:2161`, :2217; `ShopHome.test.tsx:576`).
+- [ ] **Application.** `application/shop_media.py` declares the ports `MediaStore` (put bytes
+  under a shop's `UUID` and a hash, open them, remove a shop's directory) and
+  `ShopMediaRepository` (insert a row while the shop's draft stands, list a shop's rows, read
+  one), and `ShopMediaService`: `upload(shop_id, file_name, stream)` reads at most the cap and one
+  byte more and refuses past the cap (`media_too_large`); tells the type from the first bytes —
+  PNG `89 50 4E 47 0D 0A 1A 0A`, JPEG `FF D8 FF`, WebP `RIFF····WEBP` — and refuses any other
+  (`media_type_unsupported`); cleans the file name as a label — the last path component only,
+  control characters stripped, capped at `MAX_LABEL_LENGTH` (`domain/content.py`), a name left
+  empty becoming "image.{ext}"; hashes, stores, and inserts the row, which a repeat finds already there.
+  `list(shop_id)` is newest first; `open(shop_id, sha256)` answers only for a row the shop holds.
+  It logs the hash, the type and the size, never the file name or a byte. No FastAPI, SQLAlchemy
+  or filesystem import.
+- [ ] **The write rule.** `ShopService` (`application/shops.py:90`) takes the
+  `ShopMediaRepository` port, and `replace_draft` (:118) refuses every media entry whose reference
+  is not a row the shop holds — a written reference included, whatever the stored draft holds —
+  with 422 `media_not_uploaded` at the entry's path.
+- [ ] **The gate.** The shop's preview and publish gate gain the error `media_asset_missing` for
+  an entry whose reference is not a row in `ShopMediaRepository`, at the entry's path.
+  `validate_shop` (`domain/shop.py:793`) is unchanged: the finding is the service's.
+  `product_without_media` stays a warning. The sentence is mirrored character for character in
+  `lib/fieldRules.ts`, and `lib/issueRoutes.ts` sends the finding to the product's Media card.
+- [ ] **Infrastructure.** `infrastructure/media_store.py`, a `FilesystemMediaStore(root)` that
+  writes the bytes to a temporary file in the shop's directory and then `os.link`s it to its hash's
+  name, unlinking the temporary file either way, so an existing file is kept and never rewritten
+  (`os.replace` would overwrite it); a malformed hash is refused before a path is built.
+  `ShopMediaAssetModel` in `infrastructure/models.py` (`file_name` a label-length string) and its
+  repository in `infrastructure/repositories.py`, whose insert is one conditional statement —
+  `INSERT … SELECT … WHERE EXISTS` the shop's draft — inside a savepoint that reads the row the
+  unique constraint kept when it loses a race, as `attach` does (:1437); the migration
+  `…_0022_shop_media_assets.py` (the head is `20260921_0021_model_connections.py`; check at branch
+  time); `Settings.media_root` (`./var/media`, `AGENT_LAB_MEDIA_ROOT`) and
+  `Settings.media_max_bytes` (5 MiB, `AGENT_LAB_MEDIA_MAX_BYTES`) in `infrastructure/config.py`;
+  `python-multipart` declared in `apps/api/pyproject.toml` with a comment saying which route needs
+  it, and `uv.lock` updated.
+- [ ] **Routes and the contract.** `presentation/shop_media.py`, composed in `presentation/api.py`:
+  `POST /api/v1/shops/{shop_id}/media` (`uploadShopMedia`, multipart field `file`) refuses a
+  request whose `Content-Length` is absent (411) or exceeds the cap plus 64 KiB of multipart
+  overhead (413 `media_too_large`) before the body is parsed, and the service counts what it reads
+  against the cap all the same; 201 with the image when stored, 200 with the same body when the
+  shop already held those bytes; 404, 413, 415 `media_type_unsupported`.
+  `GET /api/v1/shops/{shop_id}/media` (`listShopMedia`) lists the shop's images, which the Media
+  card reads to name and describe its items. `GET /api/v1/shops/{shop_id}/media/{sha256}`
+  (`getShopMedia`; 404 for a malformed hash and for one this shop does not hold) serves the stored
+  type with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none';
+  sandbox`, `Content-Disposition: inline`, `Cache-Control: public, max-age=31536000, immutable`
+  and the hash as its `ETag`. `ShopMediaAssetSchema` carries `reference`, `sha256`,
+  `content_type`, `byte_size`, `file_name` and `created_at`. No request log, span or error body
+  carries the multipart file name. `MediaReferenceSchema.reference`'s description ("URL or path
+  metadata; managed upload is deferred.") is rewritten. Under `/api/v1`, the prefix Vite
+  proxies (`apps/web/vite.config.ts:42`). `make contracts` regenerates the contract and its types
+  in the same change.
+- [ ] **Composition and tests write nowhere in the checkout.** `api_factories.api_client`
+  (`tests/api_factories.py:188–213`) takes a media root under `tmp_path` and hands it to
+  `create_app`, as does every test that builds `Settings`; a test that leaves anything under
+  `var/media` fails.
+- [ ] **The seed keeps working.** Its four written references (`presentation/seed/content.py`
+  :233–240, :313–318, :372–377) are now refused on write, so the seed's products carry no media
+  until Slice 43; `product_without_media` is a warning and the seed still publishes.
+  `test_demo_seed.py:442` asserts `product.variants` alone, and Slice 43 puts `product.media` back.
+- [ ] **The test factories.** `tests/shop_factories.py`'s `product()` (:61–78) and
+  `publishable_shop()` (:81) stay byte for byte as they are, so `PRE_LOGO_PUBLISHABLE_FINGERPRINT`
+  (:131) and `test_shop_payload.py:157` stay green. A save through the service — `seed_workspace`
+  (`tests/workspace_factories.py:505–507`) and the suites that build a `ShopService` — passes
+  `media=()` or goes through a helper that uploads first and uses the reference it returns.
+- [ ] `api/shops.ts` gains `uploadShopMedia(shopId, file)` — a `FormData`, with no `Content-Type`
+  set by hand — `listShopMedia` and `shopMediaUrl(shopId, sha256)` through `apiPath`
+  (`api/client.ts`).
+- [ ] **The Media card** (`MediaCard`, `routes/ProductEditorPage.tsx:1440–1585`) is titled
+  *Media*, its description ("URL or path metadata only — managed binary upload is deferred.",
+  :1490) gone. Items: the image as the item's `lead` (`ListItem`, `components/ItemList.tsx:42`),
+  a 48px thumbnail whose `alt` is the entry's alt text; the file name as the name; the alt text,
+  the type and the size as the detail, read from `listShopMedia`. Its controls are named by the
+  file name — "Edit ocean-blue-front.jpg", "Remove ocean-blue-front.jpg"; when two entries of one
+  product carry the same file name, each is named "{file name} ({first eight hex of its hash})".
+- [ ] **The form**, "Add an image" / "Edit {name}", asks *Image* and *Alt text*. *Image* is a drop
+  zone that says "Drop an image here" over a visually hidden `<input type="file"
+  accept="image/png,image/jpeg,image/webp">`, reached by its *Browse…* label, so the keyboard and a
+  screen reader open the operating system's picker. A file dropped or chosen is checked against
+  the mirrored types and cap, uploaded at once and chosen, its thumbnail and file name shown in the
+  zone; "Uploading…" and then the server's refusal, in its words, are said under the zone in
+  `ActionStatus`. While editing, the image is shown and fixed, and *Alt text* is what changes.
+  Refused after the buttons, in order: no image chosen, an image another entry of this product
+  holds (`alreadyTakenMessage` with `MEDIA_TAKEN_PLACE`, `lib/productEntries.ts:47`), the alt text
+  empty (`MEDIA_ALT_TEXT_RULE`, `lib/fieldRules.ts:719`). `mediaRefusal`
+  (`lib/productEntries.ts:120–137`) takes the chosen hash; `MEDIA_REFERENCE_RULE`
+  (`lib/fieldRules.ts:60`), `MEDIA_NEEDS_REFERENCE` (:717) and the Reference input with its
+  placeholder go. *Add media* keeps its name. The form is unsaved work while it holds a chosen
+  image or typed alt text (ADR 0051); the uploaded file is the shop's already, so leaving loses
+  the entry and not the image. The removal's consequence (:1511, "the file it points at is not
+  this lab's and is not touched") says the image stays with the shop.
+- [ ] **A media root per Playwright worker.** `tests/e2e/support/stack.ts` gains `mediaRoot(runId,
+  worker)` beside `databaseUrl` (:50), under the run's prefix; `playwright.config.ts` passes it as
+  `AGENT_LAB_MEDIA_ROOT` beside the database URL (:32–35); `playwright.teardown.ts` removes it
+  recursively, which its `rm` without `recursive` does not.
+- [ ] Documents: `docs/architecture.md`'s *Persistence* table gains `shop_media_assets` and a
+  sentence that the media root holds the bytes it names, and the catalog row of *Product areas*
+  its images; `docs/development.md` names the media root and adds it to the reset (:51–56):
+  stop the API and the web server; delete the database file `AGENT_LAB_DATABASE_URL` names
+  (`var/agent-lab.db` by default) with its `-journal`, `-wal` and `-shm` files; delete the media
+  root (`var/media` by default); `make migrate`; `make seed`, or *The fast path* on `/settings`.
+  The operator runs it when this slice lands: the QA shop's written references would refuse every
+  save of its draft, and it is published, so Slice 42's delete would refuse it too.
+  `docs/design-direction.md` rewrites "a SKU and a media reference are their own keys and say
+  so" (:329), the media list's clause of the list rule (:507) and *Add media*'s refusals (:557),
+  and gains a *Departures* row for the drop zone and the picker.
+
+Frames: none draws it. `Workspace.dc.html`'s product frame (:955–1040) draws no media list, no
+file input, no drop zone and no image, and the handoff's README says "No image assets" (:237) of
+its own iconography. The card is ADR 0074's pattern (methods handoff
+`shop-details.template.html` :160–186) on the existing chrome.
+
+Authority: ADR 0012, ADR 0013 (superseded on binary media), ADR 0019, ADR 0022, ADR 0051,
+ADR 0060, ADR 0063, ADR 0074, ADR 0075; `docs/architecture.md` (the dependency rule — the ports
+in `application/`, the filesystem in `infrastructure/` — *Persistence* and *Public contracts*);
+`docs/api-and-schema-conventions.md`; `docs/observability.md`.
+
+Departures to record: the drop zone and the picker, which the handoff does not draw, built on the
+operator's decision of 2 October 2026 (`docs/design-direction.md`, *Authority*, rule 5: a decision
+another authority owns), in a *Departures* row and in ADR 0076; the item's `lead` holds a
+thumbnail where ADR 0074 gave it to a control.
+
+Backend change: yes — the domain's reference, a service and its ports, the filesystem store, a
+table and its migration, two settings, a dependency, three routes and the contract.
+
+Branch: `feat/shop-media-upload`. Checks: backend — a new `test_shop_media.py` (the service over
+in-memory ports: each type told by its bytes, a PNG named `.gif` accepted and a GIF, an SVG and
+text refused, exactly 5 MiB accepted and one byte more refused, the same bytes twice one image
+under the first file name, an unknown shop refused, a file name with a path, a control character
+or past the cap cleaned, nothing logged but hash, type and size); a new `test_shop_media_api.py`
+(the three routes, the five headers, 404 for another shop's hash and a malformed one, a request
+with no file, an oversized body refused at the route by its `Content-Length` before it is
+parsed, the multipart file name absent from the request log); a new `test_media_store.py` (the
+link into place, an existing file kept and never rewritten, a malformed hash refused before a path
+is built); `test_repositories.py` (two inserts of one shop and hash racing in two sessions leave
+one row and both read it, after the savepoint pattern at `repositories.py:1437`; an insert for a
+shop whose draft is gone lands nothing); `test_shops.py` and `test_shop_api.py` (a written
+reference refused with `media_not_uploaded` whether or not the stored draft held it;
+`media_asset_missing` in preview and publish at its path); `test_shop_domain.py` (the reference's
+grammar; `product_without_media`'s new sentence); `test_shop_payload.py:157` unchanged and
+green; `test_config.py` (the two settings and their variables); `test_demo_seed.py` (the seed
+still publishes); `test_sandbox_tools.py` (`catalog.product` returns an asset reference as it
+is). `ShopService`'s 27 construction sites take the new port — `presentation/api.py:1867`,
+`presentation/seed/services.py`, `tests/workspace_factories.py:505`, `tests/test_shops.py`
+(sixteen), `tests/test_orders.py` (four), `tests/test_agent_configurations.py` (two),
+`tests/test_tickets.py` and `tests/test_customer_profiles.py`. Every API suite passes a
+`tmp_path` media root through `api_client`. Migration — `test_migrations.py`'s
+`test_upgrade_empty_database` (:131), `test_upgrade_downgrade_upgrade_cycle` (:453) and
+`test_model_metadata_matches_migrated_schema` (:535), and new beside them: one row per shop and
+hash (as :345 does for order references), a downgrade that refuses to drop a table holding rows
+(as :282 does for published versions). Contract — `make check-contracts` and
+`test_api_contract.py`. Vitest — `App.test.tsx` *media references* (:3076–3215), rewritten for
+the drop, *Browse…*, the item's file name and thumbnail, two items of one file name, the
+refusals in order and the prompt, and :5621–5624, the confirm; `lib/productEntries.test.ts`
+(:131, :138); `lib/fieldRules.test.ts` for the gate's sentence; `lib/issueRoutes.test.ts` for
+`media_asset_missing`; `lib/textFieldCaps.test.ts`'s "domain/shop.py · media reference" (:420),
+which pinned a field that goes and leaves with it; `tests/config/e2e-isolation.test.ts` gains
+"gives every worker a media root no other worker can reach" beside :76. Playwright — no spec
+reaches the Media card today (under `tests/e2e`, "media" is only `support/lab.ts:94`'s
+`media: []`), so `shop-publication.spec.ts` (:20) gives its product an image through *Browse…*
+(`setInputFiles` with a PNG buffer, no committed fixture), its alt text and *Add media*, sees the
+item named by its file name with its thumbnail, and publishes; no accessible name a spec reaches
+moves.
+
+Slice evidence: on a product, the operator drags `ocean-blue-front.png` onto the drop zone; it
+uploads and is chosen; with an alt text, *Add media* adds an item named "ocean-blue-front.png"
+showing it. A GIF and a 6 MiB JPEG are refused under the zone saying why. A draft carrying a
+written reference is refused on save. Publish passes, and the version holds `asset:sha256:…`.
+
+### Slice 40b — The shop's library, to pick an image from
+
+The form offers every image the shop already holds, so one image serves several products
+without uploading it again.
+
+- [ ] **The library** in the Media card's form, beside the drop zone in *Image*: a radio group,
+  "This shop's images", newest first, one 72px thumbnail per image, each radio named "{file name},
+  {type}, {size}", read from `listShopMedia` when the card opens and after each upload, the
+  image just uploaded chosen in it. Empty, it says "No image uploaded to this shop yet." An image
+  this product's entries already hold is marked and not choosable; the refusal it would meet
+  stays the form's (Slice 40a).
+- [ ] Picking an image another product holds adds it here without a request; the draft names the
+  same reference twice, on two products, which the domain allows (uniqueness is per product,
+  `domain/shop.py:331–333`).
+- [ ] `docs/design-direction.md`: the *Departures* row Slice 40a wrote gains the library.
+
+Frames: none draws it, as for 40a; methods handoff `shop-details.template.html` :160–186.
+
+Authority: ADR 0051, ADR 0063, ADR 0074, ADR 0076.
+
+Departures to record: the library, which the handoff does not draw, on the operator's decision
+of 2 October 2026.
+
+Backend change: none. The library reads Slice 40a's `listShopMedia`.
+
+Branch: `feat/shop-media-library`. Checks: Vitest — `App.test.tsx` *media references* (:3076) for
+the library (the radios' names and order, the empty sentence, the upload chosen in it, an image
+this product holds not choosable, an image of another product reused with no upload request in
+MSW). Playwright — `shop-publication.spec.ts` gives a second product the first product's image
+from the library and publishes.
+
+Slice evidence: on a second product, the operator picks the image uploaded on the first from
+"This shop's images", gives it an alt text and adds it; nothing uploads, and both products show
+it.
+
+### Slice 41 — Replace an image on its item, and see it wherever it is listed
+
+An image is replaced on its item keeping its alt text, and the frozen version and the catalog
+draw the image instead of a path.
+
+- [ ] **Replace** on each item of the Media card, before the pencil: a verb that is neither Edit
+  nor Remove, so it keeps its written word, as *Duplicate* does (ADR 0075), named "Replace {name}".
+  It loads the form as "Replace {name}": *Image* the drop zone, *Browse…* and the library of
+  Slices 40a and 40b, the current image marked and not choosable; *Alt text* the entry's, kept
+  and editable; the submit *Replace image*. Refused after the buttons, in order: no other image
+  chosen, an image another entry of this product holds, the alt text empty. Saving swaps the
+  entry's reference where it stands, in its place in the list, and focus returns to the new
+  item's *Replace*. The draft's change summary reads it as a removal and an addition
+  (`domain/shop.py:918–926` keys the diff by reference); the published version keeps the old
+  hash, and the shop keeps its file.
+- [ ] **The frozen version** (`ShopVersionPage.tsx:148–158`) draws each entry as a 48px thumbnail,
+  its alt text as `alt`, with the file name and the alt text beside it; a written reference a
+  stored version holds stays code with no image.
+- [ ] **The catalog** (`ProductsPage.tsx`) draws a product's first image as a 30px tile before its
+  title, as the shops index draws a shop's logo tile before its name (`Workspace.dc.html` :181);
+  a product without one draws no tile and no placeholder.
+- [ ] `docs/design-direction.md`: the media clause of the list rule (:507) names *Replace*, and
+  the *Departures* row Slice 40a wrote gains the catalog's tile and the version's thumbnails.
+
+Frames: `Workspace.dc.html` :842–846 (the catalog's Product cell: title and category, no image),
+:181 (the shops index's logo tile, the tile's measure); methods handoff
+`shop-details.template.html` :160–186 (the form below the list).
+
+Authority: ADR 0051, ADR 0063, ADR 0074, ADR 0075, ADR 0076.
+
+Departures to record: *Replace* and the thumbnails are drawn nowhere in the handoff, on the
+operator's decision of 2 October 2026; the catalog's tile beside the title, which the prototype
+draws for a shop's logo and not for a product.
+
+Backend change: none. Replace is an upload through Slice 40a's route and a draft save.
+
+Branch: `feat/replace-media-and-thumbnails`. Checks: Vitest — `App.test.tsx` *media references*
+(:3076) for *Replace* (the alt text kept, the image swapped in place, each refusal in order,
+focus returned, the prompt for a chosen image), *shows a published version as read-only frozen
+content* (:1635) for the thumbnails and a stored written reference's code, and the catalog's
+tests (:5146, :5188, the row actions :6309) for the tile and its absence. Playwright —
+`shop-publication.spec.ts` reads the frozen version back (:133) and now sees the image Slice
+40a's step uploaded, by its alt text; no accessible name a spec reaches moves.
+
+Slice evidence: on a product, the operator presses *Replace* on an image, drops another, keeps
+the alt text, and saves; the item shows the new image in the same place; the published version
+still shows the old one; the catalog row shows the product's first image beside its title.
+
+### Slice 42 — A shop that never published can be deleted
+
+The shops index deletes a shop that never published, with its draft, orders, tickets, scenarios
+and images; a published shop is refused and says why.
+
+- [ ] Write ADR 0077 (the next free number after ADR 0076; check `docs/adr/` at branch time) with
+  the slice. It amends ADR 0060 with the lab's first delete of a whole definition: a shop with no
+  published version — and so no ticket or scenario version, no snapshot and no experiment, each of
+  which needs a published shop version (ADR 0012, ADR 0016, ADR 0019) — can be deleted whole. The
+  service checks both conditions the operator named, no published version and no experiment
+  naming the shop. What goes: the shop's draft, the drafts of its tickets and scenarios
+  (`definition_drafts` by `shop_id`), its orders (`shop_order_fixtures`), its attachments
+  (`definition_shop_attachments`), its media rows and its directory. What stays: the
+  shop-independent definitions it had attached — profiles, identities, blocks, configurations and
+  judges. It accepts one risk: a directory whose removal fails after the commit is left behind,
+  holding files no row names, never served, and logged by shop ID. ADR 0060's sentence on a
+  published shop version and ADR 0019 stand.
+- [ ] **Application.** `ShopService` (`application/shops.py:90`) gains `delete_shop(shop_id)` over
+  ports declared in `application/`. Its first write is one conditional statement — delete the
+  shop's draft where no published version of it and no experiment naming it exists — and the rest
+  follow only when that one removed a row; otherwise it answers 404 for an unknown shop and 409
+  `shop_published`, naming how many versions, for a published one. SQLite's single writer orders
+  it against a publish: a publish that commits first makes the delete's condition false, and a
+  publish after it finds no draft. An upload racing it lands no row, because the media insert is
+  conditional on the draft too (Slice 40a). A repeated delete answers 404, as an order's does.
+- [ ] **The directory goes after the commit.** The route's dependency (`presentation/api.py:1866`
+  opens a `session_scope` per service; `infrastructure/database.py:35–42` commits when it exits)
+  gains a deletion dependency that yields the use case inside its own `session_scope` and, after
+  that block has committed, removes the directory of the shop the use case reports deleted through
+  `MediaStore`. Nothing is removed when the scope rolls back.
+- [ ] **Infrastructure.** The repositories in `infrastructure/repositories.py` gain the deletes the
+  ports declare, each on its own tables; no schema change and no migration.
+- [ ] **Route and contract.** `DELETE /api/v1/shops/{shop_id}` (`deleteShop`, 204; 404; 409 with
+  `shop_published`), registered as the order's is (`presentation/orders.py:495–503`); the
+  contract and its types regenerated.
+- [ ] **The shops index** (`ShopsPage.tsx:120`, a row :183) gains a last column holding the trash,
+  "Delete {name}" (ADR 0075, as the catalog's `RemoveButton` with its `label`,
+  `ProductsPage.tsx:298`), the only place a shop is deleted from. On a shop with a published
+  version it is held (`RemoveButton`'s `held`, `components/ItemList.tsx:166–193`; ADR 0063): "A
+  published shop is kept: its versions are what experiments are explained by." The confirm takes
+  the row's place in the warm red (ADR 0075), "Delete {name} and everything it holds?", its
+  consequence counting what goes — products, orders, tickets, scenarios, images — from the shop's
+  listings and `listShopMedia`, read once when the confirm opens and never per row (ADR 0062's
+  rule), and saying "Customers, identities and blocks it used are kept." The preference removes
+  the second press (ADR 0060). After it the row goes and the notice line takes focus.
+- [ ] **The switcher after a delete.** The index reads its listing again (`useShops`,
+  `ShopsPage.tsx:91`). The other shop lists read on mount — the shop workspace's
+  (`refreshShops`, `shell/ShopWorkspace.tsx:69`), the lab's (`shell/LabWorkspace.tsx:125`) and
+  the lab surfaces' (`shell/useLabSurface.ts:22`) — and `/shops` mounts neither mode, so the
+  switcher next drawn lists the shops that remain. The stored last-visited shop is cleared with
+  `forgetLastVisitedShop` (`lib/preferences.ts:79`) when it names the deleted shop, so no surface
+  holds a dead identifier between reads; resolving it against the list (ADR 0054,
+  `useLabSurface.ts:44`) stays the guard for one deleted elsewhere.
+- [ ] `docs/design-direction.md`: *Removing is deliberate* names the shop's delete, and a
+  *Departures* row says the prototype's shops index draws no row action; `docs/architecture.md`
+  says a definition is never deleted except a shop that never published (ADR 0077).
+
+Frames: `Workspace.dc.html` :148–200 (the shops index; a row :178–196, no row action), :3927
+(Settings' "A published shop version and a recorded run are never deletable").
+
+Authority: ADR 0012, ADR 0019, ADR 0054, ADR 0060, ADR 0062, ADR 0063, ADR 0075, ADR 0076.
+
+Departures to record: the shops index's trash, which the prototype does not draw, on the
+operator's decision of 2 October 2026; ADR 0060's exception for a shop that never published, in
+ADR 0077.
+
+Backend change: yes — a use case, repository deletes, a deletion dependency and a route with its
+contract; no migration.
+
+Branch: `feat/delete-unpublished-shop`. Checks: backend — a new `test_shop_deletion.py`: it
+enumerates every mapped table with a `shop_id` column from `Base.metadata` and asserts each holds
+no row for the deleted shop — emptied, or provably empty for a shop that never published
+(`definition_versions`, `sandbox_snapshots`, `sandboxes`, `sandbox_action_proposals`,
+`experiments`, `experiment_runs`) — and still holds the other shop's; the attached profile,
+identity and block kept; a published shop refused; a shop an experiment names refused; a publish
+and a delete racing, one winning; an upload after the delete landing no row; the directory removed
+after the commit and kept when the scope rolls back. `test_shop_api.py` (204, then 404; 409 and
+its body). `test_migrations.py`'s `test_model_metadata_matches_migrated_schema` (:535) unchanged
+and green. Contract — `make check-contracts` and `test_api_contract.py`. Vitest — the shops
+index's tests (`Indexes.test.tsx`, `App.test.tsx`) for the trash held with its reason, the
+confirm and its counts, the preference, the focus after; a new test that after a delete the
+switcher lists the remaining shops and the last-visited shop is forgotten when it was the deleted
+one; `App.test.tsx` *opens on the shops index when the remembered shop is no longer there*
+(:5332). Playwright — a new `shop-deletion.spec.ts`: a shop is created, given an order and an
+image, and deleted from the index through its confirm; and `shop-publication.spec.ts` sees its
+published shop's trash held.
+
+Slice evidence: on the shops index, the operator presses the trash on a shop never published;
+the confirm counts its orders and images; *Delete* takes the row away, the switcher no longer
+offers it, and the shop's media directory is gone. A published shop's trash says why it is kept.
+
+### Slice 43 — The seed ships real images
+
+The seed's catalog carries real images, stored through the same service an upload uses.
+
+- [ ] Four small images, made for the lab — flat drawings with no photograph and no third-party
+  work in them, so their licence is the repository's — each under 16 KiB, at
+  `apps/api/src/capability_lab/presentation/seed/images/`, named after the products and colours
+  they show: `alpine-shell-ocean-blue.jpg`, `alpine-shell-detail-seams.jpg`,
+  `fjord-base-layer-slate.png` and `harbour-dry-bag-sand.webp`, so the seed exercises all three
+  types. The file name each upload keeps is that name.
+- [ ] `presentation/seed/content.py` names each product's images by file and alt text, the alt
+  texts kept (:233–240, :313–318, :372–377). `_shop` (`presentation/seed/demo.py:137`) creates the
+  shop, uploads each file through `ShopMediaService.upload` — never the route: the seed reaches
+  the world through application services (ADR 0043) — writes the draft with the references the
+  uploads returned, and publishes. `SeedServices` (`presentation/seed/services.py:81`) and
+  `build_services` (:105) gain the service composed from `Settings.media_root`, which
+  `run_seed` and the lab seed route (`presentation/lab_seed.py:79–90`) already hold.
+  `SEEDED_TABLES` (`presentation/seed/runner.py:84`) counts `shop_media_assets` already, being
+  derived from the mapped metadata.
+- [ ] The refusal (`DatabaseNotEmptyError`, `runner.py:104–115`) names the media root beside the
+  database file, as `docs/development.md`'s reset does since Slice 40a. The seed still never
+  wipes, truncates or reseeds (ADR 0043, ADR 0047). The operator runs that reset once more when
+  this slice lands, so the QA lab carries the seed's images.
+- [ ] *Use an example shop* (`ShopsPage.tsx:403`) fills the create form's fields and creates
+  nothing; it holds no image and is unchanged. The shop with a catalog and images is the seed's.
+
+Frames: none; no surface moves.
+
+Authority: ADR 0043, ADR 0047, ADR 0076.
+
+Departures to record: none.
+
+Backend change: yes — the seed's content, its composition and four committed images; no route,
+contract or migration.
+
+Branch: `feat/seed-ships-images`. Checks: backend — `test_demo_seed.py`
+*the seeded shop carries the content the studio screens read* (:431) puts `product.media` back
+(:442) and asserts each reference is an image the shop holds whose bytes hash to it, under its
+file name; *refuses a database that already holds one* (:458) for the message; *runs the whole
+story with the network removed* (:570) with a temporary media root; `test_lab_seed_api.py` (:74,
+:93) the same, through `api_client`'s `tmp_path` root; a test that the four images ship inside the
+package (`importlib.resources`), so a built wheel seeds too. No Vitest or Playwright spec seeds
+the lab, and none changes.
+
+Slice evidence: on a fresh database, `make migrate && make seed`; the seeded shop's catalog shows
+the Alpine Shell Jacket's image beside its title, its editor's Media card both images named by
+their files, and its version 1 page the same; the history run reads as before.
+
+### Acceptance criteria
+
+- A media entry is added by dropping a file, browsing for one, or picking one from the shop's
+  library, and only as an uploaded image; a written reference is refused on every write and still
+  reads wherever a stored version holds it.
+- Every image is stored once per shop under its hash, never overwritten, and served with its own
+  type and the headers ADR 0076 names; PNG, JPEG and WebP only, at most the cap, refused at the
+  route before an oversized body is parsed.
+- An image is named by its original file name, cleaned, which is never a path, a log line or a
+  span attribute.
+- A draft holding a media reference that is not a held image cannot publish.
+- *Replace* swaps an entry's image and keeps its alt text, and the published version keeps the
+  old one.
+- The editor's items, the library, the frozen version and the catalog draw the image.
+- A shop that never published is deleted from the shops index with its draft, orders, tickets,
+  scenarios and images; a published one is refused with the reason, and its files are kept.
+- The seed ships real images through the store; the reset is documented and run by the operator,
+  and nothing in the lab wipes.
+- ADR 0076 and ADR 0077 record the decisions; every contract, migration and setting ships with its
+  consumer; no test writes under the checkout's `var/`; the Playwright journeys pass, each worker
+  with its own media root.
 
 ## Deliberately not here
 
@@ -104,3 +631,18 @@ is open: the next one is planned here, under the rules above, when the operator 
 - **Read-only version pages for configurations and scenarios.** The results link a pinned
   version to its definition's editor (ADR 0068); a frozen view per definition is worth its own
   slice in `docs/PLAN.md` if a review journey needs it.
+- **An uploaded shop logo.** ADR 0070 keeps the logo a drawn mark on a chosen ground; Milestone 11
+  stores a product's images and nothing else.
+- **Removing an image from the library, or a sweep of the ones no entry names.** A file goes with
+  its shop and only then, and a published version's are kept for as long as it is.
+- **Converting the written references a stored version holds, accepting them on write, or
+  migrating the QA lab.** A version is immutable, so they still read; the lab is reset and
+  reseeded instead (Slices 40a and 43).
+- **SVG, GIF, resizing, cropping, generated thumbnails or pixel dimensions.** The browser scales
+  the stored bytes; the file name is kept for display only.
+- **Deleting a shop from anywhere but its row on the shops index.**
+- **The image in what an agent, a tool result or a judge reads**, beyond the reference string
+  `catalog.product` already returns.
+- **Deleting a published shop, a version, a snapshot or a run.** ADR 0060 and ADR 0019 stand.
+- ***Use an example shop* creating a catalog.** It fills the create form; the shop with a catalog
+  and images is the seed's.
