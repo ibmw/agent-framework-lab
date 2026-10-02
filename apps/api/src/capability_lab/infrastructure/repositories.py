@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.dml import Delete, Insert
+from sqlalchemy.sql.dml import Delete, Insert, Update
 from sqlalchemy.sql.expression import Exists
 
 from capability_lab.application.agent_configurations import AGENT_CONFIGURATION_CODEC
@@ -1218,6 +1218,9 @@ class SqlAlchemyDefinitionRepository[PayloadT]:
             is not None
         )
 
+    def claim_draft(self, definition: DefinitionId) -> bool:
+        return _claimed(self._session, definition.definition_type.value, str(definition.id))
+
     def save_draft(self, record: DefinitionDraftRecord[PayloadT]) -> None:
         definition = record.definition
         document = cast("dict[str, object]", self._codec.document(record.payload))
@@ -1406,6 +1409,34 @@ class SqlAlchemyPublishedVersionDirectory:
         return _published_version(model, definition)
 
 
+def claim_draft_statement(definition_type: str, definition_id: str) -> Update:
+    """A no-op `UPDATE` of one draft: the write that orders a request against a delete.
+
+    On SQLite any write takes the database's single write lock, held to the commit, and the
+    statement holds it from its start, so the draft it matches is the committed truth and no
+    delete can commit until this transaction does. On PostgreSQL it locks the draft's row,
+    which a delete of that draft must lock too.
+    """
+    return (
+        update(DefinitionDraftModel)
+        .where(
+            DefinitionDraftModel.definition_type == definition_type,
+            DefinitionDraftModel.definition_id == definition_id,
+        )
+        .values(updated_at=DefinitionDraftModel.updated_at)
+    )
+
+
+def _claimed(session: Session, definition_type: str, definition_id: str) -> bool:
+    """Run the claim; whether the draft stood when this transaction took the write lock."""
+    statement = claim_draft_statement(definition_type, definition_id)
+    result = cast(
+        CursorResult[Any],
+        session.execute(statement.execution_options(synchronize_session=False)),
+    )
+    return result.rowcount == 1
+
+
 def _deleted_rows(session: Session, statement: Delete) -> int:
     """Run a bulk delete and answer how many rows it removed.
 
@@ -1440,6 +1471,9 @@ class SqlAlchemyShopDirectory:
             )
             is not None
         )
+
+    def claim(self, shop_id: UUID) -> bool:
+        return _claimed(self._session, DefinitionType.SHOP.value, str(shop_id))
 
     def delete_unpublished(self, shop_id: UUID) -> bool:
         """One statement: the shop's draft goes only while nothing has published or run on it.

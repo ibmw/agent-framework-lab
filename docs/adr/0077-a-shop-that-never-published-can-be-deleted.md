@@ -2,6 +2,47 @@
 
 Status: accepted — 2026-10-02
 
+Amendment: 2026-10-03 — The races this record accepted are closed. It supersedes three passages
+of the body: "It is not a savepoint" under *One guarded statement first*, the paragraph **What
+this does not guard**, and the PostgreSQL paragraph after it.
+
+- **Every other write that names the shop claims it first.** An order created or edited, a
+  ticket or a scenario created or its draft saved, and a profile attached or created into a shop
+  each read what they need, then *claim* the shop before their first write:
+  `DefinitionRepository.claim_draft`, or `ShopClaims.claim` for an attach, both a no-op `UPDATE`
+  of the shop's draft (`claim_draft_statement`) that answers whether it matched a row.
+  `claim_shop` in `application/shops.py` turns a miss into 404 `shop_not_found`. On SQLite the
+  `UPDATE` takes the write lock, held to the commit, so the draft it matches is the committed
+  truth: a delete that committed after the write's reads leaves nothing to match, and the write
+  is refused with nothing written; a delete that comes later waits for the write to commit, then
+  removes its row with the shop's.
+- **Every draft save claims its own draft** before it writes
+  (`DefinitionAuthoringService.replace_draft`). A delete can no longer commit between the save's
+  read of the row and its update, where the update matched nothing and failed with
+  `StaleDataError`, a 500; a shop's draft saved as the shop is deleted answers 404.
+- **The order routes were already refused over HTTP**, by accident: they answer through
+  `validate_order`, which reads the shop again after the write and under its lock. The order
+  service itself was not, and is now.
+- **What remains.** `get_order`, `_require_ticket` and `_require_scenario` still return a stored
+  record without asking whether its shop stands, and `attached_shop_count` and `attached_shops`
+  still count every attachment. No write can now leave such a row, so all they could reach is a
+  row a race left before 3 October 2026, and none is known.
+- **Not a savepoint, for a different reason.** A savepoint no longer commits early (ADR 0003's
+  amendment of this date). The guarded delete still runs as one statement in the request's own
+  transaction, because its condition must be inside the `DELETE`.
+- **PostgreSQL.** Under READ COMMITTED the claim still holds, because its `UPDATE` locks the
+  draft's row and the guarded `DELETE` must lock it too. The guard and the publish's recheck
+  would still need the row locked (`SELECT … FOR UPDATE`) for a delete and a publish to exclude
+  each other.
+- **Verification.** `test_shop_deletion_races.py` commits the delete after the last read of an
+  order created and one edited (over HTTP and through the service), a ticket created and its
+  draft saved, a scenario created and its draft saved, a profile attached and one created into
+  the shop, and the shop's own draft saved: each is refused as `shop_not_found` and leaves no
+  row naming the shop. It also tries a delete while a draft save flushes its update. That delete
+  is given a short busy timeout (`timeout=0.2`), so being refused with `database is locked`
+  proves the save holds the lock, and the save answers 200; a real concurrent delete waits up to
+  pysqlite's 5 s default instead, and deletes once the save has committed.
+
 Amends ADR 0060 with the lab's first delete of a whole definition. ADR 0060's sentence — "A
 published shop version and a recorded run are never deletable" — and ADR 0019's (snapshots are
 never deleted) stand unchanged: what this record allows is a shop that has neither.

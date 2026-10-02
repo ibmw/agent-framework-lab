@@ -127,6 +127,17 @@ def shop_definition_id(shop_id: UUID) -> DefinitionId:
     return DefinitionId(definition_type=DefinitionType.SHOP, id=shop_id)
 
 
+def claim_shop(shops: DefinitionRepository[ShopPayload], shop_id: UUID) -> None:
+    """Claim the shop's draft before a write that names the shop, or refuse it as unknown.
+
+    Called after the write's reads and before its first write. A shop deleted since those reads
+    answers 404 here, and one that stands cannot be deleted until this transaction ends, so the
+    write never leaves a row naming a shop that has gone (ADR 0077).
+    """
+    if not shops.claim_draft(shop_definition_id(shop_id)):
+        raise ShopNotFoundError(f"shop {shop_id} has no draft")
+
+
 class ShopService(DefinitionAuthoringService[ShopPayload]):
     def __init__(
         self,

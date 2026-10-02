@@ -29,7 +29,7 @@ from capability_lab.application.definition_authoring import DefinitionRepository
 from capability_lab.application.definition_resolution import DefinitionResolutionError
 from capability_lab.application.order_fixture_payload import order_fixture_content_fingerprint
 from capability_lab.application.ports import Clock
-from capability_lab.application.shops import ShopNotFoundError
+from capability_lab.application.shops import ShopNotFoundError, claim_shop
 from capability_lab.domain.address_change import freeze_address
 from capability_lab.domain.customer_profile import AddressEntry, CustomerProfilePayload
 from capability_lab.domain.definitions import (
@@ -269,6 +269,7 @@ class OrderFixtureService:
         shop = self._require_shop(shop_id)
         self._require_attached_profile(shop_id, customer_profile_id)
         self._require_free_reference(shop_id, reference, order_id=None)
+        claim_shop(self._shops, shop_id)
         now = self._clock.now()
         record = OrderFixtureRecord(
             shop_id=shop_id,
@@ -309,6 +310,7 @@ class OrderFixtureService:
             shipping_address=self._materialize_address(previous, edit.shipping_address_id),
             events=self._materialize_events(edit.events),
         )
+        claim_shop(self._shops, shop_id)
         record = replace(existing, payload=payload, updated_at=self._clock.now())
         self._orders.save(record)
         return record

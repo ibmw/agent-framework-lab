@@ -57,7 +57,7 @@ from capability_lab.application.scenario_payload import (
     scenario_from_document,
 )
 from capability_lab.application.shop_documents import ShopDocumentOption, shop_document_options
-from capability_lab.application.shops import ShopNotFoundError
+from capability_lab.application.shops import ShopNotFoundError, claim_shop
 from capability_lab.application.tickets import (
     TicketRepository,
     shop_definition_id,
@@ -577,6 +577,7 @@ class ScenarioService(DefinitionAuthoringService[ScenarioPayload]):
         if ticket is None:
             raise ScenarioTicketNotInShopError(f"shop {shop_id} has no ticket {ticket_id}")
         self._require_free_name(shop_id, name, scenario_id=None)
+        claim_shop(self._shops, shop_id)
         return self.create(
             new_scenario(
                 name,
@@ -609,6 +610,7 @@ class ScenarioService(DefinitionAuthoringService[ScenarioPayload]):
                 "facts all describe the incident it was built on"
             )
         self._require_free_name(shop_id, payload.name, scenario_id=scenario_id)
+        claim_shop(self._shops, shop_id)
         return self.replace_draft(scenario_id, payload)
 
     def publish_scenario(self, shop_id: UUID, scenario_id: UUID) -> ScenarioVersionRecord:

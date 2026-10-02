@@ -41,7 +41,7 @@ from capability_lab.application.definition_resolution import DefinitionResolutio
 from capability_lab.application.order_fixtures import OrderFixtureRecord, OrderFixtureRepository
 from capability_lab.application.ports import Clock
 from capability_lab.application.shop_documents import ShopDocumentOption, shop_document_options
-from capability_lab.application.shops import ShopNotFoundError
+from capability_lab.application.shops import ShopNotFoundError, claim_shop
 from capability_lab.application.ticket_payload import (
     ticket_content_fingerprint,
     ticket_document,
@@ -441,6 +441,7 @@ class TicketService(DefinitionAuthoringService[TicketPayload]):
         self._require_shop(shop_id)
         self._require_attached_profile(shop_id, customer_profile_id)
         self._require_free_reference(shop_id, reference, ticket_id=None)
+        claim_shop(self._shops, shop_id)
         return self.create(
             new_ticket(reference, subject, customer_profile_id, channel),
             shop=shop_definition_id(shop_id),
@@ -462,6 +463,7 @@ class TicketService(DefinitionAuthoringService[TicketPayload]):
                 "belong to the customer it was created for"
             )
         self._require_free_reference(shop_id, payload.reference, ticket_id=ticket_id)
+        claim_shop(self._shops, shop_id)
         return self.replace_draft(ticket_id, payload)
 
     def publish_ticket(self, shop_id: UUID, ticket_id: UUID) -> TicketVersionRecord:

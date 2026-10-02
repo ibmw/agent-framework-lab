@@ -152,6 +152,15 @@ class DefinitionRepository[PayloadT](Protocol):
         """Whether the draft stands in the store now, read afresh rather than from a cache."""
         ...
 
+    def claim_draft(self, definition: DefinitionId) -> bool:
+        """Take the store's write lock through the draft, as a write's first statement.
+
+        Answers whether the draft stood when the lock was taken. While this transaction
+        lasts nothing can delete it, so a write that claimed first never lands on a draft — or
+        names a shop — that a racing delete removed (ADR 0077).
+        """
+        ...
+
     def save_draft(self, record: DefinitionDraftRecord[PayloadT]) -> None: ...
 
     def latest_published_version(self, definition: DefinitionId) -> int | None: ...
@@ -254,6 +263,9 @@ class DefinitionAuthoringService[PayloadT]:
     ) -> DefinitionDraftRecord[PayloadT]:
         """Replace the whole draft payload; published versions are never touched."""
         existing = self.get_draft(definition_id)
+        # The draft read above may have been deleted since; the claim answers under the write
+        # lock, so a racing delete is this replace's 404 and not an update of a missing row.
+        self._claim_draft(definition_id)
         record = DefinitionDraftRecord[PayloadT](
             # The scope is identity and survives every edit; the references are content and
             # are re-derived, so a payload that stops naming a target stops referencing it.
@@ -264,6 +276,10 @@ class DefinitionAuthoringService[PayloadT]:
         )
         self._repository.save_draft(record)
         return record
+
+    def _claim_draft(self, definition_id: UUID) -> None:
+        if not self._repository.claim_draft(self._definition(definition_id)):
+            raise self._errors.not_found(f"{self._noun} {definition_id} has no draft")
 
     def preview_draft(self, definition_id: UUID) -> DefinitionDraftPreview[PayloadT]:
         """Validate the draft and describe the version publishing it would create."""

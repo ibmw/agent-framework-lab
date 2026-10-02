@@ -76,14 +76,27 @@ CustomerProfileRepository = DefinitionRepository[CustomerProfilePayload]
 
 
 class ShopDirectory(Protocol):
-    """Whether a shop definition exists.
-
-    Attachment carries no foreign key — it stays an unversioned, unpinned relation — so the
-    service checks existence itself rather than letting a typo create a dangling row that
-    Milestone 2's same-shop pickers would have to filter out.
-    """
+    """Whether a shop definition exists."""
 
     def exists(self, shop_id: UUID) -> bool: ...
+
+
+class ShopClaims(Protocol):
+    """A shop's draft, claimed before an attachment names the shop.
+
+    Attachment carries no foreign key — it stays an unversioned, unpinned relation — so the
+    service checks the shop itself rather than letting a typo create a dangling row that
+    Milestone 2's same-shop pickers would have to filter out. It checks by claiming, so the
+    answer also holds against a racing delete (ADR 0077).
+    """
+
+    def claim(self, shop_id: UUID) -> bool:
+        """Take the store's write lock through the shop's draft; whether the draft stood.
+
+        One deleted first answers false; one that stands cannot be deleted until this
+        transaction ends.
+        """
+        ...
 
 
 class DefinitionShopAttachmentRepository(Protocol):
@@ -145,7 +158,7 @@ class CustomerProfileService(DefinitionAuthoringService[CustomerProfilePayload])
         self,
         repository: DefinitionRepository[CustomerProfilePayload],
         attachments: DefinitionShopAttachmentRepository,
-        shops: ShopDirectory,
+        shops: ShopClaims,
         clock: Clock,
     ) -> None:
         super().__init__(
@@ -205,7 +218,7 @@ class CustomerProfileService(DefinitionAuthoringService[CustomerProfilePayload])
     ) -> CustomerProfileDraftRecord:
         """Create the profile and, when created from a shop, attach it to that shop."""
         if shop_id is not None:
-            self._require_shop(shop_id)
+            self._claim_shop(shop_id)
         record = self.create(new_customer_profile(identity, customer_since))
         if shop_id is not None:
             self._attachments.attach(record.definition, shop_id, self._clock.now())
@@ -216,7 +229,7 @@ class CustomerProfileService(DefinitionAuthoringService[CustomerProfilePayload])
 
     def attach_to_shop(self, profile_id: UUID, shop_id: UUID) -> tuple[UUID, ...]:
         definition = self._require_profile(profile_id)
-        self._require_shop(shop_id)
+        self._claim_shop(shop_id)
         self._attachments.attach(definition, shop_id, self._clock.now())
         return self._attachments.shops_for(definition)
 
@@ -232,6 +245,7 @@ class CustomerProfileService(DefinitionAuthoringService[CustomerProfilePayload])
             raise CustomerProfileNotFoundError(f"customer profile {profile_id} has no draft")
         return definition
 
-    def _require_shop(self, shop_id: UUID) -> None:
-        if not self._shops.exists(shop_id):
+    def _claim_shop(self, shop_id: UUID) -> None:
+        """The shop must stand, and stays standing until the attachment is committed."""
+        if not self._shops.claim(shop_id):
             raise ShopNotFoundError(f"shop {shop_id} has no draft")
