@@ -18,6 +18,7 @@ import {
   ENTRY_KEY_RULE,
   MEDIA_ALT_TEXT_RULE,
   MEDIA_NEEDS_IMAGE,
+  MEDIA_NEEDS_OTHER_IMAGE,
   OPTION_NAME_RULE,
   OPTION_NEEDS_VALUE,
   REVIEW_AUTHOR_RULE,
@@ -121,16 +122,22 @@ export function mediaFields(entry: MediaReferenceSchema): MediaFields {
 /**
  * An image chosen, shown by no other entry of the product, then the alt text. `editing` is the
  * reference the form was opened on, which its own entry holds and so never collides with;
- * `nameOf` names the image the way the list does, so the refusal says which one.
+ * `nameOf` names the image the way the list does, so the refusal says which one. `replacing`
+ * is the form opened by *Replace* (Slice 41): there the image it was opened on is the one
+ * going, so it counts as none chosen.
  */
 export function mediaRefusal(
   fields: MediaFields,
   taken: readonly string[],
   editing: string | null,
   nameOf: (reference: string) => string,
+  replacing = false,
 ): ItemRefusal<MediaField> | null {
   if (fields.reference === "") {
     return { field: "reference", reason: MEDIA_NEEDS_IMAGE };
+  }
+  if (replacing && fields.reference === editing) {
+    return { field: "reference", reason: MEDIA_NEEDS_OTHER_IMAGE };
   }
   if (fields.reference !== editing && taken.includes(fields.reference)) {
     return {

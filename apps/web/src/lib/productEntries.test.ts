@@ -11,6 +11,7 @@ import {
   ENTRY_KEY_RULE,
   MEDIA_ALT_TEXT_RULE,
   MEDIA_NEEDS_IMAGE,
+  MEDIA_NEEDS_OTHER_IMAGE,
   OPTION_NAME_RULE,
   OPTION_NEEDS_VALUE,
   REVIEW_AUTHOR_RULE,
@@ -140,6 +141,28 @@ describe("the media form's refusal", () => {
     expect(mediaRefusal({ reference: BACK, altText: "" }, taken, null, nameOf)?.field).toBe(
       "reference",
     );
+  });
+
+  it("refuses a replacement in order: no other image, another entry's image, the alt text", () => {
+    const taken = [FRONT, BACK];
+    const replacing = (fields: MediaFields) => mediaRefusal(fields, taken, FRONT, nameOf, true);
+    const OTHER = `asset:sha256:${"c".repeat(64)}`;
+    // Opened on its own image, which is the one going: none chosen yet, before the alt text.
+    expect(replacing({ reference: FRONT, altText: "" })).toEqual({
+      field: "reference",
+      reason: MEDIA_NEEDS_OTHER_IMAGE,
+    });
+    expect(replacing({ reference: BACK, altText: "" })).toEqual({
+      field: "reference",
+      reason: "back.jpg is already an image of this product.",
+    });
+    expect(replacing({ reference: OTHER, altText: " " })).toEqual({
+      field: "altText",
+      reason: MEDIA_ALT_TEXT_RULE,
+    });
+    expect(replacing({ reference: OTHER, altText: "Front" })).toBeNull();
+    // An edit of the alt text keeps its own image, which is no refusal there.
+    expect(mediaRefusal(MEDIA, taken, FRONT, nameOf)).toBeNull();
   });
 
   it("stores the alt text stripped and the reference as the upload returned it", () => {

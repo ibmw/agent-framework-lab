@@ -1,4 +1,4 @@
-import { type DragEvent, type ReactNode, useId, useState } from "react";
+import { type DragEvent, type ReactNode, type Ref, useId, useState } from "react";
 import { MEDIA_TYPES } from "../lib/fieldRules";
 import {
   fieldLabelClasses,
@@ -16,8 +16,10 @@ import { ActionStatus } from "./ActionStatus";
  * `status`, which is drawn under the zone in `ActionStatus`.
  *
  * `fixed` is an entry being edited: its image is shown and is not what changes, so the zone
- * takes no file and offers no *Browse…*. `library` is the third way to an image, the shop's
- * own (`MediaLibrary`), drawn in the same field under the zone.
+ * takes no file and offers no *Browse…*. An entry being replaced (Slice 41) is not fixed: its
+ * image is shown until another is chosen. `library` is the third way to an image, the shop's
+ * own (`MediaLibrary`), drawn in the same field under the zone. `pickerRef` is the file input,
+ * which *Replace* hands focus to.
  */
 export function MediaDropZone({
   label,
@@ -31,6 +33,7 @@ export function MediaDropZone({
   describedBy,
   onFile,
   library,
+  pickerRef,
 }: {
   label: string;
   hint: string;
@@ -47,6 +50,7 @@ export function MediaDropZone({
   describedBy?: string;
   onFile: (file: File) => void;
   library?: ReactNode;
+  pickerRef?: Ref<HTMLInputElement>;
 }) {
   const id = useId();
   const labelId = `${id}-label`;
@@ -104,6 +108,7 @@ export function MediaDropZone({
           <span className="ml-auto flex items-center">
             <input
               id={id}
+              ref={pickerRef}
               type="file"
               accept={MEDIA_TYPES.join(",")}
               className="peer sr-only"

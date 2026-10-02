@@ -25,6 +25,7 @@ import {
   LABEL_MAX_LENGTH,
   MEDIA_ALT_TEXT_RULE,
   MEDIA_NEEDS_IMAGE,
+  MEDIA_NEEDS_OTHER_IMAGE,
   MEDIA_TYPE_RULE,
   mediaAssetMissingRule,
   OPTION_NAME_RULE,
@@ -1706,7 +1707,20 @@ describe("shop workspace", () => {
           version: 1,
           content_fingerprint: "b".repeat(64),
           published_at: "2026-08-23T12:10:00+00:00",
-          content: READY_CONTENT,
+          content: {
+            ...READY_CONTENT,
+            products: [
+              {
+                ...READY_CONTENT.products[0],
+                // A version is immutable, so one stored before uploads still holds the path
+                // it was written with (ADR 0076).
+                media: [
+                  ...READY_CONTENT.products[0].media,
+                  { reference: "media/alpine-shell-back.jpg", alt_text: "Back, hood down" },
+                ],
+              },
+            ],
+          },
         } satisfies ShopVersionResponse),
       ),
     );
@@ -1758,8 +1772,21 @@ describe("shop workspace", () => {
     // tools answer with the category, the options, the media and the reviews too.
     expect(screen.getByText("Jackets")).toBeVisible();
     expect(screen.getByText("Ocean Blue")).toBeVisible();
-    expect(screen.getByText(HOOD_UP.reference)).toBeVisible();
-    expect(screen.getByText("Hood up in the rain")).toBeVisible();
+    // Each image as a 48px thumbnail the lab serves, its alt text as `alt`, the file name and
+    // the alt text beside it (Slice 41); the written reference stays code, with no image.
+    const thumbnail = await screen.findByRole("img", { name: "Hood up in the rain" });
+    expect(thumbnail).toHaveAttribute("src", `/api/v1/shops/${SHOP_ID}/media/${HOOD_UP.sha256}`);
+    expect(thumbnail).toHaveClass("h-12", "w-12");
+    const imageEntry = thumbnail.closest("li") as HTMLElement;
+    expect(within(imageEntry).getByText("alpine-shell.jpg")).toBeVisible();
+    expect(within(imageEntry).getByText("Hood up in the rain")).toBeVisible();
+    expect(screen.queryByText(HOOD_UP.reference)).toBeNull();
+    const written = screen.getByText("media/alpine-shell-back.jpg");
+    expect(written.tagName).toBe("CODE");
+    const writtenEntry = written.closest("li") as HTMLElement;
+    expect(writtenEntry).toHaveTextContent("Back, hood down");
+    expect(writtenEntry.querySelector("img")).toBeNull();
+    expect(screen.getAllByRole("img")).toHaveLength(1);
     expect(screen.getByText(/“Dry\.” — Camille/)).toBeVisible();
 
     // And the identity, which the draft edits field by field and the version showed only
@@ -1779,6 +1806,73 @@ describe("shop workspace", () => {
     const panel = sidePanel(identity);
     expect(panelCards(panel)).toEqual(["Shop identity", "Payment methods", "Fulfilment methods"]);
     expect(panelFields(panel)).toEqual([]);
+  });
+
+  describe("a frozen version's images, whatever the shop's listing answers", () => {
+    function serveVersion() {
+      server.use(
+        http.get(`*/api/v1/shops/${SHOP_ID}/versions/1`, () =>
+          HttpResponse.json({
+            shop_id: SHOP_ID,
+            lifecycle_state: "published",
+            version: 1,
+            content_fingerprint: "b".repeat(64),
+            published_at: "2026-08-23T12:10:00+00:00",
+            content: READY_CONTENT,
+          } satisfies ShopVersionResponse),
+        ),
+      );
+    }
+
+    it("draws the thumbnail before the listing answers, and names it by its file once it does", async () => {
+      let answer: (() => void) | undefined;
+      server.use(
+        http.get(`*/api/v1/shops/${SHOP_ID}/media`, async () => {
+          await new Promise<void>((resolve) => {
+            answer = resolve;
+          });
+          return HttpResponse.json({ media: [HOOD_UP] });
+        }),
+      );
+      serveVersion();
+      renderAt(`/shops/${SHOP_ID}/versions/1`);
+
+      // The publish gate let v1 name only images the shop held: drawn from the reference.
+      const thumbnail = await screen.findByRole("img", { name: "Hood up in the rain" });
+      expect(thumbnail).toHaveAttribute("src", `/api/v1/shops/${SHOP_ID}/media/${HOOD_UP.sha256}`);
+      const entry = thumbnail.closest("li") as HTMLElement;
+      await waitFor(() => expect(answer).toBeDefined());
+      expect(within(entry).getByText("image 0f0f0f0f")).toBeVisible();
+
+      await act(async () => {
+        answer?.();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(await within(entry).findByText("alpine-shell.jpg")).toBeVisible();
+      expect(within(entry).getByRole("img", { name: "Hood up in the rain" })).toBe(thumbnail);
+    });
+
+    it("keeps the thumbnail and the short hash when the listing cannot be read", async () => {
+      server.use(
+        http.get(`*/api/v1/shops/${SHOP_ID}/media`, () =>
+          HttpResponse.json(
+            { code: "internal_error", message: "The lab could not answer.", request_id: "r" },
+            { status: 500 },
+          ),
+        ),
+      );
+      serveVersion();
+      renderAt(`/shops/${SHOP_ID}/versions/1`);
+
+      const thumbnail = await screen.findByRole("img", { name: "Hood up in the rain" });
+      expect(thumbnail).toHaveAttribute("src", `/api/v1/shops/${SHOP_ID}/media/${HOOD_UP.sha256}`);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      const entry = thumbnail.closest("li") as HTMLElement;
+      expect(within(entry).getByText("image 0f0f0f0f")).toBeVisible();
+      expect(within(entry).queryByText("alpine-shell.jpg")).toBeNull();
+    });
   });
 });
 
@@ -3594,6 +3688,338 @@ describe("a product's four lists, edited in the form below them", () => {
       expect(confirm).toHaveTextContent(
         "It is the product's last image, which the publish gate warns about.",
       );
+    });
+
+    describe("replacing an image on its item", () => {
+      const OCEAN_NAME = "ocean-blue-front.png, PNG, 900 B";
+      const HOOD_NAME = "alpine-shell.jpg, JPEG, 12.5 KB";
+      const SEAMS_NAME = "seams.webp, WebP, 2.0 MB";
+
+      /** The jacket with two images, the one to replace first. */
+      function twoImages() {
+        currentContent = {
+          ...READY_CONTENT,
+          products: [
+            {
+              ...READY_CONTENT.products[0],
+              media: [
+                { reference: HOOD_UP.reference, alt_text: "Hood up in the rain" },
+                { reference: SEAMS.reference, alt_text: "Taped seams" },
+              ],
+            },
+          ],
+        };
+        shopImages = [OCEAN, SEAMS, HOOD_UP];
+      }
+
+      async function libraryIn(region: ReturnType<typeof within>) {
+        return within(await region.findByRole("radiogroup", { name: "This shop's images" }));
+      }
+
+      function replaceForm(media: ReturnType<typeof within>, name = "alpine-shell.jpg") {
+        return within(media.getByRole("group", { name: `Replace ${name}` }));
+      }
+
+      function itemNames(media: ReturnType<typeof within>) {
+        return media
+          .getAllByRole("button", { name: /^Edit / })
+          .map((button: HTMLElement) => button.getAttribute("aria-label"));
+      }
+
+      it("swaps the image where it stands, keeps the alt text, and hands focus to the new item's Replace", async () => {
+        const user = userEvent.setup();
+        twoImages();
+        uploadAnswer = () => HttpResponse.json(OCEAN, { status: 201 });
+        const media = await card("Media");
+        const replace = await media.findByRole("button", { name: "Replace alpine-shell.jpg" });
+        // A written verb on the item, before the pencil (ADR 0075's *Duplicate*).
+        expect(replace).toHaveTextContent("Replace");
+        expect(
+          precedes(
+            replace,
+            within(itemOf(media, "alpine-shell.jpg")).getByRole("button", {
+              name: "Edit alpine-shell.jpg",
+            }),
+          ),
+        ).toBe(true);
+
+        await user.click(replace);
+
+        const form = replaceForm(media);
+        // The image is asked first, so the picker has focus; the entry is the one highlighted.
+        expect(form.getByLabelText("Browse…")).toHaveFocus();
+        expect(itemOf(media, "alpine-shell.jpg")).toHaveAttribute("aria-current", "true");
+        // The image it holds until another is chosen, and the alt text kept and editable.
+        expect(zoneOf(form)).toHaveTextContent("alpine-shell.jpg");
+        expect(form.getByLabelText("Alt text")).toHaveValue("Hood up in the rain");
+        expect(form.getByRole("button", { name: "Replace image" })).toBeVisible();
+        expect(form.queryByRole("button", { name: "Save changes" })).toBeNull();
+
+        dropOn(zoneOf(form), png());
+        await waitFor(() =>
+          expect(uploadStatus(form)).toHaveTextContent("ocean-blue-front.png uploaded"),
+        );
+        expect(zoneOf(form)).toHaveTextContent("ocean-blue-front.png");
+        await user.click(form.getByRole("button", { name: "Replace image" }));
+
+        // In the first place still, under the new file, with the old alt text.
+        expect(itemNames(media)).toEqual(["Edit ocean-blue-front.png", "Edit seams.webp"]);
+        const item = itemOf(media, "ocean-blue-front.png");
+        expect(within(item).getByRole("img", { name: "Hood up in the rain" })).toHaveAttribute(
+          "src",
+          `/api/v1/shops/${SHOP_ID}/media/${OCEAN.sha256}`,
+        );
+        expect(media.getByRole("button", { name: "Replace ocean-blue-front.png" })).toHaveFocus();
+        expect(media.getByRole("group", { name: "Add an image" })).toBeVisible();
+
+        // The old image is still the shop's, and choosable again now that no entry shows it.
+        const library = await libraryIn(within(media.getByRole("group", { name: "Add an image" })));
+        expect(library.getByRole("radio", { name: HOOD_NAME })).toBeEnabled();
+        expect(library.getByRole("radio", { name: OCEAN_NAME })).toBeDisabled();
+
+        await user.click(screen.getByRole("button", { name: "Save draft" }));
+        await waitFor(() => expect(savedDrafts).toHaveLength(1));
+        const before = unchangedPayload();
+        expect(lastSaved()).toStrictEqual({
+          ...before,
+          products: [
+            {
+              ...before.products[0],
+              media: [
+                { reference: OCEAN.reference, alt_text: "Hood up in the rain" },
+                { reference: SEAMS.reference, alt_text: "Taped seams" },
+              ],
+            },
+          ],
+        });
+      });
+
+      it("offers the library with the current image marked and not choosable, and replaces with a pick", async () => {
+        const user = userEvent.setup();
+        twoImages();
+        const media = await card("Media");
+        await user.click(await media.findByRole("button", { name: "Replace alpine-shell.jpg" }));
+        const form = replaceForm(media);
+        const library = await libraryIn(form);
+
+        const current = library.getByRole("radio", { name: HOOD_NAME });
+        expect(current).toBeDisabled();
+        expect(current).toHaveAccessibleDescription("Already an image of this product");
+        // Held, so never checked: the group keeps its tab stop.
+        for (const radio of library.getAllByRole("radio")) {
+          expect(radio).not.toBeChecked();
+        }
+        expect(library.getByRole("radio", { name: SEAMS_NAME })).toBeDisabled();
+
+        await user.click(library.getByRole("radio", { name: OCEAN_NAME }));
+        await user.clear(form.getByLabelText("Alt text"));
+        await user.type(form.getByLabelText("Alt text"), "Hood up, front");
+        await user.click(form.getByRole("button", { name: "Replace image" }));
+
+        expect(itemNames(media)).toEqual(["Edit ocean-blue-front.png", "Edit seams.webp"]);
+        expect(
+          within(itemOf(media, "ocean-blue-front.png")).getByRole("img", {
+            name: "Hood up, front",
+          }),
+        ).toBeVisible();
+        expect(uploads).toEqual([]);
+      });
+
+      it("refuses after Replace image, in order: no other image, another entry's, the alt text", async () => {
+        const user = userEvent.setup();
+        twoImages();
+        const media = await card("Media");
+        await user.click(await media.findByRole("button", { name: "Replace alpine-shell.jpg" }));
+        const form = replaceForm(media);
+        const button = form.getByRole("button", { name: "Replace image" });
+
+        // Still the image it replaces: refused, and nothing marked before a change.
+        expectRefused(button, MEDIA_NEEDS_OTHER_IMAGE);
+        expect(form.getByLabelText("Browse…")).not.toHaveAttribute("aria-invalid");
+        await user.type(form.getByLabelText("Alt text"), " again");
+        expectRefused(button, MEDIA_NEEDS_OTHER_IMAGE);
+        expect(form.getByLabelText("Browse…")).toHaveAttribute("aria-invalid", "true");
+
+        // Bytes the other entry shows, as the lab answers a repeat upload.
+        uploadAnswer = () => HttpResponse.json(SEAMS, { status: 200 });
+        dropOn(zoneOf(form), png("seams-again.webp"));
+        await waitFor(() =>
+          expectRefused(button, "seams.webp is already an image of this product."),
+        );
+
+        await user.click((await libraryIn(form)).getByRole("radio", { name: OCEAN_NAME }));
+        await user.clear(form.getByLabelText("Alt text"));
+        expectRefused(button, MEDIA_ALT_TEXT_RULE);
+        expect(form.getByLabelText("Alt text")).toHaveAttribute("aria-invalid", "true");
+        await user.click(button);
+        await submitWithoutPressing(button);
+        expect(itemNames(media)).toEqual(["Edit alpine-shell.jpg", "Edit seams.webp"]);
+
+        await user.type(form.getByLabelText("Alt text"), "Hood up");
+        expectNotRefused(button);
+        expect(savedDrafts).toEqual([]);
+      });
+
+      it("cancels to an empty add form, handing focus back to the Replace that opened it", async () => {
+        const user = userEvent.setup();
+        twoImages();
+        const media = await card("Media");
+        const replace = await media.findByRole("button", { name: "Replace alpine-shell.jpg" });
+        await user.click(replace);
+        await user.click(
+          (await libraryIn(replaceForm(media))).getByRole("radio", { name: OCEAN_NAME }),
+        );
+
+        await user.click(replaceForm(media).getByRole("button", { name: "Cancel" }));
+
+        expect(replace).toHaveFocus();
+        const add = within(media.getByRole("group", { name: "Add an image" }));
+        expect(zoneOf(add)).toHaveTextContent("Drop an image here");
+        expect(add.getByLabelText("Alt text")).toHaveValue("");
+        expect(itemNames(media)).toEqual(["Edit alpine-shell.jpg", "Edit seams.webp"]);
+        expect(screen.getByText("All changes saved")).toBeInTheDocument();
+      });
+
+      it("asks about a replacement chosen and not yet made", async () => {
+        const user = userEvent.setup();
+        twoImages();
+        const media = await card("Media");
+        await user.click(await media.findByRole("button", { name: "Replace alpine-shell.jpg" }));
+        await user.click(
+          (await libraryIn(replaceForm(media))).getByRole("radio", { name: OCEAN_NAME }),
+        );
+
+        await leaveForOrders(user);
+
+        const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+        expect(prompt).toHaveTextContent(
+          "The Media form holds an edit to alpine-shell.jpg that has not reached the draft.",
+        );
+        expect(prompt).toHaveTextContent(itemFormReason("an image", "draft"));
+      });
+
+      it("leaves an add form's upload that answers after Replace was pressed out of the replacement", async () => {
+        const user = userEvent.setup();
+        twoImages();
+        let answer: (response: Response) => void = () => {};
+        uploadAnswer = () => new Promise<Response>((resolve) => (answer = resolve));
+        const media = await card("Media");
+        const replace = await media.findByRole("button", { name: "Replace alpine-shell.jpg" });
+
+        dropOn(zoneOf(within(media.getByRole("group", { name: "Add an image" }))), png());
+        await waitFor(() => expect(uploads).toHaveLength(1));
+        await user.click(replace);
+        const form = replaceForm(media);
+        await act(async () => {
+          answer(HttpResponse.json(OCEAN, { status: 201 }));
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        });
+
+        // The replacement still holds the image it opened on, and says nothing of the upload.
+        expect(zoneOf(form)).toHaveTextContent("alpine-shell.jpg");
+        expect(zoneOf(form)).not.toHaveTextContent("ocean-blue-front.png");
+        expect(uploadStatus(form)).toHaveTextContent("");
+        expectRefused(form.getByRole("button", { name: "Replace image" }), MEDIA_NEEDS_OTHER_IMAGE);
+      });
+
+      it("leaves a replacement's upload that answers after Cancel out of the add form", async () => {
+        const user = userEvent.setup();
+        twoImages();
+        let answer: (response: Response) => void = () => {};
+        uploadAnswer = () => new Promise<Response>((resolve) => (answer = resolve));
+        const media = await card("Media");
+        await user.click(await media.findByRole("button", { name: "Replace alpine-shell.jpg" }));
+        dropOn(zoneOf(replaceForm(media)), png());
+        await waitFor(() => expect(uploads).toHaveLength(1));
+
+        await user.click(replaceForm(media).getByRole("button", { name: "Cancel" }));
+        await act(async () => {
+          answer(
+            HttpResponse.json(
+              { code: "media_type_unsupported", message: MEDIA_TYPE_RULE, request_id: "r" },
+              { status: 415 },
+            ),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        });
+
+        const add = within(media.getByRole("group", { name: "Add an image" }));
+        expect(zoneOf(add)).toHaveTextContent("Drop an image here");
+        expect(uploadStatus(add)).toHaveTextContent("");
+        expect(media.queryByText(MEDIA_TYPE_RULE)).toBeNull();
+      });
+
+      it("ends with its filling: an Edit after Replace, or after Replace and Cancel, is an edit", async () => {
+        const user = userEvent.setup();
+        twoImages();
+        const media = await card("Media");
+
+        /** The form an Edit opens: the alt text alone, its image fixed and no library. */
+        async function expectEditing(name: string, altText: string) {
+          const form = within(media.getByRole("group", { name: `Edit ${name}` }));
+          expect(media.queryByRole("group", { name: /^Replace / })).toBeNull();
+          expect(form.getByRole("button", { name: "Save changes" })).toBeVisible();
+          expect(form.queryByRole("button", { name: "Replace image" })).toBeNull();
+          expect(form.queryByRole("radiogroup", { name: "This shop's images" })).toBeNull();
+          expect(form.queryByLabelText("Browse…")).toBeNull();
+          dropOn(zoneOf(form), png());
+          await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          });
+          expect(uploads).toEqual([]);
+          expect(zoneOf(form)).toHaveTextContent(name);
+          await user.clear(form.getByLabelText("Alt text"));
+          await user.type(form.getByLabelText("Alt text"), altText);
+          await user.click(form.getByRole("button", { name: "Save changes" }));
+          expect(media.getByRole("button", { name: `Edit ${name}` })).toHaveFocus();
+        }
+
+        // Replace, then the same entry's Edit, with nothing cancelled in between.
+        await user.click(await media.findByRole("button", { name: "Replace alpine-shell.jpg" }));
+        await libraryIn(replaceForm(media));
+        await user.click(media.getByRole("button", { name: "Edit alpine-shell.jpg" }));
+        await expectEditing("alpine-shell.jpg", "Hood up, edited");
+
+        // Replace, Cancel, then the other entry's Edit.
+        await user.click(media.getByRole("button", { name: "Replace alpine-shell.jpg" }));
+        await user.click(replaceForm(media).getByRole("button", { name: "Cancel" }));
+        await user.click(media.getByRole("button", { name: "Edit seams.webp" }));
+        await expectEditing("seams.webp", "Seams, edited");
+
+        await user.click(screen.getByRole("button", { name: "Save draft" }));
+        await waitFor(() => expect(savedDrafts).toHaveLength(1));
+        expect(lastSaved().products[0].media).toEqual([
+          { reference: HOOD_UP.reference, alt_text: "Hood up, edited" },
+          { reference: SEAMS.reference, alt_text: "Seams, edited" },
+        ]);
+      });
+
+      it("is done from the keyboard: Replace, the library's arrows, the alt text, Replace image", async () => {
+        const user = userEvent.setup();
+        twoImages();
+        const media = await card("Media");
+        const replace = await media.findByRole("button", { name: "Replace alpine-shell.jpg" });
+
+        act(() => replace.focus());
+        await user.keyboard("{Enter}");
+        const form = replaceForm(media);
+        expect(form.getByLabelText("Browse…")).toHaveFocus();
+
+        // One Tab reaches the library on its one choosable image, past the held ones.
+        await user.tab();
+        const ocean = (await libraryIn(form)).getByRole("radio", { name: OCEAN_NAME });
+        expect(ocean).toHaveFocus();
+        await user.keyboard(" ");
+        expect(ocean).toBeChecked();
+        expect(zoneOf(form)).toHaveTextContent("ocean-blue-front.png");
+
+        await user.tab();
+        expect(form.getByLabelText("Alt text")).toHaveFocus();
+        await user.keyboard("{Enter}");
+
+        expect(itemNames(media)).toEqual(["Edit ocean-blue-front.png", "Edit seams.webp"]);
+        expect(media.getByRole("button", { name: "Replace ocean-blue-front.png" })).toHaveFocus();
+      });
     });
 
     describe("the shop's library", () => {
@@ -6012,6 +6438,82 @@ describe("index filter chips", () => {
     const box = await screen.findByRole("searchbox", { name: "Search products" });
     const title = screen.getByRole("heading", { level: 2, name: "Catalog" });
     expect(title.parentElement).toContainElement(box);
+  });
+
+  // Slice 41: the shops index's logo tile, at its measure, for a product's first image.
+  it("draws a product's first image as a 30px tile before its title, and nothing without one", async () => {
+    const back = shopImage("b2".repeat(32), "alpine-shell-back.jpg");
+    const bare = {
+      ...READY_CONTENT.products[0],
+      handle: "trailhead-cap",
+      title: "Trailhead Cap",
+      variants: [],
+      media: [],
+      reviews: [],
+      ratings: { review_count: 0, average_rating: null },
+    };
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...READY_CONTENT.products[0],
+          media: [
+            ...READY_CONTENT.products[0].media,
+            { reference: back.reference, alt_text: "Back" },
+          ],
+        },
+        bare,
+        // A path a draft held from before uploads names no image, so it draws no tile either.
+        {
+          ...bare,
+          handle: "harbour-dry-bag",
+          title: "Harbour Dry Bag",
+          media: [{ reference: "media/dry-bag.jpg", alt_text: "Dry bag" }],
+        },
+        // Its first image, then, is the first entry that is one.
+        {
+          ...bare,
+          handle: "fjord-base-layer",
+          title: "Fjord Base Layer",
+          media: [
+            { reference: "media/fjord.jpg", alt_text: "Written" },
+            { reference: back.reference, alt_text: "Back" },
+          ],
+        },
+      ],
+    };
+    renderAt(`/shops/${SHOP_ID}/products`);
+
+    const table = await screen.findByRole("table");
+    const rowOf = (title: string) =>
+      within(table).getByRole("link", { name: title }).closest("tr") as HTMLElement;
+    const alpine = rowOf("Alpine Shell Jacket");
+    const tiles = alpine.querySelectorAll("img");
+    expect(tiles).toHaveLength(1);
+    const tile = tiles[0];
+    // The first image, not the second; served by the lab.
+    expect(tile).toHaveAttribute("src", `/api/v1/shops/${SHOP_ID}/media/${HOOD_UP.sha256}`);
+    expect(tile).toHaveClass("h-[30px]", "w-[30px]", "rounded-[8px]");
+    // Decorative, as a shop's badge is: the title beside it names the row.
+    expect(tile).toHaveAttribute("alt", "");
+    expect(precedes(tile, within(alpine).getByRole("link", { name: "Alpine Shell Jacket" }))).toBe(
+      true,
+    );
+    // The link's name is still the title alone.
+    expect(within(alpine).getByRole("link")).toHaveAccessibleName("Alpine Shell Jacket");
+
+    const fjordTiles = rowOf("Fjord Base Layer").querySelectorAll("img");
+    expect(fjordTiles).toHaveLength(1);
+    expect(fjordTiles[0]).toHaveAttribute("src", `/api/v1/shops/${SHOP_ID}/media/${back.sha256}`);
+
+    // No image, no tile and no placeholder in its place.
+    for (const title of ["Trailhead Cap", "Harbour Dry Bag"]) {
+      const row = rowOf(title);
+      expect(row.querySelector("img")).toBeNull();
+      const cell = within(row).getByRole("link", { name: title }).closest("td") as HTMLElement;
+      expect(cell.querySelector("[data-shop-badge]")).toBeNull();
+      expect(cell.textContent).toBe(`${title}${bare.category}`);
+    }
   });
 
   it("counts the shops by publication and narrows the table to the pressed one", async () => {

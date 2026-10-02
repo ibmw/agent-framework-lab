@@ -7,10 +7,10 @@ import type {
   ShopMediaAssetSchema,
   VariantSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
-import { listShopMedia, shopMediaUrl, uploadShopMedia } from "../api/shops";
+import { shopMediaUrl, uploadShopMedia } from "../api/shops";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipList, ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
@@ -90,14 +90,7 @@ import {
   useFocusAfterCommit,
   useItemForm,
 } from "../lib/itemForm";
-import {
-  assetOf,
-  libraryOf,
-  libraryOrder,
-  localMediaRefusal,
-  mediaFacts,
-  mediaNames,
-} from "../lib/media";
+import { assetOf, localMediaRefusal, mediaFacts, mediaNames } from "../lib/media";
 import {
   type AttributeFields,
   attributeEntry,
@@ -158,6 +151,7 @@ import {
   fieldLabelClasses,
   mediaThumbnailClasses,
   outlineButtonClasses,
+  subtleButtonClasses,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -167,6 +161,7 @@ import {
 import { HELD_VALUE_REASON, useRegisterUnsavedWork } from "../lib/unsavedWork";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 import { useDuplicateProduct } from "./useDuplicateProduct";
+import { useShopLibrary } from "./useShopLibrary";
 
 const AVAILABILITIES = optionsOf(VARIANT_AVAILABILITY);
 
@@ -1440,61 +1435,6 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   );
 }
 
-/**
- * The shop's images, as the Media card names its items by and its library offers them: read
- * when the card opens and again after each upload (Slice 40b). An upload is put first at once,
- * so the image just uploaded is named and offered before the listing that follows it answers.
- * Only the latest read lands, so a slow first listing never takes back an upload's.
- */
-function useShopLibrary(shopId: string) {
-  const [state, setState] = useState<{
-    assets: ShopMediaAssetSchema[];
-    read: boolean;
-    failure: string | null;
-  }>({ assets: [], read: false, failure: null });
-  const latest = useRef(0);
-  const controller = useRef<AbortController | null>(null);
-
-  const reread = useCallback(() => {
-    const reading = ++latest.current;
-    const signal = controller.current?.signal;
-    listShopMedia(shopId, signal)
-      .then((listing) => {
-        if (reading !== latest.current) {
-          return;
-        }
-        setState({ assets: libraryOrder(listing.media), read: true, failure: null });
-      })
-      .catch((error: unknown) => {
-        if (reading !== latest.current || signal?.aborted) {
-          return;
-        }
-        // Unread, the items keep their hashes as names and say nothing they cannot know; the
-        // library says it could not be read until a listing answers, and never empties itself.
-        setState((now) => ({
-          ...now,
-          failure: describeApiError(error, "the lab did not answer."),
-        }));
-      });
-  }, [shopId]);
-
-  useEffect(() => {
-    controller.current = new AbortController();
-    setState({ assets: [], read: false, failure: null });
-    reread();
-    return () => controller.current?.abort();
-  }, [reread]);
-
-  return {
-    ...state,
-    library: libraryOf(state.assets),
-    uploaded(asset: ShopMediaAssetSchema) {
-      setState((now) => ({ ...now, assets: libraryOrder([asset, ...now.assets]) }));
-      reread();
-    },
-  };
-}
-
 const MEDIA_WORDS: ItemFormWords = {
   form: "Media",
   entry: "an image",
@@ -1505,11 +1445,13 @@ const MEDIA_WORDS: ItemFormWords = {
 const UPLOADING = "Uploading…";
 
 /**
- * The product's images, as items, and the one form that adds one or edits the one chosen
- * (ADR 0074, ADR 0076). An image is dropped on the form or browsed for, uploaded to the shop at
- * once and chosen — or picked from the shop's library, with no upload (Slice 40b); the entry's
- * alt text is what an edit changes, because the image is the entry's key and fixed once it is
- * added. Each item leads with its 48px thumbnail and is named by its
+ * The product's images, as items, and the one form that adds one, edits the one chosen or
+ * replaces its image (ADR 0074, ADR 0076). An image is dropped on the form or browsed for,
+ * uploaded to the shop at once and chosen — or picked from the shop's library, with no upload
+ * (Slice 40b); the entry's alt text is what an edit changes, because the image is the entry's
+ * key and fixed once it is added. *Replace* (Slice 41) is how the image changes: the same form,
+ * opened on the entry with its alt text kept and its image to choose again, which swaps the
+ * entry's reference where it stands. Each item leads with its 48px thumbnail and is named by its
  * file name — with its hash's first eight digits where two entries share one — read from the
  * shop's images (`listShopMedia`), which also give the type and the size its detail says.
  */
@@ -1541,7 +1483,13 @@ function MediaCard({ product, onChange }: EditorProps) {
   const altTextInput = useRef<HTMLInputElement>(null);
   const reasonId = useId();
   const [upload, setUpload] = useState({ running: false, summary: "", refused: false });
-  const refusal = mediaRefusal(form.fields, ids, form.editing, nameOf);
+  // The filling of the form *Replace* opened (Slice 41). Every Edit, reset and entry taken away
+  // moves the form's session on, so a filling that is not this one is an add or an edit.
+  const [replaceSession, setReplaceSession] = useState<number | null>(null);
+  const replacing = form.editing !== null && replaceSession === form.session;
+  const replaceButtons = useEditButtons();
+  const pickerInput = useRef<HTMLInputElement>(null);
+  const refusal = mediaRefusal(form.fields, ids, form.editing, nameOf, replacing);
   const marked = form.dirty ? refusal : null;
   const location = useLocation();
   const cardRef = useRef<HTMLElement>(null);
@@ -1615,13 +1563,19 @@ function MediaCard({ product, onChange }: EditorProps) {
     const editing = form.editing;
     const entry = mediaEntry(form.fields);
     if (editing !== null) {
+      // An edit and a replacement alike write the entry where it stands, in its place in the
+      // list; a replacement's reference is the new image, so focus goes to its *Replace*.
       if (form.dirty) {
         onChange({
           ...product,
           media: media.map((item) => (item.reference === editing ? entry : item)),
         });
       }
-      focusAfterCommit(() => editButtons.get(editing));
+      if (replacing) {
+        focusAfterCommit(() => replaceButtons.get(entry.reference));
+      } else {
+        focusAfterCommit(() => editButtons.get(editing));
+      }
     } else {
       onChange({ ...product, media: [...media, entry] });
     }
@@ -1699,6 +1653,20 @@ function MediaCard({ product, onChange }: EditorProps) {
                       }
                       editing={form.editing === entry.reference}
                     >
+                      {/* A verb that is neither Edit nor Remove keeps its word (ADR 0075). */}
+                      <button
+                        type="button"
+                        className={subtleButtonClasses}
+                        aria-label={`Replace ${name}`}
+                        ref={replaceButtons.ref(entry.reference)}
+                        onClick={() => {
+                          form.begin(entry.reference, mediaFields(entry));
+                          setReplaceSession(form.session + 1);
+                          focusAfterCommit(() => pickerInput.current);
+                        }}
+                      >
+                        Replace
+                      </button>
                       <EditButton
                         name={name}
                         buttonRef={editButtons.ref(entry.reference)}
@@ -1725,27 +1693,37 @@ function MediaCard({ product, onChange }: EditorProps) {
           </div>
         </FieldGroup>
         <ItemFormRow
-          title={formTitle(form.editing, nameOf, MEDIA_WORDS.entry)}
+          title={
+            replacing && form.editing !== null
+              ? `Replace ${nameOf(form.editing)}`
+              : formTitle(form.editing, nameOf, MEDIA_WORDS.entry)
+          }
           editing={form.editing !== null}
           addLabel="Add media"
+          saveLabel={replacing ? "Replace image" : undefined}
           refusal={refusal}
           reasonId={reasonId}
           onSubmit={submit}
-          onCancel={() => cancelEdit(form, focusAfterCommit, editButtons)}
+          onCancel={() =>
+            cancelEdit(form, focusAfterCommit, replacing ? replaceButtons : editButtons)
+          }
         >
           <MediaDropZone
             label="Image"
             hint={MEDIA_IMAGE_RULE}
             chosen={chosen}
-            fixed={form.editing !== null}
+            fixed={form.editing !== null && !replacing}
             uploading={upload.running}
             status={upload.summary}
             refused={upload.refused}
             invalid={marked?.field === "reference"}
             describedBy={reasonId}
             onFile={(file) => void choose(file)}
+            pickerRef={pickerInput}
             library={
-              form.editing !== null ? null : (
+              // Hidden while an entry's alt text is edited, its image being fixed; offered to
+              // a replacement, where this entry's own image is marked as every held one is.
+              form.editing !== null && !replacing ? null : (
                 <MediaLibrary
                   assets={shelf.assets}
                   read={shelf.read}

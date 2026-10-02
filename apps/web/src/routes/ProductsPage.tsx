@@ -1,6 +1,7 @@
 import type { DefinitionIssueSchema, ProductViewSchema } from "@agent-lab/contracts";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { shopMediaUrl } from "../api/shops";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { RemovalNotice } from "../components/ConfirmRemove";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
@@ -16,6 +17,7 @@ import {
 import { uniqueId } from "../lib/entryIds";
 import { labelOf, PRODUCT_STATUS } from "../lib/enumLabels";
 import { filterList } from "../lib/filters";
+import { assetOf } from "../lib/media";
 import { type DraftProduct, productEntryState } from "../lib/productKeys";
 import { useArrivedRemoval, useRemoval } from "../lib/removal";
 import {
@@ -27,6 +29,7 @@ import {
 } from "../lib/shop";
 import {
   accentButtonClasses,
+  catalogImageTileClasses,
   subtleButtonClasses,
   surfaceClasses,
   tableCellClasses,
@@ -258,14 +261,19 @@ export function ProductsPage() {
                 return (
                   <tr key={product.key}>
                     <td className={tableCellClasses}>
-                      <Link
-                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                        to={encodeURIComponent(product.handle)}
-                        state={productEntryState(product.key)}
-                      >
-                        {productTitle(product)}
-                      </Link>
-                      <div className="text-admin-muted">{product.category}</div>
+                      <div className="flex min-w-0 items-center gap-[11px]">
+                        <CatalogImage shopId={shopId} product={product} />
+                        <div className="min-w-0">
+                          <Link
+                            className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                            to={encodeURIComponent(product.handle)}
+                            state={productEntryState(product.key)}
+                          >
+                            {productTitle(product)}
+                          </Link>
+                          <div className="text-admin-muted">{product.category}</div>
+                        </div>
+                      </div>
                     </td>
                     <td className={tableCellClasses}>
                       <StatusPill tone="product" label={labelOf(PRODUCT_STATUS, product.status)} />
@@ -315,4 +323,22 @@ export function ProductsPage() {
       </section>
     </>
   );
+}
+
+/**
+ * A product's first image as a 30px tile before its title (Slice 41), as the shops index draws
+ * a shop's logo before its name; a product with no uploaded image draws nothing in its place. Decorative,
+ * as the shop's badge is: the title beside it names the row, and the alt text is read on the
+ * product's Media card. A draft write takes only images the shop holds and nothing removes one
+ * while the shop stands (ADR 0076), so an image reference here names an image the lab serves; a
+ * written reference a draft held from before uploads is not an image and is passed over.
+ */
+function CatalogImage({ shopId, product }: { shopId: string; product: DraftProduct }) {
+  // The first entry that is an image: a written reference before it is not one.
+  const first = product.media.find((entry) => assetOf(entry.reference) !== null);
+  const sha256 = first === undefined ? null : assetOf(first.reference);
+  if (sha256 === null) {
+    return null;
+  }
+  return <img src={shopMediaUrl(shopId, sha256)} alt="" className={catalogImageTileClasses} />;
 }

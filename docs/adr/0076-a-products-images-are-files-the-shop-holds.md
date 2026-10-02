@@ -23,6 +23,32 @@ shop yet." only once a listing has said so; one that cannot be read says so in t
 and the drop zone uploads all the same. While an entry is edited its image is fixed, and the
 library is not drawn.
 
+Amendment: 2026-10-02 — *Replace* and the image wherever it is listed (Slice 41). Each item of
+the Media card carries *Replace* before its pencil, a written verb named "Replace {name}", as
+*Duplicate* keeps its word (ADR 0075). It opens the same form as "Replace {name}" on the entry,
+its alt text kept and editable and focus on *Browse…*: the drop zone shows the entry's image
+until another is chosen, and takes a file, and the library is drawn, the entry's own image
+marked as every image this product shows is and so not choosable. The submit is *Replace
+image*, refused after the buttons, in order: no other image chosen ("Choose another image to
+replace this one with."), an image another entry of this product shows, the alt text empty.
+Saving swaps the entry's reference where it stands, in its place in the list, and focus goes
+to the new item's *Replace*; *Cancel* hands it back to the *Replace* that opened the form. An
+upload or a refusal that answers after the form was cancelled, opened on another entry or
+given another image is dropped, as it is from an add. The old image stays the shop's and is
+offered again by the library once no entry shows it; a published version keeps the old hash,
+and the draft's change summary reads the swap as a removal and an addition, because the diff
+keys an entry by its reference. The frozen version draws each entry as a 48px thumbnail, its
+alt text as `alt`, with the file name — read from the shop's images, as the Media card names
+its items — and the alt text beside it; a written reference a stored version holds stays code
+with no image. The thumbnail is drawn from the reference alone, since the publish gate let a
+published version name only images the shop held and nothing removes one; only the file name
+waits for the listing, and the short hash names the image until it answers or if it cannot. The
+catalog draws a product's first uploaded image — the first entry that is one, past any written
+reference — as a 30px tile, rounded as the shops index's logo tile is, before its title,
+decorative because the title beside it names the row; a product with no uploaded image draws no
+tile and no placeholder. The catalog reads no listing for it: a draft write takes only images
+the shop holds and nothing removes one while the shop stands.
+
 Supersedes ADR 0013's "Media stores URL/reference metadata only; managed binary upload remains
 deferred" (:46), and the two sentences of `docs/product-direction.md` that deferred managed
 upload. ADR 0070's *Deliberately not here* stands: the shop logo stays a drawn mark.

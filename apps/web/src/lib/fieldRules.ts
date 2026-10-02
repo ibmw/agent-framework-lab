@@ -746,6 +746,9 @@ export const ENTRY_KEY_RULE = "The key must be lowercase with hyphens.";
 /** Why a media entry is refused with no image chosen: the image is what the entry shows. */
 export const MEDIA_NEEDS_IMAGE = "A media entry needs an image.";
 
+/** Why a replacement is refused while the form still holds the image it replaces (Slice 41). */
+export const MEDIA_NEEDS_OTHER_IMAGE = "Choose another image to replace this one with.";
+
 export const MEDIA_ALT_TEXT_RULE = "A media entry needs its alt text.";
 
 export const ATTRIBUTE_LABEL_RULE = "An attribute needs a label.";

@@ -266,6 +266,7 @@ export function ItemFormRow({
   hint,
   editing,
   addLabel,
+  saveLabel = "Save changes",
   refusal,
   reasonId,
   onSubmit,
@@ -277,6 +278,8 @@ export function ItemFormRow({
   hint?: string;
   editing: boolean;
   addLabel: string;
+  /** The submit's word while editing: *Save changes*, or a verb of the list's own (*Replace image*). */
+  saveLabel?: string;
   refusal: ItemRefusal | null;
   reasonId: string;
   onSubmit: () => void;
@@ -299,7 +302,7 @@ export function ItemFormRow({
             refusal={refusal ? { id: reasonId, reason: refusal.reason } : null}
           >
             <ButtonIcon verb={editing ? "save" : "create"} />
-            {editing ? "Save changes" : addLabel}
+            {editing ? saveLabel : addLabel}
           </PrimaryAction>
           {editing ? (
             <button type="button" className={outlineButtonClasses} onClick={onCancel}>

@@ -21,6 +21,17 @@ const PINE_SQUARE_PNG = Buffer.from(
   "base64",
 );
 
+/** A 16×8 rust bar, the image *Replace* puts in its place: other bytes, and told by its width. */
+const RUST_BAR_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAABAAAAAICAIAAAB/FOjAAAAAE0lEQVR42mO4kaVDEmIY1UALDQB7vLcB7eMGRAAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/** How wide an image drew, which is the file the lab served for it. */
+function naturalWidth(image: ReturnType<Page["getByRole"]>) {
+  return image.evaluate((element: HTMLImageElement) => element.naturalWidth);
+}
+
 async function saveDraft(page: Page) {
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
@@ -228,11 +239,16 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await expect(frozen.getByText("Charcoal · L")).toBeVisible();
   await expect(frozen.getByText("249.00 CHF").first()).toBeVisible();
   await expect(frozen.getByText("249.00 EUR").first()).toBeVisible();
-  // The version froze the image by its hash, the reference a draft write takes — one image,
-  // on both products.
-  const frozenImages = page.getByText(/^asset:sha256:[0-9a-f]{64}$/);
-  await expect(frozenImages).toHaveCount(2);
-  expect(await frozenImages.nth(1).textContent()).toBe(await frozenImages.nth(0).textContent());
+  // The version froze the image by its hash, the reference a draft write takes, and draws it
+  // by its alt text with its file name beside it (Slice 41) — one image, on both products.
+  const frozenFront = page.getByRole("img", { name: "Ocean Blue, front" });
+  const frozenFolded = page.getByRole("img", { name: "Ocean Blue, folded" });
+  await expect.poll(() => naturalWidth(frozenFront)).toBe(8);
+  await expect.poll(() => naturalWidth(frozenFolded)).toBe(8);
+  const frozenSource = await frozenFront.getAttribute("src");
+  expect(frozenSource).toMatch(/\/media\/[0-9a-f]{64}$/);
+  expect(await frozenFolded.getAttribute("src")).toBe(frozenSource);
+  await expect(page.getByText("ocean-blue-front.png", { exact: true })).toHaveCount(2);
 
   // PLAN-UX Slice 7, read on Slice 16's surface. One word of a three-paragraph policy is
   // wrong. The operator opens the policy from the Documents table — a page now, not a row —
@@ -263,4 +279,50 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await expect(becomingV2.getByRole("listitem")).toHaveCount(1);
   await expect(becomingV2.getByText("Updated policy Shipping policy")).toBeVisible();
   await expect(timeline.getByText("Scenarios stay on v1 until you repoint them.")).toBeVisible();
+
+  // Slice 41. The catalog draws each product's first image as a tile before its title.
+  await openSection(page, "Products", "Products");
+  const catalog = page.getByRole("table");
+  const alpineRow = catalog.getByRole("row").filter({
+    has: page.getByRole("link", { name: "Alpine Shell Jacket" }),
+  });
+  const alpineTile = alpineRow.locator("img");
+  await expect(alpineTile).toHaveCount(1);
+  await expect.poll(() => naturalWidth(alpineTile)).toBe(8);
+
+  // The jacket's image is replaced on its item: another file dropped in, the alt text kept.
+  await alpineRow.getByRole("link", { name: "Alpine Shell Jacket" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Alpine Shell Jacket" })).toBeVisible();
+  const alpineMedia = card(page, "Media");
+  await alpineMedia.getByRole("button", { name: "Replace ocean-blue-front.png" }).click();
+  const replacing = alpineMedia.getByRole("group", { name: "Replace ocean-blue-front.png" });
+  await expect(replacing.getByLabel("Alt text", { exact: true })).toHaveValue("Ocean Blue, front");
+  await replacing.getByLabel("Browse…").setInputFiles({
+    name: "ocean-blue-back.png",
+    mimeType: "image/png",
+    buffer: RUST_BAR_PNG,
+  });
+  await expect(replacing.getByRole("group", { name: "Image", exact: true })).toContainText(
+    "ocean-blue-back.png",
+  );
+  await replacing.getByRole("button", { name: "Replace image" }).click();
+  await expect(
+    alpineMedia.getByRole("button", { name: "Replace ocean-blue-back.png" }),
+  ).toBeFocused();
+  const replaced = alpineMedia.getByRole("img", { name: "Ocean Blue, front" });
+  await expect.poll(() => naturalWidth(replaced)).toBe(16);
+  await saveDraft(page);
+
+  // The catalog's tile follows the draft…
+  await openSection(page, "Products", "Products");
+  await expect.poll(() => naturalWidth(alpineTile)).toBe(16);
+
+  // …and v1 still shows the image it froze, under its own file name.
+  await openSection(page, "Overview", "Overview");
+  await card(page, "Versions of this shop").getByRole("link", { name: "v1", exact: true }).click();
+  await expect(page.getByText("published · read only")).toBeVisible();
+  const stillFrozen = page.getByRole("img", { name: "Ocean Blue, front" });
+  await expect.poll(() => naturalWidth(stillFrozen)).toBe(8);
+  expect(await stillFrozen.getAttribute("src")).toBe(frozenSource);
+  await expect(page.getByText("ocean-blue-back.png")).toHaveCount(0);
 });

@@ -46,7 +46,7 @@ The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
 - **No backend change unless the slice says so.** A slice that says so ships its contract, its
   persistence and migration, and its frontend consumer together, as `docs/PLAN.md`'s delivery
   rules require, and its *Checks* line names the backend tests, the migration test and the
-  contract check beside Vitest and Playwright. Slices 42 and 43 say so; Slice 41 does not.
+  contract check beside Vitest and Playwright. Slices 42 and 43 say so.
 - **Standing decisions hold.** ADR 0044 refused a stored checklist and ADR 0045 removed the
   derived progress strip; ADR 0049 keeps the tours per surface; ADR 0051 asks about unsaved work
   once; ADR 0052 and ADR 0053 decide the connection and the provider; ADR 0054 decides the two
@@ -115,18 +115,16 @@ application, and the verdict on each slice of the 13 September plan — is
 Milestones 8, 9 and 10 are delivered. Their record is the commits and ADR 0052–0074; their goals
 and acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md`,
 `docs/history/PLAN-UX-2026-09-28.md` and `docs/history/PLAN-UX-2026-09-29.md`. Milestone 11's
-first two slices are delivered, and their record is ADR 0076, its amendment for the shop's
-library, and their commits; what every later slice stands on — the store, the reference, the
-table, the settings, the routes and their contract, the write rule, the gate, and the library
-the form picks from — is there. Its three remaining slices run in order, 41, 42 and 43, one
+first three slices are delivered, and their record is ADR 0076, its amendments for the shop's
+library and for *Replace* and the thumbnails, and their commits; what every later slice stands
+on — the store, the reference, the table, the settings, the routes and their contract, the write
+rule, the gate, the library the form picks from, and the image drawn on the item, the frozen
+version and the catalog — is there. Its two remaining slices run in order, 42 and 43, one
 branch each:
 
-- **41** gives the item *Replace* and draws the image wherever a reference is shown today. It is
-  the frontend's only.
-- **42** deletes a shop that never published. It needs ADR 0076's store to remove the directory
-  and nothing of 41.
+- **42** deletes a shop that never published. It needs ADR 0076's store to remove the directory.
 - **43** makes the seed ship real images through ADR 0076's store. It needs nothing else, and
-  may land before 41 and 42 if the operator wants the QA lab's images sooner.
+  may land before 42 if the operator wants the QA lab's images sooner.
 
 ## Milestone 11 — A product's images are files the shop holds
 
@@ -160,54 +158,6 @@ The model every slice builds on, which ADR 0076 records with its reasons:
   holds is refused; a stored version's written references still read.
 - **Served as an image and nothing else**, with its stored type, `nosniff`, a sandboxing
   `Content-Security-Policy`, `inline` and `immutable`, and logged by hash, type and size only.
-
-### Slice 41 — Replace an image on its item, and see it wherever it is listed
-
-An image is replaced on its item keeping its alt text, and the frozen version and the catalog
-draw the image instead of a path.
-
-- [ ] **Replace** on each item of the Media card, before the pencil: a verb that is neither Edit
-  nor Remove, so it keeps its written word, as *Duplicate* does (ADR 0075), named "Replace {name}".
-  It loads the form as "Replace {name}": *Image* the drop zone, *Browse…* and the library of
-  ADR 0076, the current image marked and not choosable; *Alt text* the entry's, kept
-  and editable; the submit *Replace image*. Refused after the buttons, in order: no other image
-  chosen, an image another entry of this product holds, the alt text empty. Saving swaps the
-  entry's reference where it stands, in its place in the list, and focus returns to the new
-  item's *Replace*. The draft's change summary reads it as a removal and an addition
-  (`domain/shop.py:918–926` keys the diff by reference); the published version keeps the old
-  hash, and the shop keeps its file.
-- [ ] **The frozen version** (`ShopVersionPage.tsx:148–158`) draws each entry as a 48px thumbnail,
-  its alt text as `alt`, with the file name and the alt text beside it; a written reference a
-  stored version holds stays code with no image.
-- [ ] **The catalog** (`ProductsPage.tsx`) draws a product's first image as a 30px tile before its
-  title, as the shops index draws a shop's logo tile before its name (`Workspace.dc.html` :181);
-  a product without one draws no tile and no placeholder.
-- [ ] `docs/design-direction.md`: the media clause of the list rule (:507) names *Replace*, and
-  the *Departures* row *A product's images* gains the catalog's tile and the version's thumbnails.
-
-Frames: `Workspace.dc.html` :842–846 (the catalog's Product cell: title and category, no image),
-:181 (the shops index's logo tile, the tile's measure); methods handoff
-`shop-details.template.html` :160–186 (the form below the list).
-
-Authority: ADR 0051, ADR 0063, ADR 0074, ADR 0075, ADR 0076.
-
-Departures to record: *Replace* and the thumbnails are drawn nowhere in the handoff, on the
-operator's decision of 2 October 2026; the catalog's tile beside the title, which the prototype
-draws for a shop's logo and not for a product.
-
-Backend change: none. Replace is an upload through `uploadShopMedia` and a draft save.
-
-Branch: `feat/replace-media-and-thumbnails`. Checks: Vitest — `App.test.tsx` *media references*
-(:3076) for *Replace* (the alt text kept, the image swapped in place, each refusal in order,
-focus returned, the prompt for a chosen image), *shows a published version as read-only frozen
-content* (:1635) for the thumbnails and a stored written reference's code, and the catalog's
-tests (:5146, :5188, the row actions :6309) for the tile and its absence. Playwright —
-`shop-publication.spec.ts` reads the frozen version back (:133) and now sees the image Slice
-the spec's media step uploaded, by its alt text; no accessible name a spec reaches moves.
-
-Slice evidence: on a product, the operator presses *Replace* on an image, drops another, keeps
-the alt text, and saves; the item shows the new image in the same place; the published version
-still shows the old one; the catalog row shows the product's first image beside its title.
 
 ### Slice 42 — A shop that never published can be deleted
 

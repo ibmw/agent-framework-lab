@@ -493,6 +493,13 @@ export const mediaThumbnailClasses =
 export const mediaLibraryTileClasses =
   "flex min-w-0 cursor-pointer flex-col items-start gap-1 rounded-[9px] border border-admin-quiet-border bg-white p-2 text-[12.5px] text-admin-muted hover:border-admin-faint has-checked:border-lab-primary has-checked:bg-admin-chip has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-lab-primary has-disabled:cursor-not-allowed has-disabled:hover:border-admin-quiet-border";
 
+/**
+ * A product's first image on its catalog row (Slice 41): the 30px tile, rounded 8px, that the
+ * shops index draws a shop's logo in (`Workspace.dc.html` :181).
+ */
+export const catalogImageTileClasses =
+  "h-[30px] w-[30px] flex-none rounded-[8px] border border-admin-border bg-admin-canvas object-cover";
+
 /** An image as the library offers it: 72px. */
 export const mediaLibraryThumbnailClasses =
   "h-[72px] w-[72px] flex-none rounded-md border border-admin-border bg-admin-canvas object-cover";

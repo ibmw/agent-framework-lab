@@ -1,8 +1,8 @@
-import type { ShopVersionResponse } from "@agent-lab/contracts";
+import type { MediaReferenceSchema, ShopVersionResponse } from "@agent-lab/contracts";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { LabApiError } from "../api/client";
-import { getShopVersion } from "../api/shops";
+import { getShopVersion, shopMediaUrl } from "../api/shops";
 import {
   Card,
   DefaultToneChip,
@@ -23,22 +23,29 @@ import {
   SUPPORT_CHANNEL,
   VARIANT_AVAILABILITY,
 } from "../lib/enumLabels";
+import { assetOf, mediaNames } from "../lib/media";
 import { ratingLabel, variantOptionLabel, variantPriceLabel } from "../lib/shop";
 import {
   editorColumnsClasses,
   editorMainClasses,
   editorPanelClasses,
   formatTimestamp,
+  mediaThumbnailClasses,
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
+import { useShopLibrary } from "./useShopLibrary";
 
 export function ShopVersionPage() {
   const { version = "" } = useParams();
   const { shopId } = useShopWorkspace();
   const [published, setPublished] = useState<ShopVersionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The shop's images, which name a frozen entry by its file. The publish gate let this version
+  // name only images the shop held, and nothing removes one (ADR 0076), so its thumbnails are
+  // drawn without waiting: only the file name waits for the listing.
+  const { library } = useShopLibrary(shopId);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -146,16 +153,11 @@ export function ShopVersionPage() {
                 </tbody>
               </table>
               {product.media.length > 0 ? (
-                <ul className="grid gap-1 text-[13px]">
-                  {product.media.map((entry) => (
-                    <li key={entry.reference} className="flex flex-wrap items-center gap-2">
-                      <code className="min-w-0 [overflow-wrap:anywhere] font-mono text-[12px]">
-                        {entry.reference}
-                      </code>
-                      <span className="text-admin-muted">{entry.alt_text}</span>
-                    </li>
-                  ))}
-                </ul>
+                <FrozenMedia
+                  media={product.media}
+                  names={mediaNames(product.media, library)}
+                  urlOf={(sha256) => shopMediaUrl(shopId, sha256)}
+                />
               ) : null}
               <p className="text-[13px] text-admin-muted">{ratingLabel(product)}</p>
               {product.reviews.length > 0 ? (
@@ -309,6 +311,49 @@ export function ShopVersionPage() {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * A frozen product's images (Slice 41): each a 48px thumbnail, its alt text as `alt`, with the
+ * file name and the alt text beside it. A written reference a version stored before uploads
+ * (ADR 0076) stays the code it is, with no image. An image is drawn from its reference alone,
+ * because a published version names only images the shop holds; its file name is the
+ * listing's, and until that is read — or if it cannot be — the short hash names it.
+ */
+function FrozenMedia({
+  media,
+  names,
+  urlOf,
+}: {
+  media: readonly MediaReferenceSchema[];
+  names: ReadonlyMap<string, string>;
+  urlOf: (sha256: string) => string;
+}) {
+  return (
+    <ul className="grid gap-2 text-[13px]">
+      {media.map((entry) => {
+        const sha256 = assetOf(entry.reference);
+        const url = sha256 === null ? null : urlOf(sha256);
+        return (
+          <li key={entry.reference} className="flex flex-wrap items-center gap-2.5">
+            {url === null ? null : (
+              <img src={url} alt={entry.alt_text} className={mediaThumbnailClasses} />
+            )}
+            {sha256 === null ? (
+              <code className="min-w-0 [overflow-wrap:anywhere] font-mono text-[12px]">
+                {entry.reference}
+              </code>
+            ) : (
+              <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">
+                {names.get(entry.reference) ?? entry.reference}
+              </span>
+            )}
+            <span className="text-admin-muted">{entry.alt_text}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
