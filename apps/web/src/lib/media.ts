@@ -90,6 +90,44 @@ export function mediaFacts(asset: ShopMediaAssetSchema): string {
 }
 
 /**
+ * The shop's images as its library offers them (Slice 40b): newest first, whatever order they
+ * were gathered in — a listing, or an upload put before the listing that follows it — and one
+ * image once, its first sighting kept.
+ */
+export function libraryOrder(assets: readonly ShopMediaAssetSchema[]): ShopMediaAssetSchema[] {
+  const seen = new Set<string>();
+  const unique = assets.filter((asset) => {
+    if (seen.has(asset.sha256)) {
+      return false;
+    }
+    seen.add(asset.sha256);
+    return true;
+  });
+  // `sort` is stable, so two images uploaded in the same instant keep the listing's order.
+  return unique.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+}
+
+/**
+ * Each library image's name, by hash: its file name, told apart by its hash's first eight
+ * digits where two of the shop's images share it — the rule the product's own list names its
+ * entries by.
+ */
+export function libraryNames(assets: readonly ShopMediaAssetSchema[]): Map<string, string> {
+  const names = mediaNames(
+    assets.map((asset) => ({ reference: asset.reference, alt_text: "" })),
+    libraryOf(assets),
+  );
+  return new Map(
+    assets.map((asset) => [asset.sha256, names.get(asset.reference) ?? asset.file_name]),
+  );
+}
+
+/** A library image's radio name: "{file name}, {type}, {size}". */
+export function libraryOptionName(asset: ShopMediaAssetSchema, name: string): string {
+  return `${name}, ${mediaTypeLabel(asset.content_type)}, ${formatByteSize(asset.byte_size)}`;
+}
+
+/**
  * Why a file is refused before it is uploaded, in the lab's own words, or none.
  *
  * The browser's type is read from the name, so it is only the first filter: a file whose type

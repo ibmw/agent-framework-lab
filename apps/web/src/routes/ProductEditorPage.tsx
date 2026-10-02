@@ -4,9 +4,10 @@ import type {
   OptionSchema,
   ProductViewSchema,
   ReviewSchema,
+  ShopMediaAssetSchema,
   VariantSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { listShopMedia, shopMediaUrl, uploadShopMedia } from "../api/shops";
@@ -24,6 +25,7 @@ import {
   RemoveButton,
 } from "../components/ItemList";
 import { MediaDropZone } from "../components/MediaDropZone";
+import { MediaLibrary } from "../components/MediaLibrary";
 import { PrimaryAction } from "../components/PrimaryAction";
 import { ProductDeleteConfirm } from "../components/ProductDeleteConfirm";
 import {
@@ -91,10 +93,10 @@ import {
 import {
   assetOf,
   libraryOf,
+  libraryOrder,
   localMediaRefusal,
   mediaFacts,
   mediaNames,
-  type ShopMediaLibrary,
 } from "../lib/media";
 import {
   type AttributeFields,
@@ -1438,6 +1440,61 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   );
 }
 
+/**
+ * The shop's images, as the Media card names its items by and its library offers them: read
+ * when the card opens and again after each upload (Slice 40b). An upload is put first at once,
+ * so the image just uploaded is named and offered before the listing that follows it answers.
+ * Only the latest read lands, so a slow first listing never takes back an upload's.
+ */
+function useShopLibrary(shopId: string) {
+  const [state, setState] = useState<{
+    assets: ShopMediaAssetSchema[];
+    read: boolean;
+    failure: string | null;
+  }>({ assets: [], read: false, failure: null });
+  const latest = useRef(0);
+  const controller = useRef<AbortController | null>(null);
+
+  const reread = useCallback(() => {
+    const reading = ++latest.current;
+    const signal = controller.current?.signal;
+    listShopMedia(shopId, signal)
+      .then((listing) => {
+        if (reading !== latest.current) {
+          return;
+        }
+        setState({ assets: libraryOrder(listing.media), read: true, failure: null });
+      })
+      .catch((error: unknown) => {
+        if (reading !== latest.current || signal?.aborted) {
+          return;
+        }
+        // Unread, the items keep their hashes as names and say nothing they cannot know; the
+        // library says it could not be read until a listing answers, and never empties itself.
+        setState((now) => ({
+          ...now,
+          failure: describeApiError(error, "the lab did not answer."),
+        }));
+      });
+  }, [shopId]);
+
+  useEffect(() => {
+    controller.current = new AbortController();
+    setState({ assets: [], read: false, failure: null });
+    reread();
+    return () => controller.current?.abort();
+  }, [reread]);
+
+  return {
+    ...state,
+    library: libraryOf(state.assets),
+    uploaded(asset: ShopMediaAssetSchema) {
+      setState((now) => ({ ...now, assets: libraryOrder([asset, ...now.assets]) }));
+      reread();
+    },
+  };
+}
+
 const MEDIA_WORDS: ItemFormWords = {
   form: "Media",
   entry: "an image",
@@ -1450,8 +1507,9 @@ const UPLOADING = "Uploading…";
 /**
  * The product's images, as items, and the one form that adds one or edits the one chosen
  * (ADR 0074, ADR 0076). An image is dropped on the form or browsed for, uploaded to the shop at
- * once and chosen; the entry's alt text is what an edit changes, because the image is the entry's
- * key and fixed once it is added. Each item leads with its 48px thumbnail and is named by its
+ * once and chosen — or picked from the shop's library, with no upload (Slice 40b); the entry's
+ * alt text is what an edit changes, because the image is the entry's key and fixed once it is
+ * added. Each item leads with its 48px thumbnail and is named by its
  * file name — with its hash's first eight digits where two entries share one — read from the
  * shop's images (`listShopMedia`), which also give the type and the size its detail says.
  */
@@ -1459,8 +1517,9 @@ function MediaCard({ product, onChange }: EditorProps) {
   const media = product.media;
   const ids = media.map((entry) => entry.reference);
   const { shopId, discarding } = useShopWorkspace();
-  const [library, setLibrary] = useState<ShopMediaLibrary>(() => libraryOf([]));
-  const [libraryRead, setLibraryRead] = useState(false);
+  const shelf = useShopLibrary(shopId);
+  const library = shelf.library;
+  const libraryRead = shelf.read;
   const names = mediaNames(media, library);
   const nameOf = (reference: string) =>
     names.get(reference) ?? mediaNames([{ reference, alt_text: "" }], library).get(reference) ?? "";
@@ -1487,19 +1546,6 @@ function MediaCard({ product, onChange }: EditorProps) {
   const location = useLocation();
   const cardRef = useRef<HTMLElement>(null);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    listShopMedia(shopId, controller.signal)
-      .then((listing) => {
-        setLibrary(libraryOf(listing.media));
-        setLibraryRead(true);
-      })
-      .catch(() => {
-        // Unread, the items keep their hashes as names and say nothing they cannot know.
-      });
-    return () => controller.abort();
-  }, [shopId]);
-
   // A finding about one of this product's images opens the editor on this card (`issueRoutes`).
   useEffect(() => {
     if (location.hash === "#media") {
@@ -1515,6 +1561,9 @@ function MediaCard({ product, onChange }: EditorProps) {
     sessionRef.current = session;
     setUpload({ running: false, summary: "", refused: false });
   }, [session]);
+  // Which choice of image the form is on: every file taken and every pick from the library moves
+  // it, so an upload that answers after the operator picked another image is not the form's.
+  const choiceRef = useRef(0);
 
   async function choose(file: File) {
     const refused = localMediaRefusal(file);
@@ -1522,20 +1571,23 @@ function MediaCard({ product, onChange }: EditorProps) {
       setUpload({ running: false, summary: refused, refused: true });
       return;
     }
-    // The filling of the form this upload is for: a result that comes back to another — an Edit
-    // pressed, a Cancel — is the shop's image still, and never that form's choice.
+    // The filling of the form this upload is for, and the choice within it: a result that comes
+    // back to another — an Edit pressed, a Cancel, an image picked from the library meanwhile —
+    // is the shop's image still, and never that form's choice.
     const startedIn = sessionRef.current;
+    const choice = ++choiceRef.current;
+    const ours = () => sessionRef.current === startedIn && choiceRef.current === choice;
     setUpload({ running: true, summary: UPLOADING, refused: false });
     try {
       const asset = await uploadShopMedia(shopId, file);
-      setLibrary((held) => new Map(held).set(asset.sha256, asset));
-      if (sessionRef.current !== startedIn) {
+      shelf.uploaded(asset);
+      if (!ours()) {
         return;
       }
       form.update({ reference: asset.reference });
       setUpload({ running: false, summary: `${asset.file_name} uploaded`, refused: false });
     } catch (error) {
-      if (sessionRef.current !== startedIn) {
+      if (!ours()) {
         return;
       }
       setUpload({
@@ -1544,6 +1596,16 @@ function MediaCard({ product, onChange }: EditorProps) {
         refused: true,
       });
     }
+  }
+
+  /**
+   * An image the shop holds, chosen from its library: no request, and an upload still in flight
+   * is no longer this form's — it lands in the library, and the pick stands.
+   */
+  function pick(asset: ShopMediaAssetSchema) {
+    choiceRef.current += 1;
+    form.update({ reference: asset.reference });
+    setUpload({ running: false, summary: "", refused: false });
   }
 
   function submit() {
@@ -1682,6 +1744,19 @@ function MediaCard({ product, onChange }: EditorProps) {
             invalid={marked?.field === "reference"}
             describedBy={reasonId}
             onFile={(file) => void choose(file)}
+            library={
+              form.editing !== null ? null : (
+                <MediaLibrary
+                  assets={shelf.assets}
+                  read={shelf.read}
+                  failure={shelf.failure}
+                  held={ids}
+                  chosen={form.fields.reference}
+                  urlOf={(sha256) => shopMediaUrl(shopId, sha256)}
+                  onPick={pick}
+                />
+              )
+            }
           />
           <FieldHint label="Alt text">
             <input

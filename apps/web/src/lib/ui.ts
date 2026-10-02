@@ -485,6 +485,19 @@ export const mediaThumbnailClasses =
   "h-12 w-12 flex-none rounded-md border border-admin-border bg-admin-canvas object-cover";
 
 /**
+ * One image of the shop's library (Slice 40b): a native radio drawn as a tile, as the logo's
+ * marks are — the input visually hidden and the label carrying the look, so the library is a
+ * real radio group with arrow keys and one tab stop. Pine when chosen; quiet and not pressable
+ * for an image this product already shows.
+ */
+export const mediaLibraryTileClasses =
+  "flex min-w-0 cursor-pointer flex-col items-start gap-1 rounded-[9px] border border-admin-quiet-border bg-white p-2 text-[12.5px] text-admin-muted hover:border-admin-faint has-checked:border-lab-primary has-checked:bg-admin-chip has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-lab-primary has-disabled:cursor-not-allowed has-disabled:hover:border-admin-quiet-border";
+
+/** An image as the library offers it: 72px. */
+export const mediaLibraryThumbnailClasses =
+  "h-[72px] w-[72px] flex-none rounded-md border border-admin-border bg-admin-canvas object-cover";
+
+/**
  * A primary action that cannot proceed: dashed, quiet, reachable, and never pressable.
  *
  * `docs/design-direction.md` states the rule — *A blocked primary action says why*: dashed,

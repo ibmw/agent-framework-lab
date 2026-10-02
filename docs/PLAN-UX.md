@@ -46,7 +46,7 @@ The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
 - **No backend change unless the slice says so.** A slice that says so ships its contract, its
   persistence and migration, and its frontend consumer together, as `docs/PLAN.md`'s delivery
   rules require, and its *Checks* line names the backend tests, the migration test and the
-  contract check beside Vitest and Playwright. Slices 42 and 43 say so; Slices 40b and 41 do not.
+  contract check beside Vitest and Playwright. Slices 42 and 43 say so; Slice 41 does not.
 - **Standing decisions hold.** ADR 0044 refused a stored checklist and ADR 0045 removed the
   derived progress strip; ADR 0049 keeps the tours per surface; ADR 0051 asks about unsaved work
   once; ADR 0052 and ADR 0053 decide the connection and the provider; ADR 0054 decides the two
@@ -115,19 +115,18 @@ application, and the verdict on each slice of the 13 September plan — is
 Milestones 8, 9 and 10 are delivered. Their record is the commits and ADR 0052–0074; their goals
 and acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md`,
 `docs/history/PLAN-UX-2026-09-28.md` and `docs/history/PLAN-UX-2026-09-29.md`. Milestone 11's
-first slice is delivered, and its record is ADR 0076 and its commit; what every later slice
-stands on — the store, the reference, the table, the settings, the routes and their contract, the
-write rule and the gate — is there. Its four remaining slices run in order, 40b, 41, 42 and 43,
-one branch each:
+first two slices are delivered, and their record is ADR 0076, its amendment for the shop's
+library, and their commits; what every later slice stands on — the store, the reference, the
+table, the settings, the routes and their contract, the write rule, the gate, and the library
+the form picks from — is there. Its three remaining slices run in order, 41, 42 and 43, one
+branch each:
 
-- **40b** gives the form the shop's library to pick from, so an image is reused across products
-  without uploading it again.
 - **41** gives the item *Replace* and draws the image wherever a reference is shown today. It is
   the frontend's only.
 - **42** deletes a shop that never published. It needs ADR 0076's store to remove the directory
-  and nothing of 40b or 41.
+  and nothing of 41.
 - **43** makes the seed ship real images through ADR 0076's store. It needs nothing else, and
-  may land before 40b, 41 and 42 if the operator wants the QA lab's images sooner.
+  may land before 41 and 42 if the operator wants the QA lab's images sooner.
 
 ## Milestone 11 — A product's images are files the shop holds
 
@@ -162,41 +161,6 @@ The model every slice builds on, which ADR 0076 records with its reasons:
 - **Served as an image and nothing else**, with its stored type, `nosniff`, a sandboxing
   `Content-Security-Policy`, `inline` and `immutable`, and logged by hash, type and size only.
 
-### Slice 40b — The shop's library, to pick an image from
-
-The form offers every image the shop already holds, so one image serves several products
-without uploading it again.
-
-- [ ] **The library** in the Media card's form, beside the drop zone in *Image*: a radio group,
-  "This shop's images", newest first, one 72px thumbnail per image, each radio named "{file name},
-  {type}, {size}", read from `listShopMedia` when the card opens and after each upload, the
-  image just uploaded chosen in it. Empty, it says "No image uploaded to this shop yet." An image
-  this product's entries already hold is marked and not choosable; the refusal it would meet
-  stays the form's (ADR 0076).
-- [ ] Picking an image another product holds adds it here without a request; the draft names the
-  same reference twice, on two products, which the domain allows (uniqueness is per product,
-  `domain/shop.py:331–333`).
-- [ ] `docs/design-direction.md`: the *Departures* row *A product's images* gains the library.
-
-Frames: none draws it, as none drew the drop zone (ADR 0076); methods handoff `shop-details.template.html` :160–186.
-
-Authority: ADR 0051, ADR 0063, ADR 0074, ADR 0076.
-
-Departures to record: the library, which the handoff does not draw, on the operator's decision
-of 2 October 2026.
-
-Backend change: none. The library reads `listShopMedia` (ADR 0076).
-
-Branch: `feat/shop-media-library`. Checks: Vitest — `App.test.tsx` *media references* (:3076) for
-the library (the radios' names and order, the empty sentence, the upload chosen in it, an image
-this product holds not choosable, an image of another product reused with no upload request in
-MSW). Playwright — `shop-publication.spec.ts` gives a second product the first product's image
-from the library and publishes.
-
-Slice evidence: on a second product, the operator picks the image uploaded on the first from
-"This shop's images", gives it an alt text and adds it; nothing uploads, and both products show
-it.
-
 ### Slice 41 — Replace an image on its item, and see it wherever it is listed
 
 An image is replaced on its item keeping its alt text, and the frozen version and the catalog
@@ -205,7 +169,7 @@ draw the image instead of a path.
 - [ ] **Replace** on each item of the Media card, before the pencil: a verb that is neither Edit
   nor Remove, so it keeps its written word, as *Duplicate* does (ADR 0075), named "Replace {name}".
   It loads the form as "Replace {name}": *Image* the drop zone, *Browse…* and the library of
-  ADR 0076 and Slice 40b, the current image marked and not choosable; *Alt text* the entry's, kept
+  ADR 0076, the current image marked and not choosable; *Alt text* the entry's, kept
   and editable; the submit *Replace image*. Refused after the buttons, in order: no other image
   chosen, an image another entry of this product holds, the alt text empty. Saving swaps the
   entry's reference where it stands, in its place in the list, and focus returns to the new

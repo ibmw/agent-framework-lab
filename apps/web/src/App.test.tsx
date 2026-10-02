@@ -271,6 +271,8 @@ let shopImages: ShopMediaAssetSchema[] = [HOOD_UP];
 let uploadAnswer: () => Response | Promise<Response> = () =>
   HttpResponse.json(shopImage("c3".repeat(32), "ocean-blue-front.png"), { status: 201 });
 let uploads: string[] = [];
+/** How many times the shop's images were listed. */
+let mediaReads = 0;
 
 function lastSaved(): SavedShopPayload {
   const payload = savedDrafts.at(-1);
@@ -298,10 +300,21 @@ const server = setupServer(
     return HttpResponse.json(draft(currentContent));
   }),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft/preview`, () => HttpResponse.json(currentPreview)),
-  http.get(`*/api/v1/shops/${SHOP_ID}/media`, () => HttpResponse.json({ media: shopImages })),
-  http.post(`*/api/v1/shops/${SHOP_ID}/media`, ({ request }) => {
+  http.get(`*/api/v1/shops/${SHOP_ID}/media`, () => {
+    mediaReads += 1;
+    return HttpResponse.json({ media: shopImages });
+  }),
+  http.post(`*/api/v1/shops/${SHOP_ID}/media`, async ({ request }) => {
     uploads.push(request.headers.get("content-type") ?? "");
-    return uploadAnswer();
+    const response = await uploadAnswer();
+    // What the lab stored is what its listing answers next, newest first.
+    if (response.ok) {
+      const stored = (await response.clone().json()) as ShopMediaAssetSchema;
+      if (!shopImages.some((image) => image.sha256 === stored.sha256)) {
+        shopImages = [stored, ...shopImages];
+      }
+    }
+    return response;
   }),
   http.get(`*/api/v1/shops/${SHOP_ID}/versions`, () => HttpResponse.json(versions)),
   // The overview reads this shop's experiments for its activity card; every other surface in
@@ -349,6 +362,7 @@ afterEach(() => {
   savedDrafts = [];
   shopImages = [HOOD_UP];
   uploads = [];
+  mediaReads = 0;
   uploadAnswer = () =>
     HttpResponse.json(shopImage("c3".repeat(32), "ocean-blue-front.png"), { status: 201 });
 });
@@ -2845,8 +2859,14 @@ describe("a product's four lists, edited in the form below them", () => {
     return within(await screen.findByRole("region", { name }));
   }
 
+  /** The list's item of that name — not the library's tile of the same file name. */
   function itemOf(region: ReturnType<typeof within>, name: string): HTMLElement {
-    return region.getByText(name, { selector: "span" }).closest("li") as HTMLElement;
+    const items = region
+      .getAllByText(name, { selector: "span" })
+      .map((span: HTMLElement) => span.closest("li"))
+      .filter((item: HTMLLIElement | null): item is HTMLLIElement => item !== null);
+    expect(items).toHaveLength(1);
+    return items[0];
   }
 
   function leaveForOrders(user: ReturnType<typeof userEvent.setup>) {
@@ -3158,7 +3178,7 @@ describe("a product's four lists, edited in the form below them", () => {
       shopImages = [SEAMS, HOOD_UP];
       const media = await card("Media");
 
-      await media.findByText("seams.webp", { selector: "span" });
+      await media.findByRole("button", { name: "Edit seams.webp" });
       const item = itemOf(media, "seams.webp");
       const thumbnail = within(item).getByRole("img", { name: "Taped seams" });
       expect(thumbnail).toHaveAttribute("src", `/api/v1/shops/${SHOP_ID}/media/${SEAMS.sha256}`);
@@ -3574,6 +3594,485 @@ describe("a product's four lists, edited in the form below them", () => {
       expect(confirm).toHaveTextContent(
         "It is the product's last image, which the publish gate warns about.",
       );
+    });
+
+    describe("the shop's library", () => {
+      // Uploaded in this order, so the library offers them the other way round.
+      const OLDEST = shopImage("e5".repeat(32), "seams.webp", {
+        content_type: "image/webp",
+        byte_size: 2_048_000,
+        created_at: "2026-10-01T08:00:00Z",
+      });
+      const NEWEST = shopImage("c3".repeat(32), "ocean-blue-front.png", {
+        content_type: "image/png",
+        byte_size: 900,
+        created_at: "2026-10-02T11:00:00Z",
+      });
+      const OCEAN_NAME = "ocean-blue-front.png, PNG, 900 B";
+      const SEAMS_NAME = "seams.webp, WebP, 2.0 MB";
+      const HOOD_NAME = "alpine-shell.jpg, JPEG, 12.5 KB";
+
+      async function libraryIn(region: ReturnType<typeof within>) {
+        return within(await region.findByRole("radiogroup", { name: "This shop's images" }));
+      }
+
+      function addForm(media: ReturnType<typeof within>) {
+        return within(media.getByRole("group", { name: "Add an image" }));
+      }
+
+      function radioNames(library: ReturnType<typeof within>) {
+        return library
+          .getAllByRole("radio")
+          .map((radio: HTMLElement) => radio.getAttribute("aria-label"));
+      }
+
+      it("offers every image the shop holds, newest first, each radio named by file, type and size", async () => {
+        // Listed in no particular order: the library puts the newest first.
+        shopImages = [OLDEST, NEWEST, HOOD_UP];
+        const media = await card("Media");
+        const library = await libraryIn(addForm(media));
+
+        expect(radioNames(library)).toEqual([OCEAN_NAME, HOOD_NAME, SEAMS_NAME]);
+        // Nothing is chosen until the operator picks or uploads.
+        for (const radio of library.getAllByRole("radio")) {
+          expect(radio).not.toBeChecked();
+        }
+        // Each drawn at 72px from the image the lab serves, decorative beside its name.
+        const ocean = library.getByRole("radio", { name: OCEAN_NAME }).closest("label");
+        const thumbnail = ocean?.querySelector("img");
+        expect(thumbnail).toHaveAttribute("src", `/api/v1/shops/${SHOP_ID}/media/${NEWEST.sha256}`);
+        expect(thumbnail).toHaveAttribute("alt", "");
+        expect(thumbnail).toHaveClass("h-[72px]", "w-[72px]");
+        expect(ocean).toHaveTextContent("ocean-blue-front.png");
+        expect(ocean).toHaveTextContent("PNG · 900 B");
+        // Read once, when the card opened.
+        expect(mediaReads).toBe(1);
+      });
+
+      it("tells two of the shop's images of one file name apart by their hashes", async () => {
+        const copy = shopImage("b2".repeat(32), "alpine-shell.jpg", {
+          created_at: "2026-10-02T10:00:00Z",
+        });
+        shopImages = [copy, HOOD_UP];
+        const media = await card("Media");
+        const library = await libraryIn(addForm(media));
+
+        expect(radioNames(library)).toEqual([
+          "alpine-shell.jpg (b2b2b2b2), JPEG, 12.5 KB",
+          "alpine-shell.jpg (0f0f0f0f), JPEG, 12.5 KB",
+        ]);
+      });
+
+      it("marks an image this product already shows, and does not let it be chosen", async () => {
+        const user = userEvent.setup();
+        shopImages = [NEWEST, HOOD_UP];
+        const media = await card("Media");
+        const add = addForm(media);
+        const library = await libraryIn(add);
+
+        const held = library.getByRole("radio", { name: HOOD_NAME });
+        expect(held).toBeDisabled();
+        expect(held).toHaveAccessibleDescription("Already an image of this product");
+        const ocean = library.getByRole("radio", { name: OCEAN_NAME });
+        expect(ocean).toBeEnabled();
+        expect(ocean).not.toHaveAttribute("aria-describedby");
+
+        await user.click(held);
+        expect(held).not.toBeChecked();
+        expect(zoneOf(add)).toHaveTextContent("Drop an image here");
+      });
+
+      it("fills the form with the image picked, with no upload, and adds it", async () => {
+        const user = userEvent.setup();
+        shopImages = [NEWEST, HOOD_UP];
+        const media = await card("Media");
+        const add = addForm(media);
+        const library = await libraryIn(add);
+
+        await user.click(library.getByRole("radio", { name: OCEAN_NAME }));
+
+        expect(library.getByRole("radio", { name: OCEAN_NAME })).toBeChecked();
+        expect(zoneOf(add)).toHaveTextContent("ocean-blue-front.png");
+        expect(zoneOf(add).querySelector("img")).toHaveAttribute(
+          "src",
+          `/api/v1/shops/${SHOP_ID}/media/${NEWEST.sha256}`,
+        );
+        await user.type(add.getByLabelText("Alt text"), "Ocean Blue, front");
+        await user.click(add.getByRole("button", { name: "Add media" }));
+
+        const item = itemOf(media, "ocean-blue-front.png");
+        expect(within(item).getByRole("img", { name: "Ocean Blue, front" })).toBeVisible();
+        expect(item).toHaveTextContent("Ocean Blue, front · PNG · 900 B");
+        // Added, it is this product's now: marked in the library, and the form is empty again.
+        expect(library.getByRole("radio", { name: OCEAN_NAME })).toBeDisabled();
+        expect(library.getByRole("radio", { name: OCEAN_NAME })).not.toBeChecked();
+        expect(zoneOf(add)).toHaveTextContent("Drop an image here");
+        await user.click(screen.getByRole("button", { name: "Save draft" }));
+        await waitFor(() => expect(savedDrafts).toHaveLength(1));
+        expect(lastSaved().products[0].media).toEqual([
+          { reference: HOOD_UP.reference, alt_text: "Hood up in the rain" },
+          { reference: NEWEST.reference, alt_text: "Ocean Blue, front" },
+        ]);
+        expect(uploads).toEqual([]);
+      });
+
+      it("gives a second product the first product's image, with no upload", async () => {
+        const user = userEvent.setup();
+        const alpine = READY_CONTENT.products[0];
+        currentContent = {
+          ...READY_CONTENT,
+          products: [
+            alpine,
+            {
+              ...alpine,
+              handle: "fjord-base-layer",
+              title: "Fjord Base Layer",
+              variants: alpine.variants.map((variant) => ({
+                ...variant,
+                sku: variant.sku.replace("ASJ", "FBL"),
+              })),
+              media: [],
+              reviews: [],
+              ratings: { review_count: 0, average_rating: null },
+            },
+          ],
+        };
+        renderAt(`/shops/${SHOP_ID}/products/fjord-base-layer`);
+        const media = within(await screen.findByRole("region", { name: "Media" }));
+        const add = addForm(media);
+
+        // Another product shows it; this one does not, so it is choosable here.
+        const hood = (await libraryIn(add)).getByRole("radio", { name: HOOD_NAME });
+        expect(hood).toBeEnabled();
+        await user.click(hood);
+        await user.type(add.getByLabelText("Alt text"), "Folded");
+        await user.click(add.getByRole("button", { name: "Add media" }));
+        await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+        await waitFor(() => expect(savedDrafts).toHaveLength(1));
+        // One reference on two products, which the domain allows.
+        expect(lastSaved().products.map((product) => product.media)).toEqual([
+          [{ reference: HOOD_UP.reference, alt_text: "Hood up in the rain" }],
+          [{ reference: HOOD_UP.reference, alt_text: "Folded" }],
+        ]);
+        expect(uploads).toEqual([]);
+      });
+
+      it("is one tab stop the arrow keys move through, passing over an image this product shows", async () => {
+        const user = userEvent.setup();
+        // The held image sits between the two choosable ones.
+        const middle = { ...HOOD_UP, created_at: "2026-10-02T09:00:00Z" };
+        shopImages = [NEWEST, middle, OLDEST];
+        const media = await card("Media");
+        const add = addForm(media);
+        const library = await libraryIn(add);
+        const ocean = library.getByRole("radio", { name: OCEAN_NAME });
+        const seams = library.getByRole("radio", { name: SEAMS_NAME });
+
+        // From *Browse…*, one Tab reaches the library on its first choosable image.
+        act(() => add.getByLabelText("Browse…").focus());
+        await user.tab();
+        expect(ocean).toHaveFocus();
+
+        await user.keyboard("{ArrowRight}");
+        expect(seams).toHaveFocus();
+        expect(seams).toBeChecked();
+        expect(zoneOf(add)).toHaveTextContent("seams.webp");
+        await user.keyboard("{ArrowLeft}");
+        expect(ocean).toHaveFocus();
+        expect(ocean).toBeChecked();
+        expect(zoneOf(add)).toHaveTextContent("ocean-blue-front.png");
+
+        // And one more Tab leaves the group for the alt text.
+        await user.tab();
+        expect(add.getByLabelText("Alt text")).toHaveFocus();
+      });
+
+      it("says the library is empty only once the listing says so", async () => {
+        let answer: (() => void) | undefined;
+        server.use(
+          http.get(`*/api/v1/shops/${SHOP_ID}/media`, async () => {
+            await new Promise<void>((resolve) => {
+              answer = resolve;
+            });
+            return HttpResponse.json({ media: [] });
+          }),
+        );
+        currentContent = {
+          ...READY_CONTENT,
+          products: [{ ...READY_CONTENT.products[0], media: [] }],
+        };
+        const media = await card("Media");
+        const add = addForm(media);
+
+        await waitFor(() => expect(answer).toBeDefined());
+        expect(add.queryByText("No image uploaded to this shop yet.")).toBeNull();
+        expect(add.queryByText("This shop's images")).toBeNull();
+        await act(async () => {
+          answer?.();
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+
+        expect(await add.findByText("No image uploaded to this shop yet.")).toBeVisible();
+        expect(add.getByText("This shop's images")).toBeVisible();
+        expect(add.queryByRole("radiogroup")).toBeNull();
+      });
+
+      it("says a listing that could not be read, and the drop zone still uploads", async () => {
+        server.use(
+          http.get(`*/api/v1/shops/${SHOP_ID}/media`, () =>
+            HttpResponse.json(
+              { code: "internal_error", message: "The lab could not answer.", request_id: "r" },
+              { status: 500 },
+            ),
+          ),
+        );
+        uploadAnswer = () => HttpResponse.json(NEWEST, { status: 201 });
+        const media = await card("Media");
+        const add = addForm(media);
+
+        expect(
+          await add.findByText("This shop's images could not be read: The lab could not answer."),
+        ).toBeVisible();
+        expect(add.queryByText("No image uploaded to this shop yet.")).toBeNull();
+        expect(add.queryByRole("radiogroup")).toBeNull();
+
+        dropOn(zoneOf(add), png());
+        await waitFor(() =>
+          expect(uploadStatus(add)).toHaveTextContent("ocean-blue-front.png uploaded"),
+        );
+        // What the upload answered is offered, and chosen, though the listing still fails.
+        expect((await libraryIn(add)).getByRole("radio", { name: OCEAN_NAME })).toBeChecked();
+      });
+
+      it("reads the library again after an upload and chooses the image just uploaded in it", async () => {
+        shopImages = [HOOD_UP];
+        uploadAnswer = () => HttpResponse.json(NEWEST, { status: 201 });
+        const media = await card("Media");
+        const add = addForm(media);
+        await libraryIn(add);
+        expect(mediaReads).toBe(1);
+
+        dropOn(zoneOf(add), png());
+
+        await waitFor(() => expect(mediaReads).toBe(2));
+        const library = await libraryIn(add);
+        await waitFor(() => expect(library.getByRole("radio", { name: OCEAN_NAME })).toBeChecked());
+        expect(radioNames(library)).toEqual([OCEAN_NAME, HOOD_NAME]);
+      });
+
+      it("never checks an image this product shows, even one an upload answered, and the form refuses it", async () => {
+        const user = userEvent.setup();
+        uploadAnswer = () => HttpResponse.json(HOOD_UP, { status: 200 });
+        const media = await card("Media");
+        const add = addForm(media);
+        const library = await libraryIn(add);
+        const hood = library.getByRole("radio", { name: HOOD_NAME });
+
+        dropOn(zoneOf(add), png("hood-again.jpg"));
+
+        await waitFor(() =>
+          expect(uploadStatus(add)).toHaveTextContent("alpine-shell.jpg uploaded"),
+        );
+        // A checked radio that is disabled would leave the group no tab stop.
+        expect(hood).not.toBeChecked();
+        expect(hood).toBeDisabled();
+        for (const radio of library.getAllByRole("radio")) {
+          expect(radio).not.toBeChecked();
+        }
+        // The zone shows the image the form holds, and the form says why it cannot be added.
+        expect(zoneOf(add)).toHaveTextContent("alpine-shell.jpg");
+        await user.type(add.getByLabelText("Alt text"), "Hood up");
+        expectRefused(
+          add.getByRole("button", { name: "Add media" }),
+          "alpine-shell.jpg is already an image of this product.",
+        );
+      });
+
+      it("lets only the latest listing land, so a slow first one never takes back an upload", async () => {
+        let releaseFirst: (() => void) | undefined;
+        let reads = 0;
+        server.use(
+          http.get(`*/api/v1/shops/${SHOP_ID}/media`, async () => {
+            reads += 1;
+            if (reads === 1) {
+              // The listing as it stood when the card opened, answered last.
+              const stale = [HOOD_UP];
+              await new Promise<void>((resolve) => {
+                releaseFirst = resolve;
+              });
+              return HttpResponse.json({ media: stale });
+            }
+            return HttpResponse.json({ media: shopImages });
+          }),
+        );
+        uploadAnswer = () => HttpResponse.json(NEWEST, { status: 201 });
+        const media = await card("Media");
+        const add = addForm(media);
+        await waitFor(() => expect(releaseFirst).toBeDefined());
+
+        dropOn(zoneOf(add), png());
+        await waitFor(() => expect(reads).toBe(2));
+        const library = await libraryIn(add);
+        await waitFor(() => expect(library.getByRole("radio", { name: OCEAN_NAME })).toBeChecked());
+
+        await act(async () => {
+          releaseFirst?.();
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        });
+
+        expect(radioNames(library)).toEqual([OCEAN_NAME, HOOD_NAME]);
+        expect(library.getByRole("radio", { name: OCEAN_NAME })).toBeChecked();
+      });
+
+      it("says so when this product already shows every image the shop holds", async () => {
+        const user = userEvent.setup();
+        shopImages = [NEWEST, HOOD_UP];
+        const media = await card("Media");
+        const add = addForm(media);
+        const library = await libraryIn(add);
+        const line = "Every image of this shop is already this product's.";
+        expect(add.queryByText(line)).toBeNull();
+
+        await user.click(library.getByRole("radio", { name: OCEAN_NAME }));
+        await user.type(add.getByLabelText("Alt text"), "Ocean Blue, front");
+        await user.click(add.getByRole("button", { name: "Add media" }));
+
+        expect(add.getByText(line)).toBeVisible();
+        // The tiles stay, marked, so what the product shows is still read here.
+        expect(radioNames(library)).toEqual([OCEAN_NAME, HOOD_NAME]);
+      });
+
+      it("reads each tile once: its name and facts are the radio's name", async () => {
+        shopImages = [NEWEST, HOOD_UP];
+        const media = await card("Media");
+        const library = await libraryIn(addForm(media));
+
+        const tile = library.getByRole("radio", { name: OCEAN_NAME }).closest("label");
+        expect(within(tile as HTMLElement).getByText("ocean-blue-front.png")).toHaveAttribute(
+          "aria-hidden",
+          "true",
+        );
+        expect(within(tile as HTMLElement).getByText("PNG · 900 B")).toHaveAttribute(
+          "aria-hidden",
+          "true",
+        );
+        const held = library.getByRole("radio", { name: HOOD_NAME });
+        expect(held).toHaveAccessibleDescription("Already an image of this product");
+      });
+
+      it("keeps a pick made while an upload runs, and the upload lands in the library only", async () => {
+        const user = userEvent.setup();
+        let answer: (response: Response) => void = () => {};
+        uploadAnswer = () => new Promise<Response>((resolve) => (answer = resolve));
+        shopImages = [OLDEST, HOOD_UP];
+        const media = await card("Media");
+        const add = addForm(media);
+        const seams = (await libraryIn(add)).getByRole("radio", { name: SEAMS_NAME });
+
+        dropOn(zoneOf(add), png());
+        await waitFor(() => expect(uploadStatus(add)).toHaveTextContent("Uploading…"));
+        await user.click(seams);
+        // The pick is the form's choice at once: the upload no longer holds the form back.
+        expect(zoneOf(add)).toHaveTextContent("seams.webp");
+        expect(uploadStatus(add)).toHaveTextContent("");
+        expect(add.getByLabelText("Browse…")).not.toHaveAttribute("aria-disabled");
+
+        await act(async () => {
+          answer(HttpResponse.json(NEWEST, { status: 201 }));
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        });
+
+        // Landed in the shop and offered, but not chosen over the pick.
+        const library = await libraryIn(add);
+        await waitFor(() => expect(radioNames(library)).toContain(OCEAN_NAME));
+        expect(library.getByRole("radio", { name: OCEAN_NAME })).not.toBeChecked();
+        expect(seams).toBeChecked();
+        expect(zoneOf(add)).toHaveTextContent("seams.webp");
+        expect(zoneOf(add)).not.toHaveTextContent("ocean-blue-front.png");
+        expect(uploadStatus(add)).toHaveTextContent("");
+        await user.type(add.getByLabelText("Alt text"), "Seams");
+        await user.click(add.getByRole("button", { name: "Add media" }));
+        await user.click(screen.getByRole("button", { name: "Save draft" }));
+        await waitFor(() => expect(savedDrafts).toHaveLength(1));
+        expect(lastSaved().products[0].media.at(-1)).toEqual({
+          reference: OLDEST.reference,
+          alt_text: "Seams",
+        });
+      });
+
+      it("keeps a pick made while an upload runs from the upload's late refusal", async () => {
+        const user = userEvent.setup();
+        let answer: (response: Response) => void = () => {};
+        uploadAnswer = () => new Promise<Response>((resolve) => (answer = resolve));
+        shopImages = [OLDEST, HOOD_UP];
+        const media = await card("Media");
+        const add = addForm(media);
+        const seams = (await libraryIn(add)).getByRole("radio", { name: SEAMS_NAME });
+
+        dropOn(zoneOf(add), png());
+        await waitFor(() => expect(uploads).toHaveLength(1));
+        await user.click(seams);
+        await act(async () => {
+          answer(
+            HttpResponse.json(
+              { code: "media_type_unsupported", message: MEDIA_TYPE_RULE, request_id: "r" },
+              { status: 415 },
+            ),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        });
+
+        expect(seams).toBeChecked();
+        expect(uploadStatus(add)).toHaveTextContent("");
+        expect(media.queryByText(MEDIA_TYPE_RULE)).toBeNull();
+      });
+
+      it("lets an upload after a pick take the form's choice", async () => {
+        const user = userEvent.setup();
+        shopImages = [OLDEST, HOOD_UP];
+        uploadAnswer = () => HttpResponse.json(NEWEST, { status: 201 });
+        const media = await card("Media");
+        const add = addForm(media);
+
+        await user.click((await libraryIn(add)).getByRole("radio", { name: SEAMS_NAME }));
+        dropOn(zoneOf(add), png());
+
+        const library = await libraryIn(add);
+        await waitFor(() => expect(library.getByRole("radio", { name: OCEAN_NAME })).toBeChecked());
+        expect(library.getByRole("radio", { name: SEAMS_NAME })).not.toBeChecked();
+        expect(zoneOf(add)).toHaveTextContent("ocean-blue-front.png");
+        expect(uploadStatus(add)).toHaveTextContent("ocean-blue-front.png uploaded");
+      });
+
+      it("asks about an image picked and not yet added", async () => {
+        const user = userEvent.setup();
+        shopImages = [OLDEST, HOOD_UP];
+        const media = await card("Media");
+
+        await user.click(
+          (await libraryIn(addForm(media))).getByRole("radio", { name: SEAMS_NAME }),
+        );
+        await leaveForOrders(user);
+
+        const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+        expect(prompt).toHaveTextContent(
+          "The Media form holds “seams.webp”, which has not been added to the draft.",
+        );
+      });
+
+      it("offers no library while an entry is edited, its image being fixed", async () => {
+        const user = userEvent.setup();
+        shopImages = [NEWEST, HOOD_UP];
+        const media = await card("Media");
+        await libraryIn(addForm(media));
+
+        await user.click(media.getByRole("button", { name: "Edit alpine-shell.jpg" }));
+
+        const form = within(media.getByRole("group", { name: "Edit alpine-shell.jpg" }));
+        expect(form.queryByRole("radiogroup")).toBeNull();
+        expect(form.queryByText("This shop's images")).toBeNull();
+      });
     });
   });
 

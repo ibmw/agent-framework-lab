@@ -159,6 +159,49 @@ test("an author publishes a shop with size and colour variants and reads the fro
     .toBe(8);
   await saveDraft(page);
 
+  // A second product takes the same image from the shop's library (Slice 40b): picked, given
+  // its own alt text and added, and nothing is uploaded again.
+  const mediaUploads: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && /\/api\/v1\/shops\/[^/]+\/media$/.test(request.url())) {
+      mediaUploads.push(request.url());
+    }
+  });
+  await openSection(page, "Products", "Products");
+  await page.getByRole("button", { name: "New product" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Untitled product" })).toBeVisible();
+  await card(page, "Details").getByLabel("Title", { exact: true }).fill("Fjord Base Layer");
+  await card(page, "Details").getByLabel("Category", { exact: true }).fill("Base layers");
+  await card(page, "Details")
+    .getByLabel("Description", { exact: true })
+    .fill("Merino base layer for cold mornings.");
+  const fjordVariants = card(page, "Variants");
+  await fjordVariants.getByLabel("New variant SKU", { exact: true }).fill("NS-FBL-ONE");
+  await fjordVariants.getByLabel("Price (optional)", { exact: true }).fill("89.00");
+  await fjordVariants.getByRole("button", { name: "Add variant" }).click();
+
+  const fjordMedia = card(page, "Media");
+  const library = fjordMedia.getByRole("radiogroup", { name: "This shop's images" });
+  const shared = library.getByRole("radio", { name: /^ocean-blue-front\.png, PNG, \d+ B$/ });
+  await expect(shared).toBeEnabled();
+  // The tile is what a reader presses; the radio underneath carries the name.
+  await library.getByText("ocean-blue-front.png", { exact: true }).click();
+  await expect(shared).toBeChecked();
+  await expect(fjordMedia.getByRole("group", { name: "Image", exact: true })).toContainText(
+    "ocean-blue-front.png",
+  );
+  await fjordMedia.getByLabel("Alt text", { exact: true }).fill("Ocean Blue, folded");
+  await fjordMedia.getByRole("button", { name: "Add media" }).click();
+  await expect(fjordMedia.getByRole("button", { name: "Edit ocean-blue-front.png" })).toBeVisible();
+  const sharedThumbnail = fjordMedia.getByRole("img", { name: "Ocean Blue, folded" });
+  await expect
+    .poll(() => sharedThumbnail.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBe(8);
+  // Now this product's too, so its library marks it and will not offer it again.
+  await expect(shared).toBeDisabled();
+  await saveDraft(page);
+  expect(mediaUploads).toEqual([]);
+
   // Publish the whole shop, then read the frozen version back. The operator reads what
   // becomes v1 before anything is frozen, and only the Publish inside that review writes.
   await openSection(page, "Overview", "Overview");
@@ -185,8 +228,11 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await expect(frozen.getByText("Charcoal · L")).toBeVisible();
   await expect(frozen.getByText("249.00 CHF").first()).toBeVisible();
   await expect(frozen.getByText("249.00 EUR").first()).toBeVisible();
-  // The version froze the image by its hash, the reference a draft write takes.
-  await expect(page.getByText(/^asset:sha256:[0-9a-f]{64}$/)).toBeVisible();
+  // The version froze the image by its hash, the reference a draft write takes — one image,
+  // on both products.
+  const frozenImages = page.getByText(/^asset:sha256:[0-9a-f]{64}$/);
+  await expect(frozenImages).toHaveCount(2);
+  expect(await frozenImages.nth(1).textContent()).toBe(await frozenImages.nth(0).textContent());
 
   // PLAN-UX Slice 7, read on Slice 16's surface. One word of a three-paragraph policy is
   // wrong. The operator opens the policy from the Documents table — a page now, not a row —

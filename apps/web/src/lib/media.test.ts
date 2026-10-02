@@ -5,7 +5,10 @@ import {
   assetOf,
   assetReference,
   formatByteSize,
+  libraryNames,
   libraryOf,
+  libraryOptionName,
+  libraryOrder,
   localMediaRefusal,
   mediaFacts,
   mediaNames,
@@ -86,6 +89,40 @@ describe("a product's images, named as the list names them", () => {
     expect(mediaFacts(asset(OCEAN, "a.jpg"))).toBe("JPEG · 12.5 KB");
     expect(formatByteSize(900)).toBe("900 B");
     expect(formatByteSize(5 * 1024 * 1024)).toBe("5.0 MB");
+  });
+});
+
+describe("the shop's library", () => {
+  const at = (sha256: string, fileName: string, createdAt: string) => ({
+    ...asset(sha256, fileName),
+    created_at: createdAt,
+  });
+
+  it("offers the newest first, each image once, keeping the listing's order for a tie", () => {
+    const old = at(SEAMS, "seams.jpg", "2026-10-01T08:00:00Z");
+    const tieA = at(OCEAN, "a.jpg", "2026-10-02T09:00:00Z");
+    const tieB = at(COPY, "b.jpg", "2026-10-02T09:00:00Z");
+    // An offset is the same instant written another way.
+    const newest = at("d4".repeat(32), "d.jpg", "2026-10-02T12:00:00+02:00");
+
+    expect(libraryOrder([old, tieA, newest, tieB, tieA]).map((image) => image.file_name)).toEqual([
+      "d.jpg",
+      "a.jpg",
+      "b.jpg",
+      "seams.jpg",
+    ]);
+  });
+
+  it("names each image by its file, told apart by its hash where two share one", () => {
+    const assets = [...LIBRARY.values()];
+    const names = libraryNames(assets);
+
+    expect(names.get(SEAMS)).toBe("seams.jpg");
+    expect(names.get(OCEAN)).toBe("ocean-blue-front.jpg (0f0f0f0f)");
+    expect(names.get(COPY)).toBe("ocean-blue-front.jpg (b2b2b2b2)");
+    expect(libraryOptionName(asset(SEAMS, "seams.jpg"), "seams.jpg")).toBe(
+      "seams.jpg, JPEG, 12.5 KB",
+    );
   });
 });
 

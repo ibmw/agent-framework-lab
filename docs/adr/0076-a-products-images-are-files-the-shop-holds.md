@@ -2,6 +2,27 @@
 
 Status: accepted — 2026-10-02
 
+Amendment: 2026-10-02 — The shop's library (Slice 40b). Under the drop zone in *Image*, "This
+shop's images" is a radio group of every image the shop holds, newest first, each a 72px tile
+whose radio is named "{file name}, {type}, {size}" — the file name told apart by its hash's first
+eight digits where two of the shop's images share it. It is read when the card opens and again
+after every upload, the upload put first at once so it is chosen in it before the listing
+answers, and only the latest read lands. Picking one fills *Image* as an upload does and sends
+nothing, so one image serves several products. An image this product's entries show is marked
+"Already an image of this product" and is `disabled`, not `aria-disabled` as the picker is while it
+uploads: the picker is unavailable for a moment under a reader's focus, a held image for the
+whole of the form's filling, and a native group's arrow keys pass over a disabled radio and would
+check an `aria-disabled` one. A held radio is never checked, not even when an upload the lab
+answers with bytes this product shows puts it in the form: Chromium and Firefox give a radio
+group whose checked radio is disabled no tab stop at all, so the keyboard would lose the library.
+The drop zone shows that image and the form's own refusal says why. When this product shows
+every image the shop holds, a line under the group says so. A pick made while an upload runs is the
+form's choice: the upload lands in the library and is not chosen over it, and an upload started
+after a pick takes the form's choice in turn. An empty library says "No image uploaded to this
+shop yet." only once a listing has said so; one that cannot be read says so in the lab's words,
+and the drop zone uploads all the same. While an entry is edited its image is fixed, and the
+library is not drawn.
+
 Supersedes ADR 0013's "Media stores URL/reference metadata only; managed binary upload remains
 deferred" (:46), and the two sentences of `docs/product-direction.md` that deferred managed
 upload. ADR 0070's *Deliberately not here* stands: the shop logo stays a drawn mark.

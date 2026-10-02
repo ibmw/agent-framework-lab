@@ -1,4 +1,4 @@
-import { type DragEvent, useId, useState } from "react";
+import { type DragEvent, type ReactNode, useId, useState } from "react";
 import { MEDIA_TYPES } from "../lib/fieldRules";
 import {
   fieldLabelClasses,
@@ -16,7 +16,8 @@ import { ActionStatus } from "./ActionStatus";
  * `status`, which is drawn under the zone in `ActionStatus`.
  *
  * `fixed` is an entry being edited: its image is shown and is not what changes, so the zone
- * takes no file and offers no *Browse…*.
+ * takes no file and offers no *Browse…*. `library` is the third way to an image, the shop's
+ * own (`MediaLibrary`), drawn in the same field under the zone.
  */
 export function MediaDropZone({
   label,
@@ -29,6 +30,7 @@ export function MediaDropZone({
   invalid,
   describedBy,
   onFile,
+  library,
 }: {
   label: string;
   hint: string;
@@ -44,6 +46,7 @@ export function MediaDropZone({
   invalid: boolean;
   describedBy?: string;
   onFile: (file: File) => void;
+  library?: ReactNode;
 }) {
   const id = useId();
   const labelId = `${id}-label`;
@@ -148,6 +151,7 @@ export function MediaDropZone({
         noteId={noteId}
         regionId={statusId}
       />
+      {library}
     </div>
   );
 }
