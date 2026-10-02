@@ -36,6 +36,7 @@ from capability_lab.application.agent_configurations import (
 from capability_lab.application.ports import AgentCapability
 from capability_lab.application.sandbox_tool_contracts import ToolEffect
 from capability_lab.domain.agent_configuration import (
+    MAX_PROMPT_LENGTH,
     AgentArchitecture,
     AgentConfigurationError,
     AgentConfigurationPayload,
@@ -67,7 +68,7 @@ PreviewShopQuery = Annotated[
     Query(description="Resolve the prompt's variables against this shop's latest version."),
 ]
 Temperature = Annotated[str, Field(pattern=r"^\d(?:\.\d{1,2})?$")]
-PromptBody = Annotated[str, Field(max_length=20000)]
+PromptBody = Annotated[str, Field(max_length=MAX_PROMPT_LENGTH)]
 Description = Annotated[str, Field(max_length=4000)]
 ToolName = Annotated[str, Field(min_length=1, max_length=100)]
 

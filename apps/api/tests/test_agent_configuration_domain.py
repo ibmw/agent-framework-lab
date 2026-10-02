@@ -17,6 +17,7 @@ from capability_lab.domain.agent_configuration import (
     summarize_agent_configuration_changes,
     validate_agent_configuration,
 )
+from capability_lab.domain.content import MAX_TEXT_LENGTH
 from capability_lab.domain.definitions import DefinitionChangeKind
 
 
@@ -57,9 +58,25 @@ def test_a_model_rejects_a_tool_round_limit_no_run_could_use() -> None:
         model_settings(max_tool_rounds=500)
 
 
-def test_a_prompt_longer_than_the_limit_is_refused() -> None:
-    with pytest.raises(AgentConfigurationError, match="system prompt"):
+def test_a_prompt_is_kept_to_its_own_cap_past_the_text_cap() -> None:
+    # A prompt is the one text the lab keeps longer than `MAX_TEXT_LENGTH`; a prompt at its
+    # cap is accepted, so the shared text rule cannot refuse it first.
+    assert MAX_PROMPT_LENGTH > MAX_TEXT_LENGTH
+    prompt = "a" * MAX_PROMPT_LENGTH
+    assert publishable_configuration(prompt=prompt).prompt == prompt
+    with pytest.raises(
+        AgentConfigurationError,
+        match=f"system prompt must contain at most {MAX_PROMPT_LENGTH} characters",
+    ):
         publishable_configuration(prompt="a" * (MAX_PROMPT_LENGTH + 1))
+
+
+def test_a_description_is_still_kept_to_the_text_cap() -> None:
+    with pytest.raises(
+        AgentConfigurationError,
+        match=f"agent configuration description must contain at most {MAX_TEXT_LENGTH}",
+    ):
+        publishable_configuration(description="a" * (MAX_TEXT_LENGTH + 1))
 
 
 def test_the_shop_default_tone_cannot_also_name_an_override() -> None:

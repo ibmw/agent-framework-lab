@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
+import agentConfigurationDomain from "../../../api/src/capability_lab/domain/agent_configuration.py?raw";
 import contentDomain from "../../../api/src/capability_lab/domain/content.py?raw";
 import experimentDomain from "../../../api/src/capability_lab/domain/experiment.py?raw";
+import judgeDomain from "../../../api/src/capability_lab/domain/judge.py?raw";
 import { SLUG_MAX_LENGTH } from "./entryIds";
 import { EXPERIMENT_LABEL_MAX_LENGTH } from "./experimentStart";
 import {
   CHIP_LABEL_MAX_LENGTH,
   LABEL_MAX_LENGTH,
   NOTE_MAX_LENGTH,
+  PROMPT_MAX_LENGTH,
+  RUBRIC_MAX_LENGTH,
   TEXT_MAX_LENGTH,
   TICKET_TAG_MAX_LENGTH,
 } from "./fieldRules";
@@ -25,7 +29,11 @@ import { METHOD_LABEL_MAX_LENGTH } from "./shopMethods";
  * until someone reads which it is. Every call of the three is counted as well, whatever its
  * arguments look like, so a call the field-name reading cannot parse fails rather than slipping by.
  *
- * The sweep reads the three shared caps only. A stricter cap one field adds on top of its rule —
+ * A `require_text` call that passes its own `max_length` — a system prompt, a judge rubric — is
+ * read with it, and its controls must stop at exactly that cap: the lab keeps those longer than
+ * `MAX_TEXT_LENGTH`, and a control stopping at the shared cap would refuse what the lab accepts.
+ *
+ * Otherwise the sweep reads the three shared caps only. A stricter cap one field adds on top of its rule —
  * `MAX_NOTE_LENGTH` on a run note, `MAX_PARTICIPANT_TURN_LENGTH` on a turn, `MAX_RATIONALE_LENGTH`
  * on a verdict's rationale — is bound by the row that names it in `RULES`, not found by the sweep:
  * a new one is caught only by whoever writes that row.
@@ -49,6 +57,8 @@ const python = import.meta.glob(
 const CAPS: Record<string, number> = {
   LABEL_MAX_LENGTH,
   TEXT_MAX_LENGTH,
+  PROMPT_MAX_LENGTH,
+  RUBRIC_MAX_LENGTH,
   NOTE_MAX_LENGTH,
   CHIP_LABEL_MAX_LENGTH,
   METHOD_LABEL_MAX_LENGTH,
@@ -85,7 +95,7 @@ const CONTROLS: Record<string, Cap | { forwards: string } | { none: string }> = 
     none: "a decimal, `TEMPERATURE_PATTERN`",
   },
   "AgentConfigurationEditorPage.tsx · content.description": "TEXT_MAX_LENGTH",
-  "AgentConfigurationEditorPage.tsx · content.prompt": "TEXT_MAX_LENGTH",
+  "AgentConfigurationEditorPage.tsx · content.prompt": "PROMPT_MAX_LENGTH",
   "AgentConfigurationsPage.tsx · name": "LABEL_MAX_LENGTH",
 
   "BlockEditorPage.tsx · content.name": "SLUG_MAX_LENGTH",
@@ -134,9 +144,9 @@ const CONTROLS: Record<string, Cap | { forwards: string } | { none: string }> = 
   "JudgeConfigurationEditorPage.tsx · content.model.temperature": {
     none: "a decimal, `TEMPERATURE_PATTERN`",
   },
-  "JudgeConfigurationEditorPage.tsx · content.rubric": "TEXT_MAX_LENGTH",
+  "JudgeConfigurationEditorPage.tsx · content.rubric": "RUBRIC_MAX_LENGTH",
   "JudgeConfigurationsPage.tsx · name": "LABEL_MAX_LENGTH",
-  "JudgeConfigurationsPage.tsx · rubric": "TEXT_MAX_LENGTH",
+  "JudgeConfigurationsPage.tsx · rubric": "RUBRIC_MAX_LENGTH",
 
   'LabSettingsPage.tsx · typed ?? ""': {
     none: "a provider's key, kept as a secret and read by no text rule",
@@ -237,7 +247,7 @@ const RULES: Record<string, { cap: Cap; typed: readonly string[] } | { notTyped:
     typed: ["AgentConfigurationEditorPage.tsx · content.description"],
   },
   "domain/agent_configuration.py · system prompt": {
-    cap: "TEXT_MAX_LENGTH",
+    cap: "PROMPT_MAX_LENGTH",
     typed: ["AgentConfigurationEditorPage.tsx · content.prompt"],
   },
   "domain/agent_configuration.py · enabled tool name": {
@@ -342,7 +352,7 @@ const RULES: Record<string, { cap: Cap; typed: readonly string[] } | { notTyped:
     typed: ["JudgeConfigurationEditorPage.tsx · content.description"],
   },
   "domain/judge.py · judge rubric": {
-    cap: "TEXT_MAX_LENGTH",
+    cap: "RUBRIC_MAX_LENGTH",
     typed: [
       "JudgeConfigurationsPage.tsx · rubric",
       "JudgeConfigurationEditorPage.tsx · content.rubric",
@@ -603,11 +613,43 @@ const controls = Object.entries(pages).flatMap(([path, source]) => {
   });
 });
 
-/** `require_label(…, "field name")` and its kin, wherever the Python calls one. */
+/** The call's arguments, from its opening parenthesis to the one that closes it. */
+function callArguments(source: string, from: number): string {
+  let depth = 0;
+  for (let index = from; index < source.length; index += 1) {
+    if (source[index] === "(") depth += 1;
+    else if (source[index] === ")") {
+      depth -= 1;
+      if (depth === 0) return source.slice(from, index + 1);
+    }
+  }
+  return source.slice(from);
+}
+
+/** Every `NAME = 1234` the Python modules declare, by name. */
+const backendConstants = new Map(
+  Object.values(python).flatMap((source) =>
+    [...source.matchAll(/^([A-Z_]+) = (\d+)$/gm)].map(
+      (match) => [match[1], Number(match[2])] as const,
+    ),
+  ),
+);
+
+/**
+ * `require_label(…, "field name")` and its kin, wherever the Python calls one, with the
+ * `max_length` constant a call passes, if it passes one.
+ */
 const rules = Object.entries(python).flatMap(([path, source]) => {
   const module = path.split("/").slice(-2).join("/");
   return [...source.matchAll(/\b_?require_(label|text|email)\(\s*[\w.]+,\s*"([^"]+)"/g)].map(
-    (match) => ({ key: `${module} · ${match[2]}`, kind: match[1] }),
+    (match) => ({
+      key: `${module} · ${match[2]}`,
+      kind: match[1],
+      maxLength:
+        /\bmax_length=(\w+)/.exec(
+          callArguments(source, match.index + match[0].indexOf("(")),
+        )?.[1] ?? null,
+    }),
   );
 });
 
@@ -650,15 +692,30 @@ describe("a rule that caps a text", () => {
     expect([...new Set(rules.map((rule) => rule.key))].sort()).toEqual(Object.keys(RULES).sort());
   });
 
+  it("reads the cap a call passes as its own", () => {
+    const own = rules.filter((rule) => rule.maxLength !== null);
+    expect(own.map((rule) => [rule.key, rule.maxLength])).toEqual([
+      ["domain/agent_configuration.py · system prompt", "MAX_PROMPT_LENGTH"],
+      ["domain/judge.py · judge rubric", "MAX_RUBRIC_LENGTH"],
+    ]);
+  });
+
   it("is typed only through controls that stop at its cap", () => {
-    const kinds = new Map(rules.map((rule) => [rule.key, rule.kind]));
+    const byKey = new Map(rules.map((rule) => [rule.key, rule]));
     for (const [key, rule] of Object.entries(RULES)) {
       if ("notTyped" in rule) continue;
       expect(rule.typed.length, key).toBeGreaterThan(0);
-      const kind = kinds.get(key);
-      expect(CAPS[rule.cap], key).toBeLessThanOrEqual(
-        kind === "text" ? TEXT_MAX_LENGTH : LABEL_MAX_LENGTH,
-      );
+      const read = byKey.get(key);
+      if (read?.maxLength) {
+        // Its own cap, which the lab keeps longer than the shared one: exactly that, so the
+        // control never refuses what the lab accepts.
+        expect(backendConstants.get(read.maxLength), key).toBeDefined();
+        expect(CAPS[rule.cap], key).toBe(backendConstants.get(read.maxLength));
+      } else {
+        expect(CAPS[rule.cap], key).toBeLessThanOrEqual(
+          read?.kind === "text" ? TEXT_MAX_LENGTH : LABEL_MAX_LENGTH,
+        );
+      }
       for (const control of rule.typed) {
         expect(CONTROLS[control], `${key} · ${control}`).toBe(rule.cap);
       }
@@ -673,6 +730,8 @@ describe("the caps", () => {
     expect(LABEL_MAX_LENGTH).toBe(constant(contentDomain, "MAX_LABEL_LENGTH"));
     expect(TEXT_MAX_LENGTH).toBe(constant(contentDomain, "MAX_TEXT_LENGTH"));
     expect(NOTE_MAX_LENGTH).toBe(constant(experimentDomain, "MAX_NOTE_LENGTH"));
+    expect(PROMPT_MAX_LENGTH).toBe(constant(agentConfigurationDomain, "MAX_PROMPT_LENGTH"));
+    expect(RUBRIC_MAX_LENGTH).toBe(constant(judgeDomain, "MAX_RUBRIC_LENGTH"));
     for (const name of [
       "CHIP_LABEL_MAX_LENGTH",
       "METHOD_LABEL_MAX_LENGTH",
@@ -685,10 +744,13 @@ describe("the caps", () => {
     for (const [rule, cap] of [
       ["require_label", "MAX_LABEL_LENGTH"],
       ["require_email", "MAX_LABEL_LENGTH"],
-      ["require_text", "MAX_TEXT_LENGTH"],
     ]) {
       const body = contentDomain.split(`def ${rule}(`)[1]?.split("\ndef ")[0] ?? "";
       expect(body, rule).toContain(`if len(value) > ${cap}:`);
     }
+    // `require_text` stops at the `max_length` a call passes, and at the shared cap otherwise.
+    const text = contentDomain.split("def require_text(")[1]?.split("\ndef ")[0] ?? "";
+    expect(text).toContain("max_length: int = MAX_TEXT_LENGTH,");
+    expect(text).toContain("if len(value) > max_length:");
   });
 });

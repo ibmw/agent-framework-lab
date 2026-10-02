@@ -208,7 +208,8 @@ export const CHIP_LABEL_MAX_LENGTH = 200;
 
 /**
  * What the lab keeps of a text, by the rule it is sent to: `require_label` and `require_email`
- * stop at `MAX_LABEL_LENGTH`, `require_text` at `MAX_TEXT_LENGTH`, both in `domain/content.py`,
+ * stop at `MAX_LABEL_LENGTH`, `require_text` at `MAX_TEXT_LENGTH` unless the field passes a
+ * `max_length` of its own (`PROMPT_MAX_LENGTH`, `RUBRIC_MAX_LENGTH`), both in `domain/content.py`,
  * and an experiment note at `MAX_NOTE_LENGTH` in `domain/experiment.py`, which is stricter than
  * the `require_text` it also passes. Every control that types one stops there (`maxLength`,
  * swept in `lib/textFieldCaps.test.ts`).
@@ -216,6 +217,15 @@ export const CHIP_LABEL_MAX_LENGTH = 200;
 export const LABEL_MAX_LENGTH = 200;
 
 export const TEXT_MAX_LENGTH = 4000;
+
+/**
+ * The two texts the lab keeps longer than `TEXT_MAX_LENGTH`, passed to `require_text` as its
+ * `max_length`: a system prompt (`MAX_PROMPT_LENGTH`, `domain/agent_configuration.py`) and a
+ * judge rubric (`MAX_RUBRIC_LENGTH`, `domain/judge.py`).
+ */
+export const PROMPT_MAX_LENGTH = 20000;
+
+export const RUBRIC_MAX_LENGTH = 8000;
 
 export const NOTE_MAX_LENGTH = 2000;
 

@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+from capability_lab.domain.content import MAX_TEXT_LENGTH
 from capability_lab.domain.definitions import DefinitionChangeKind, DefinitionIssueSeverity
 from capability_lab.domain.judge import (
     MAX_RUBRIC_LENGTH,
@@ -103,8 +104,16 @@ def test_a_scope_cannot_be_asked_for_twice() -> None:
         publishable_judge(evidence=(JudgeEvidenceScope.TOOL_CALLS, JudgeEvidenceScope.TOOL_CALLS))
 
 
-def test_a_rubric_longer_than_the_field_allows_is_refused() -> None:
-    with pytest.raises(JudgeConfigurationError):
+def test_a_rubric_is_kept_to_its_own_cap_past_the_text_cap() -> None:
+    # A rubric is kept longer than `MAX_TEXT_LENGTH`; one at its cap is accepted, so the
+    # shared text rule cannot refuse it first.
+    assert MAX_RUBRIC_LENGTH > MAX_TEXT_LENGTH
+    rubric = "a" * MAX_RUBRIC_LENGTH
+    assert publishable_judge(rubric=rubric).rubric == rubric
+    with pytest.raises(
+        JudgeConfigurationError,
+        match=f"judge rubric must contain at most {MAX_RUBRIC_LENGTH} characters",
+    ):
         publishable_judge(rubric="a" * (MAX_RUBRIC_LENGTH + 1))
 
 

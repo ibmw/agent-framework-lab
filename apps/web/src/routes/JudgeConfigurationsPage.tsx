@@ -20,7 +20,7 @@ import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
 import { useCreateThenComplete } from "../lib/createDefinition";
-import { LABEL_MAX_LENGTH, TEXT_MAX_LENGTH } from "../lib/fieldRules";
+import { LABEL_MAX_LENGTH, RUBRIC_MAX_LENGTH } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import { pythonStrip } from "../lib/pythonText";
 import {
@@ -335,7 +335,7 @@ export function NewJudgePage() {
               hint="Write what a met objective looks like, not what a good agent looks like. The judge scores one arm's record at a time, and it is the whole of what this judge is — a judge with no rubric cannot be created here and could not be published either."
             >
               <textarea
-                maxLength={TEXT_MAX_LENGTH}
+                maxLength={RUBRIC_MAX_LENGTH}
                 className={`${textAreaClasses} w-full`}
                 value={rubric}
                 rows={7}

@@ -83,13 +83,16 @@ def require_text(
     *,
     error: type[DomainError],
     allow_empty: bool = False,
+    max_length: int = MAX_TEXT_LENGTH,
 ) -> str:
+    """Authored prose, stripped, kept to `max_length`: `MAX_TEXT_LENGTH` unless the field is
+    one of the few the lab keeps longer (a system prompt, a judge rubric)."""
     if not isinstance(value, str) or value != value.strip():
         raise error(f"{field_name} must be text without surrounding whitespace")
     if not allow_empty and not value:
         raise error(f"{field_name} must not be empty")
-    if len(value) > MAX_TEXT_LENGTH:
-        raise error(f"{field_name} must contain at most {MAX_TEXT_LENGTH} characters")
+    if len(value) > max_length:
+        raise error(f"{field_name} must contain at most {max_length} characters")
     return value
 
 

@@ -9,6 +9,7 @@ import pytest
 from httpx import AsyncClient
 
 from api_factories import api_client
+from capability_lab.domain.judge import MAX_RUBRIC_LENGTH
 
 JUDGES = "/api/v1/judge-configurations"
 RUBRIC = (
@@ -57,6 +58,23 @@ async def test_a_new_judge_is_a_draft_with_no_rubric(client: AsyncClient) -> Non
     assert created["lifecycle_state"] == "draft"
     assert created["content"]["rubric"] == ""
     assert created["content"]["evidence"]
+
+
+async def test_a_rubric_is_kept_to_its_own_cap_rather_than_the_text_cap(
+    client: AsyncClient,
+) -> None:
+    # Past the 4000 every other prose field stops at, and as long as the contract allows.
+    rubric = "a" * MAX_RUBRIC_LENGTH
+    judge_id = await authored(client, rubric=rubric)
+    draft = (await client.get(f"{JUDGES}/{judge_id}/draft")).json()
+
+    refused = await client.put(
+        f"{JUDGES}/{judge_id}/draft",
+        json={"payload": {**draft["content"], "rubric": rubric + "a"}},
+    )
+
+    assert draft["content"]["rubric"] == rubric
+    assert refused.status_code == 422
 
 
 async def test_the_resources_say_what_a_judge_may_name(client: AsyncClient) -> None:

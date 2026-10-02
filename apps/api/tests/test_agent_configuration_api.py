@@ -9,6 +9,7 @@ import pytest
 from httpx import AsyncClient
 
 from api_factories import SUPPORT_IDENTITY, api_client, make_identity, make_shop
+from capability_lab.domain.agent_configuration import MAX_PROMPT_LENGTH
 
 CONFIGURATIONS = "/api/v1/agent-configurations"
 WRITE_TOOL = "orders.propose_address_change"
@@ -113,6 +114,27 @@ async def test_a_temperature_beyond_the_supported_range_is_refused(client: Async
 
     assert response.status_code == 422
     assert response.json()["code"] == "agent_configuration_error"
+
+
+async def test_a_prompt_is_kept_to_its_own_cap_rather_than_the_text_cap(
+    client: AsyncClient,
+) -> None:
+    # Past the 4000 every other prose field stops at, and as long as the contract allows.
+    configuration_id, content = await authored(client)
+    prompt = "a" * MAX_PROMPT_LENGTH
+
+    kept = await client.put(
+        f"{CONFIGURATIONS}/{configuration_id}/draft",
+        json={"payload": {**content, "prompt": prompt}},
+    )
+    refused = await client.put(
+        f"{CONFIGURATIONS}/{configuration_id}/draft",
+        json={"payload": {**content, "prompt": prompt + "a"}},
+    )
+
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["content"]["prompt"] == prompt
+    assert refused.status_code == 422
 
 
 async def test_the_preview_reports_the_gate_and_what_a_run_would_inject(

@@ -308,11 +308,7 @@ class AgentConfigurationPayload:
             "an agent configuration must declare a tone of voice",
         )
         _require_text(self.description, "agent configuration description", allow_empty=True)
-        _require_text(self.prompt, "system prompt", allow_empty=True)
-        if len(self.prompt) > MAX_PROMPT_LENGTH:
-            raise AgentConfigurationError(
-                f"system prompt must contain at most {MAX_PROMPT_LENGTH} characters"
-            )
+        _require_text(self.prompt, "system prompt", allow_empty=True, max_length=MAX_PROMPT_LENGTH)
         for tool_name in self.tools:
             _require_text(tool_name, "enabled tool name")
         _require_unique(self.tools, "enabled tool names")

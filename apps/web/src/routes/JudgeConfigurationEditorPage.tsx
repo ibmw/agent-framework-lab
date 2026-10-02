@@ -34,6 +34,7 @@ import {
   LABEL_MAX_LENGTH,
   PROVEN_PROVIDER_RULE,
   RUBRIC_EMPTY_RULE,
+  RUBRIC_MAX_LENGTH,
   rubricNamesAnArmRule,
   TEMPERATURE_PATTERN,
   TEMPERATURE_RULE,
@@ -312,7 +313,7 @@ export function JudgeConfigurationEditorPage() {
                 extraTone="finding"
               >
                 <textarea
-                  maxLength={TEXT_MAX_LENGTH}
+                  maxLength={RUBRIC_MAX_LENGTH}
                   className={`${textAreaClasses} w-full min-h-56 font-mono`}
                   value={content.rubric}
                   aria-required

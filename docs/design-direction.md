@@ -334,7 +334,8 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   and only when the operator changes it (ADR 0069).
 - **A text stops where the lab's rule does, and is sent as the lab strips it.** Every control
   that types a text the lab caps carries that rule's `maxLength` — `require_label`'s 200,
-  `require_text`'s 4000, a run note's 2000 — swept from the Python's rules and from the
+  `require_text`'s 4000, or the `max_length` a field passes it (a system prompt's 20000, a
+  judge rubric's 8000), a run note's 2000 — swept from the Python's rules and from the
   workspace's controls alike in `lib/textFieldCaps.test.ts`. `maxLength` counts as the browser
   counts, in UTF-16 units, so it is never looser than the lab's code points, and stricter only
   for astral characters. A text the page writes rather than the operator types is cut to fit —

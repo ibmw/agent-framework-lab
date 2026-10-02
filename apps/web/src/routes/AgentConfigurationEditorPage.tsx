@@ -39,6 +39,7 @@ import { SLUG_MAX_LENGTH } from "../lib/entryIds";
 import { labelOf, SUPPORT_PERMISSION } from "../lib/enumLabels";
 import {
   LABEL_MAX_LENGTH,
+  PROMPT_MAX_LENGTH,
   PROVEN_PROVIDER_RULE,
   SUPPORT_IDENTITY_PIN_RULE,
   TEMPERATURE_PATTERN,
@@ -548,7 +549,7 @@ export function AgentConfigurationEditorPage() {
               )}
             </FieldRows>
             <textarea
-              maxLength={TEXT_MAX_LENGTH}
+              maxLength={PROMPT_MAX_LENGTH}
               ref={promptRef}
               aria-label="Prompt template"
               // The size is `!` because it has to beat the one it overrides: `textAreaClasses`

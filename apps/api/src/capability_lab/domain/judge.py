@@ -155,11 +155,7 @@ class JudgeConfigurationPayload:
         _require_label(self.name, "judge configuration name")
         _require_instance(self.model, JudgeModel, "a judge configuration must declare a model")
         _require_text(self.description, "judge configuration description", allow_empty=True)
-        _require_text(self.rubric, "judge rubric", allow_empty=True)
-        if len(self.rubric) > MAX_RUBRIC_LENGTH:
-            raise JudgeConfigurationError(
-                f"a judge rubric must contain at most {MAX_RUBRIC_LENGTH} characters"
-            )
+        _require_text(self.rubric, "judge rubric", allow_empty=True, max_length=MAX_RUBRIC_LENGTH)
         for scope in self.evidence:
             _require_instance(scope, JudgeEvidenceScope, "judge evidence scope")
         _require_unique(tuple(scope.value for scope in self.evidence), "judge evidence scopes")
