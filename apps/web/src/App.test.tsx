@@ -2873,6 +2873,79 @@ describe("editing a saved entry in place", () => {
     ]);
   });
 
+  it("shows a variant's stored value its option no longer offers, and writes what it shows", async () => {
+    const user = userEvent.setup();
+    // XL was authored through the API, or left by an option value's one-press removal: the
+    // product's Size offers M and L only, and the gate raises `variant_unknown_option_value`.
+    const stored = {
+      sku: "NS-ASJ-OB-XL",
+      option_values: [
+        { key: "color", value: "Ocean Blue" },
+        { key: "size", value: "XL" },
+      ],
+      availability: "in_stock" as const,
+      stock_quantity: 3,
+      price: { amount: "249.00", currency: "EUR" as const },
+    };
+    currentContent = {
+      ...READY_CONTENT,
+      products: [{ ...READY_CONTENT.products[0], variants: [stored] }],
+    };
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-XL" }));
+    const size = variants.getByLabelText("Size for NS-ASJ-OB-XL");
+    // A select that fell to its first offered value would show M and save XL.
+    expect(size).toHaveDisplayValue("XL (not offered)");
+    expect(within(size).getByRole("option", { name: "XL (not offered)" })).toBeDisabled();
+    const sku = variants.getByLabelText("SKU for NS-ASJ-OB-XL");
+    await user.clear(sku);
+    await user.type(sku, "NS-ASJ-OB-X");
+    await user.click(variants.getByRole("button", { name: "Save NS-ASJ-OB-XL" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().products[0].variants).toStrictEqual([{ ...stored, sku: "NS-ASJ-OB-X" }]);
+  });
+
+  it("replaces a variant's stored value its option no longer offers with one picked", async () => {
+    const user = userEvent.setup();
+    const stored = {
+      sku: "NS-ASJ-OB-XL",
+      option_values: [
+        { key: "color", value: "Ocean Blue" },
+        { key: "size", value: "XL" },
+      ],
+      availability: "in_stock" as const,
+      stock_quantity: 3,
+      price: { amount: "249.00", currency: "EUR" as const },
+    };
+    currentContent = {
+      ...READY_CONTENT,
+      products: [{ ...READY_CONTENT.products[0], variants: [stored] }],
+    };
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-XL" }));
+    await user.selectOptions(variants.getByLabelText("Size for NS-ASJ-OB-XL"), "L");
+    expect(variants.getByLabelText("Size for NS-ASJ-OB-XL")).toHaveDisplayValue("L");
+    await user.click(variants.getByRole("button", { name: "Save NS-ASJ-OB-XL" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().products[0].variants).toStrictEqual([
+      {
+        ...stored,
+        option_values: [
+          { key: "color", value: "Ocean Blue" },
+          { key: "size", value: "L" },
+        ],
+      },
+    ]);
+  });
+
   it("refuses a SKU another variant already holds, rather than merging two rows", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);

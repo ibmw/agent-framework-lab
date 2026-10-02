@@ -51,6 +51,13 @@ the row aligns its items at the top rather than the bottom (`items-end` to `item
 both, *Add* is the control's height (`subtleFieldButtonClasses`) and top-aligned with the input
 rather than its hint, so the two are level.
 
+Amendment: 2026-10-03 — A variant whose stored option value the option no longer offers —
+authored through the API, or left by an option value's one-press removal (ADR 0060) — shows that
+value in its open row's select, as a disabled "XL (not offered)", where the select fell to the
+option's first value while Save wrote the stored one. What the row shows is what it writes; the
+gate still raises `variant_unknown_option_value` until an offered value is picked, which
+replaces it.
+
 On 29 September 2026 the operator asked that the lists an editor edits with a form meet the
 pattern Shop details' *Payment methods* draws (ADR 0072), so that editing an entry is learned
 once. This records that pattern as the workspace's, what stays on `EntryCard`, and how the
@@ -550,3 +557,6 @@ and stays on the item.
   form; a description and a default given while adding; and the Discard pair — a dirty form
   keeping its kind, requiredness and default, a clean one following the lab's reference whole —
   each proving no reference reaches the draft with a default.
+- `App.test.tsx`: a variant's stored option value its option no longer offers shown in the open
+  row's select as the disabled "(not offered)" entry and saved as it was through a SKU-only
+  correction; an offered value picked replacing it.

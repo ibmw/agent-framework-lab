@@ -687,8 +687,9 @@ function variantOptionValues(
  *
  * This answers for the typed choice only. A variant whose *stored* value the option does not
  * offer — authored through the API, or left by an option value's one-press removal (ADR
- * 0060) — still writes that stored value, which the gate raises as
- * `variant_unknown_option_value`, while its select shows the option's first value.
+ * 0060) — still writes that stored value until another is picked, which the gate raises as
+ * `variant_unknown_option_value`. Its select shows that value as a disabled "(not offered)"
+ * entry, so what the row shows is what its Save writes.
  */
 function choiceStillOffered(
   options: readonly OptionSchema[],
@@ -1185,6 +1186,15 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                                   })
                                 }
                               >
+                                {/* A stored value the option no longer offers is what
+                                    Save writes until another is picked, so the select
+                                    shows it rather than falling to the first value; it
+                                    is disabled because it cannot be chosen again. */}
+                                {option.values.includes(chosen.value) ? null : (
+                                  <option value={chosen.value} disabled>
+                                    {chosen.value} (not offered)
+                                  </option>
+                                )}
                                 {option.values.map((value) => (
                                   <option key={value} value={value}>
                                     {value}
