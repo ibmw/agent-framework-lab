@@ -1572,6 +1572,43 @@ describe("experiment setup", () => {
     await waitFor(() => expect(screen.queryByText(failed)).not.toBeInTheDocument());
   });
 
+  it.each([
+    [408, "request_timeout", "The request timed out."],
+    [429, "rate_limited", "Too many requests; try again shortly."],
+  ])(
+    "says a %i preview above the form like a lab-side failure, not as a refusal at Start",
+    async (status, code, message) => {
+      // A timeout and a rate limit are 4xx, but neither is the lab refusing the setup: the
+      // same setup asked again may be judged.
+      const user = userEvent.setup();
+      server.use(
+        http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, async ({ request }) => {
+          const body = (await request.json()) as { arms: { version: number }[] };
+          if (body.arms[0].version === 1) {
+            return HttpResponse.json({ code, message, request_id: "r" }, { status });
+          }
+          return HttpResponse.json(PREVIEW);
+        }),
+      );
+      renderSetup();
+
+      await scenarioChosen();
+      await nameAs(user, "Unjudged");
+      await chooseArm(user, 0, "cfg-atlas");
+
+      await waitFor(() =>
+        expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toContain(message),
+      );
+      const start = screen.getByRole("button", { name: "Start experiment" });
+      expectNotRefused(start);
+      expect(startReasons(start)).not.toContain(message);
+
+      const arm = screen.getByRole("group", { name: "Arm A" });
+      await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
+      await waitFor(() => expect(screen.queryByText(message)).not.toBeInTheDocument());
+    },
+  );
+
   it("refuses nothing for a preview it could not reach, and leaves the start to answer", async () => {
     const user = userEvent.setup();
     server.use(

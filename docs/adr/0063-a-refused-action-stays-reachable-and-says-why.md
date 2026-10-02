@@ -321,7 +321,8 @@ applied, or the shop amendment's.
   missing version by its letter; a name that is not empty once trimmed; a seed, then one inside
   0..`MAX_SCENARIO_SEED`; every **error** the setup gate raises,
   in its words; the preview's own refusal of the setup (a `4xx`, which the start would answer
-  identically); and the provider this lab cannot reach. The request's conditions are said in
+  identically) (since 2026-10-03, a `408` or a `429` is not a refusal — ADR 0074's
+  amendment); and the provider this lab cannot reach. The request's conditions are said in
   the page's words, because the lab's there are the contract's generic validation messages or
   name padding the page never sends; the gate's are its own. The name field stops at
   `MAX_LABEL_LENGTH`. A gate that has not answered for the setup on screen is a press in flight

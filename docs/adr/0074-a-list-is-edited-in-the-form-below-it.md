@@ -58,6 +58,12 @@ option's first value while Save wrote the stored one. What the row shows is what
 gate still raises `variant_unknown_option_value` until an offered value is picked, which
 replaces it.
 
+Amendment: 2026-10-03 — A preview answered `408` (timed out) or `429` (rate limited) is not a
+refusal of the setup, though it is a 4xx. The preview's contract answers only 200, 404 and 422,
+so either can only come from something between the browser and the lab, such as a proxy: a
+passing failure, which the same setup asked again may not meet. It is said above the form until
+a later preview answers, as a 5xx or an unreachable lab is, and refuses nothing at Start.
+
 On 29 September 2026 the operator asked that the lists an editor edits with a form meet the
 pattern Shop details' *Payment methods* draws (ADR 0072), so that editing an entry is learned
 once. This records that pattern as the workspace's, what stays on `EntryCard`, and how the
@@ -560,3 +566,6 @@ and stays on the item.
 - `App.test.tsx`: a variant's stored option value its option no longer offers shown in the open
   row's select as the disabled "(not offered)" entry and saved as it was through a SKU-only
   correction; an offered value picked replacing it.
+- `Experiments.test.tsx`: a preview answered `408` and one answered `429` each said above the form
+  and not on Start's refusal line, Start left free, and the alert gone once a later preview
+  answers.

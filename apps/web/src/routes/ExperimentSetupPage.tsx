@@ -49,6 +49,12 @@ import { newestVersion, versionOptionLabel } from "../lib/versions";
 import { NoCurrentShop } from "../shell/LabWorkspace";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
 
+/**
+ * The 4xx answers that say nothing about the setup: the request timed out, or was turned away
+ * for its rate. The same setup asked again may be judged, so neither is a refusal of it.
+ */
+const NOT_A_REFUSAL = new Set([408, 429]);
+
 const UNAVAILABLE = "The bench is unavailable.";
 const DEFAULT_SEED = 20260828;
 
@@ -413,9 +419,11 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
           // A refusal of the setup — a version this shop does not publish, an arm version that
           // is gone — is what a start would answer too, so Start says it, and says it alone:
           // two refusals with one cause are one sentence. A preview that could not be reached,
-          // or that failed on the lab's side, says nothing about the setup and refuses nothing,
-          // so only that failure is said above the form.
-          const refused = cause instanceof LabApiError && cause.status < 500;
+          // that failed on the lab's side, or that was timed out (408) or turned away for its
+          // rate (429), says nothing about the setup and refuses nothing, so only that failure
+          // is said above the form.
+          const refused =
+            cause instanceof LabApiError && cause.status < 500 && !NOT_A_REFUSAL.has(cause.status);
           setPreviewError(
             refused ? null : describeApiError(cause, "This setup could not be judged."),
           );
