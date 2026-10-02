@@ -1388,8 +1388,58 @@ describe("what the ticket points at", () => {
       within(documents).getByRole("button", { name: "Remove suggested policy delivery" }),
     );
 
+    // It asks twice, as every editor removal does (ADR 0060): no checkbox would put it back.
+    const confirm = within(documents).getByRole("group", {
+      name: "Remove the suggested policy delivery?",
+    });
+    expect(confirm).toHaveFocus();
+    expect(confirm).toHaveAccessibleDescription(/no longer has it pre-filled/);
+    await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
+    expect(within(documents).getByText("policy · delivery")).toBeVisible();
+    expect(
+      within(documents).getByRole("button", { name: "Remove suggested policy delivery" }),
+    ).toHaveFocus();
+
+    await user.click(
+      within(documents).getByRole("button", { name: "Remove suggested policy delivery" }),
+    );
+    await user.click(
+      within(
+        within(documents).getByRole("group", { name: "Remove the suggested policy delivery?" }),
+      ).getByRole("button", { name: "Remove it" }),
+    );
+
     expect(within(documents).queryByText("Unresolved document")).toBeNull();
+    expect(
+      within(documents).getByText("Removed the suggested policy delivery from the draft."),
+    ).toBeVisible();
     expect(within(documents).getByLabelText("Address-change policy")).toBeChecked();
+  });
+
+  it("removes a suggestion the shop no longer holds on one press once the preference is off", async () => {
+    window.localStorage.setItem("agent-lab.confirm-before-delete", "false");
+    try {
+      const user = userEvent.setup();
+      currentContent = {
+        ...DRAFT_CONTENT,
+        suggested_documents: [{ kind: "policy", document_id: "delivery" }],
+      };
+      currentPreview = preview({ content: currentContent });
+      renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+      const documents = await screen.findByRole("region", { name: "Suggested documents" });
+
+      await user.click(
+        await within(documents).findByRole("button", { name: "Remove suggested policy delivery" }),
+      );
+
+      expect(within(documents).queryByRole("group", { name: /^Remove the suggested/ })).toBeNull();
+      expect(within(documents).queryByText("Unresolved document")).toBeNull();
+      expect(
+        within(documents).getByText("Removed the suggested policy delivery from the draft."),
+      ).toBeVisible();
+    } finally {
+      window.localStorage.removeItem("agent-lab.confirm-before-delete");
+    }
   });
 
   it("keeps a link the shop can no longer resolve removable", async () => {

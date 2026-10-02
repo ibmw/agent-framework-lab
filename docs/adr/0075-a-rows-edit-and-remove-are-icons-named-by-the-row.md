@@ -2,6 +2,11 @@
 
 Status: accepted — 2026-10-01
 
+Amendment: 2026-10-03 — A ticket's unresolved suggested document asks twice under the
+confirm-before-delete preference, as every editor removal does (ADR 0060): its trash is
+`RemoveButton` and its confirm takes the row's place. The bare one-press `TrashButton` is left to
+a create page's rows before Create. The departure that kept its one press is withdrawn.
+
 On 1 October 2026 the operator asked that every row-level Edit and Remove be the 30px pencil and
 trash Milestone 10's lists draw (ADR 0074), never a written *Edit* or a red-bordered *Remove
 NS-ASJ-OB-M*, and that removing read red everywhere. Asked how red the trash should be, they
@@ -80,9 +85,10 @@ expected action. It carried the trash glyph's absence before; it now carries the
 - **The *Detach* confirm is neutral** where it was solid red (above).
 - **A chip's ✕ warms to the red on hover** in `ChipListField`, where it went to ink, as the
   results' tag × already did.
-- **A ticket's unresolved suggested document keeps its one-press removal** on an editor, where
-  ADR 0060 exempts only a create page's rows: it was one press before this record, which moves
-  no behaviour, and it is now the bare `TrashButton`.
+- **A ticket's unresolved suggested document kept its one-press removal** on an editor, where
+  ADR 0060 exempts only a create page's rows: it was one press before this record, which moved
+  no behaviour. Withdrawn by the 2026-10-03 amendment: it now asks twice, through
+  `RemoveButton`.
 
 ## Verification
 
@@ -96,3 +102,6 @@ expected action. It carried the trash glyph's absence before; it now carries the
   trash removes once and a held one says why. `ChipListField.test.tsx`: the ✕'s red hover.
 - `EntryCard.test.tsx` and `ButtonIcon.test.tsx`: the row's Edit is the pencil under its name,
   and the open row's Save and Cancel keep their words.
+- `Tickets.test.tsx`: an unresolved suggested document's trash asks, focus on the confirm and
+  back on the trash through *Keep it*, and *Remove it* removes it and says so; with the
+  preference off, one press removes it.

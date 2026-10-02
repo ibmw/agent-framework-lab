@@ -166,8 +166,7 @@ export function MoveButton({
  *
  * A held trash is natively disabled and says why in its `title` and in the line `describedBy`
  * names (ADR 0063). `RemoveButton` is this asking twice; a row whose removal is one press draws
- * it bare — a create page's row before Create (ADR 0060), and a ticket's unresolved suggested
- * document, which unchecks a suggestion the shop no longer holds.
+ * it bare, and the one such row is a create page's before Create (ADR 0060).
  */
 export function TrashButton({
   label,

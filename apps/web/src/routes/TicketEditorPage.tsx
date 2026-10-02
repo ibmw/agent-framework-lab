@@ -21,7 +21,7 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { Field, FieldRows } from "../components/FieldHint";
-import { RemoveButton, TrashButton } from "../components/ItemList";
+import { RemoveButton } from "../components/ItemList";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { TicketStatusBadge } from "../components/TicketStatusBadge";
 import {
@@ -267,7 +267,12 @@ function TicketEditorPage({ ticketId }: { ticketId: string }) {
           />
           {context ? <LinkedOrders content={content} context={context} onEdit={edit} /> : null}
           {context ? (
-            <SuggestedDocuments content={content} context={context} onEdit={edit} />
+            <SuggestedDocuments
+              scope={ticketId}
+              content={content}
+              context={context}
+              onEdit={edit}
+            />
           ) : null}
         </div>
 
@@ -816,15 +821,19 @@ function LinkedOrders({
 }
 
 function SuggestedDocuments({
+  scope,
   content,
   context,
   onEdit,
 }: {
+  /** The ticket, so a confirm never follows the operator to another one. */
+  scope: string;
   content: TicketContentSchema;
   context: TicketContextSchema;
   onEdit: (next: TicketContentSchema) => void;
 }) {
   const staleDocuments = unresolvedDocuments(content.suggested_documents, context.resources);
+  const removal = useRemoval(scope);
   // Grouped by kind, in the Documents table's order and under its chips' names, so a policy
   // and an FAQ entry that share a slug are never read as one document.
   const groups = DOCUMENT_KINDS.map((shape) => ({
@@ -883,26 +892,47 @@ function SuggestedDocuments({
       {/*
         A suggestion the shop no longer holds blocks publication, as an unresolved order
         does, and it has no title to be named by — so it keeps a row of its own, named by
-        its kind and slug, with the one action that resolves it.
+        its kind and slug, with the one action that resolves it. Removing it asks twice, as
+        every editor removal does (ADR 0060): no checkbox puts it back, since the shop holds
+        no document to check.
       */}
       {staleDocuments.length > 0 ? (
         <ul className="grid gap-1.5 text-[13px]">
-          {staleDocuments.map((entry) => (
-            <li key={`${entry.kind}:${entry.document_id}`} className="flex items-center gap-2">
-              <span className="text-lab-error">Unresolved document</span>
-              <code className="truncate text-admin-muted">
-                {documentKindLabel(entry.kind)} · {entry.document_id}
-              </code>
-              <span className="ml-auto flex-none">
-                <TrashButton
-                  label={`Remove suggested ${documentKindLabel(entry.kind)} ${entry.document_id}`}
-                  onClick={() => toggleDocument(entry.kind, entry.document_id)}
-                />
-              </span>
-            </li>
-          ))}
+          {staleDocuments.map((entry) => {
+            const key = `${entry.kind}:${entry.document_id}`;
+            const named = `${documentKindLabel(entry.kind)} ${entry.document_id}`;
+            const remove = () => toggleDocument(entry.kind, entry.document_id);
+            const notice = `Removed the suggested ${named} from the draft.`;
+            return removal.isArmed(key) ? (
+              <ConfirmRemove
+                key={key}
+                as="li"
+                title={`Remove the suggested ${named}?`}
+                consequence="A scenario built on this ticket no longer has it pre-filled. Nothing is written until you save the ticket, and a published version keeps it."
+                onConfirm={removal.confirm(remove, notice)}
+                onKeep={removal.keep}
+              />
+            ) : (
+              <li key={key} className="flex items-center gap-2">
+                <span className="text-lab-error">Unresolved document</span>
+                <code className="truncate text-admin-muted">
+                  {documentKindLabel(entry.kind)} · {entry.document_id}
+                </code>
+                <span className="ml-auto flex-none">
+                  <RemoveButton
+                    name={`suggested ${named}`}
+                    entryKey={key}
+                    removal={removal}
+                    notice={notice}
+                    onRemove={remove}
+                  />
+                </span>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
+      <RemovalNotice removal={removal} />
     </Card>
   );
 }
