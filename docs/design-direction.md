@@ -292,6 +292,13 @@ their metrics are `apps/web/src/lib/ui.ts`. Rules:
 - **Georgia for display** (page and card titles, the thread subject, the bar's title); sans for
   UI; monospace for slugs, ids, model names and env vars. Entry-row titles, the per-arm run
   label and dialog titles stay sans.
+- **The sans is the workspace's own Inter**, so a label measures the same on every machine.
+  Inter 4.1's variable upright and italic faces are committed under `apps/web/src/assets/fonts/`
+  with their licence, the SIL Open Font License 1.1, and declared in `styles.css` ahead of the
+  fallback stack. `apps/web/scripts/subset-inter.sh` rebuilds them from the release, cut to the
+  Latin ranges the `@font-face` declares; the status glyphs are left to the fallback stack so
+  that a glyph set is never drawn in two fonts. A font file and its licence are an asset, not a
+  UI dependency, and no font is fetched from a CDN.
 - **A chip that names a kind is not a control** (`chipClasses`): the tool calls, attempts,
   faults and split turns on the bench and the timeline are bordered labels with no hover, no
   pointer, no ring and no tab stop. A chip that opens something — a pinned version on the

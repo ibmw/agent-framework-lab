@@ -1305,3 +1305,124 @@ describe("the confirm's press", () => {
     }
   });
 });
+
+/**
+ * The workspace ships its own Inter (design-direction, *Tokens, type and glyphs*).
+ *
+ * The stack named Inter for as long as nothing loaded it, so what a label measured depended on
+ * the machine. Held from the stylesheet's side: each face the stylesheet declares names a file
+ * that is in the repository, with the font's licence beside it; the faces carry every weight and
+ * style the workspace sets; and their `unicode-range` is the range the subsetting script cuts
+ * the files to, so a character the range promises is one the file has been asked to keep, where
+ * Inter draws it. The ranges are whole blocks and Inter 4.1 does not fill them: ⇄ is in the arrows
+ * the range declares and has no glyph in the file, so it is drawn by the fallback stack.
+ */
+const fontFiles = Object.keys(import.meta.glob("../assets/fonts/*"));
+const subsetScript = Object.values(
+  import.meta.glob("../../scripts/subset-inter.sh", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>,
+)[0];
+
+/** Every `@font-face` block in the stylesheet, as its declarations by property. */
+function fontFaces(source: string): Array<Record<string, string>> {
+  return [...source.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((block) =>
+    Object.fromEntries(
+      block[1]
+        .split(";")
+        .map((declaration) => declaration.trim())
+        .filter((declaration) => declaration !== "")
+        .map((declaration) => {
+          const colon = declaration.indexOf(":");
+          return [
+            declaration.slice(0, colon).trim(),
+            declaration
+              .slice(colon + 1)
+              .replaceAll(/\s+/g, " ")
+              .trim(),
+          ];
+        }),
+    ),
+  );
+}
+
+const TAILWIND_WEIGHTS: Record<string, number> = {
+  thin: 100,
+  extralight: 200,
+  light: 300,
+  normal: 400,
+  medium: 500,
+  semibold: 600,
+  bold: 700,
+  extrabold: 800,
+  black: 900,
+};
+
+/**
+ * Every weight the workspace sets: a named Tailwind weight or an arbitrary one (`font-[650]`) in
+ * a source, or a declaration here.
+ */
+function weightsSet(): number[] {
+  const weights = new Set<number>([400]);
+  for (const source of Object.values(sources)) {
+    for (const match of source.matchAll(
+      /\bfont-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)\b/g,
+    )) {
+      weights.add(TAILWIND_WEIGHTS[match[1]]);
+    }
+    for (const match of source.matchAll(/\bfont-\[(\d{3})\]/g)) {
+      weights.add(Number(match[1]));
+    }
+  }
+  for (const match of themeSource.matchAll(/font-weight:\s*(\d+);/g)) {
+    weights.add(Number(match[1]));
+  }
+  return [...weights].sort((a, b) => a - b);
+}
+
+describe("the workspace's Inter", () => {
+  const inter = fontFaces(themeSource).filter((face) => face["font-family"] === "Inter");
+
+  it("is declared as an upright and an italic face, each swapped in rather than waited for", () => {
+    expect(inter.map((face) => face["font-style"]).sort()).toEqual(["italic", "normal"]);
+    for (const face of inter) {
+      expect(face["font-display"], face["font-style"]).toBe("swap");
+    }
+  });
+
+  it("names a woff2 that is in the repository, with the font's licence beside it", () => {
+    for (const face of inter) {
+      const url = /^url\("\.\/(assets\/fonts\/[^"]+\.woff2)"\) format\("woff2"\)$/.exec(
+        face.src,
+      )?.[1];
+      expect(url, face.src).toBeDefined();
+      expect(fontFiles).toContain(`../${url}`);
+    }
+    expect(fontFiles).toContain("../assets/fonts/LICENSE.txt");
+  });
+
+  it("carries every weight the workspace sets, in each style", () => {
+    const used = weightsSet();
+    expect(used).toEqual(expect.arrayContaining([400, 600, 650, 700, 800]));
+    for (const face of inter) {
+      const [low, high] = face["font-weight"].split(" ").map(Number);
+      for (const weight of used) {
+        expect(weight >= low && weight <= high, `${face["font-style"]} ${weight}`).toBe(true);
+      }
+    }
+  });
+
+  it("promises the characters the subsetting script keeps, and only those", () => {
+    const kept = /^unicodes="([^"]+)"$/m.exec(subsetScript)?.[1];
+    expect(kept).toBeDefined();
+    for (const face of inter) {
+      expect(face["unicode-range"].replaceAll(" ", ""), face["font-style"]).toBe(kept);
+    }
+  });
+
+  it("is the first family of the workspace's stack, ahead of its fallbacks", () => {
+    expect(themeSource).toMatch(/font-family:\s*Inter, ui-sans-serif, system-ui,/);
+  });
+});

@@ -1,5 +1,36 @@
 @import "tailwindcss";
 
+/*
+ * The workspace's own Inter (design-direction, *Tokens, type and glyphs*). The stack below
+ * named Inter before anything loaded it, so every machine drew its own fallback and a rail
+ * label that fits in one font wrapped in another. These are Inter 4.1's variable faces,
+ * SIL Open Font License 1.1 (`assets/fonts/LICENSE.txt`), subset by
+ * `scripts/subset-inter.sh`, whose ranges are the `unicode-range` here: the two change
+ * together. One upright and one italic face carry the whole weight axis, which the workspace
+ * reads from 400 to 800. `swap` draws the fallback until the face arrives rather than no text.
+ */
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/fonts/InterVariable.woff2") format("woff2");
+  unicode-range:
+    U+0000-017F, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20A0-20CF, U+2100-214F, U+2190-21FF,
+    U+2212-2215, U+2260-2265, U+2605, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: Inter;
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/fonts/InterVariable-Italic.woff2") format("woff2");
+  unicode-range:
+    U+0000-017F, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20A0-20CF, U+2100-214F, U+2190-21FF,
+    U+2212-2215, U+2260-2265, U+2605, U+FEFF, U+FFFD;
+}
+
 @theme {
   --color-lab-canvas: #f4f1e8;
   --color-lab-canvas-top: #f7f3e9;

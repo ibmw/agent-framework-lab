@@ -318,37 +318,128 @@ test("a timestamp preference set in Settings reaches a listing Settings never dr
 });
 
 /**
- * "Agent configurations" wrapped onto two lines beside its count in the lab's 216px rail, which
- * is why the index is named *Agent configs* (design-direction, *Names*). The entry is measured
- * while it is the active one, bold by its computed weight, which is its widest state: its label's
- * text makes one line.
+ * The lab rail's entries, in rail order, and whether each draws a count beside its label. The
+ * test below reads the rail and fails if it holds anything else, so an entry added to it is
+ * measured from the day it lands.
  */
-test("the Agent configs entry, active and bold, sits on one line beside its count", async ({
+const LAB_ENTRIES = [
+  ["Bench", false],
+  ["History", true],
+  ["Agent configs", true],
+  ["Judges", true],
+  ["Support identities", true],
+  ["Objective blocks", true],
+  ["Mutation blocks", true],
+] as const;
+
+/** Waits for the workspace's faces to settle, so nothing is measured in the swap's fallback. */
+async function fontsSettled(page: Page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
+}
+
+/**
+ * "Agent configurations" wrapped onto two lines beside its count in the lab's 216px rail, which
+ * is why the index is named *Agent configs* (design-direction, *Names*). Each entry is measured
+ * while it is the active one, bold by its computed weight, which is its widest state: its label's
+ * text makes one line. The check once covered *Agent configs* alone, because the stack named an
+ * Inter nothing loaded and a width measured here held only for this machine's fallback. Now the
+ * workspace ships its own Inter, which the next test holds, every entry is measured.
+ */
+test("every lab rail entry, active and bold, sits on one line beside its count", async ({
   page,
 }) => {
   await page.setViewportSize(VIEWPORT);
 
-  await page.goto("/lab/agent-configurations");
-  await expect(page.getByRole("heading", { level: 1, name: "Agent configs" })).toBeVisible();
-  const entry = page
-    .getByLabel("Experiment lab workspace")
-    .getByRole("link", { name: "Agent configs" });
-  await expect(entry).toHaveAttribute("aria-current", "page");
-  // The figure is drawn once the listing is read; the measure is of the row as it settles.
-  const figure = entry.locator('span[aria-hidden="true"]').filter({ hasText: /^\d+$/ });
-  await expect(figure).toBeVisible();
+  await page.goto("/lab/bench");
+  const rail = page.getByLabel("Experiment lab workspace");
+  await expect(rail.getByRole("link", { name: "Bench" })).toBeVisible();
+  expect(
+    await rail.getByRole("link").evaluateAll((links) =>
+      links.map((link) => {
+        const label = document.getElementById(link.getAttribute("aria-labelledby") ?? "");
+        return label?.textContent ?? link.textContent;
+      }),
+    ),
+  ).toEqual(LAB_ENTRIES.map(([label]) => label));
 
-  const measure = await entry.evaluate((element) => {
+  for (const [name, counted] of LAB_ENTRIES) {
+    const entry = rail.getByRole("link", { name, exact: true });
+    await entry.click();
+    await expect(entry).toHaveAttribute("aria-current", "page");
+    if (counted) {
+      // The figure is drawn once the listing is read; the measure is of the row as it settles.
+      const figure = entry.locator('span[aria-hidden="true"]').filter({ hasText: /^\d+$/ });
+      await expect(figure).toBeVisible();
+    }
+    await fontsSettled(page);
+
+    const measure = await entry.evaluate((element) => {
+      const label = document.getElementById(element.getAttribute("aria-labelledby") ?? "");
+      if (label === null) {
+        throw new Error("the entry has no label to measure");
+      }
+      const range = document.createRange();
+      range.selectNodeContents(label);
+      const lines = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
+      return { weight: Number(getComputedStyle(label).fontWeight), lines: lines.size };
+    });
+
+    expect(measure.weight, `${name}: the active entry is measured in bold`).toBeGreaterThanOrEqual(
+      700,
+    );
+    expect(measure.lines, `${name} wraps onto ${measure.lines} lines`).toBe(1);
+  }
+});
+
+/**
+ * The workspace draws in its own Inter rather than in whatever the machine has (design-direction,
+ * *Tokens, type and glyphs*). The stylesheet named Inter long before anything loaded it, and a
+ * name the browser cannot find is passed over without a word, so this is asked of the page that
+ * was drawn: a rail label's computed family leads with Inter, the stylesheet's Inter face is
+ * loaded, and the glyphs Chromium actually laid out for that
+ * label came from a web font named Inter — not from a local font that happens to share the name.
+ * `document.fonts.check("600 13px Inter")` is not asked: it answers true when no Inter face is
+ * declared at all, which the mutation that removed the `@font-face` showed.
+ */
+test("the rail is drawn in the workspace's own Inter", async ({ page }) => {
+  await page.setViewportSize(VIEWPORT);
+
+  await page.goto("/lab/bench");
+  const entry = page.getByLabel("Experiment lab workspace").getByRole("link", { name: "Bench" });
+  await expect(entry).toBeVisible();
+  await fontsSettled(page);
+
+  const drawn = await entry.evaluate((element) => {
     const label = document.getElementById(element.getAttribute("aria-labelledby") ?? "");
     if (label === null) {
-      throw new Error("the entry has no label to measure");
+      throw new Error("the entry has no label to inspect");
     }
-    const range = document.createRange();
-    range.selectNodeContents(label);
-    const lines = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
-    return { weight: Number(getComputedStyle(label).fontWeight), lines: lines.size };
+    const faces = [...document.fonts].filter((face) => face.family.replaceAll('"', "") === "Inter");
+    return {
+      id: label.id,
+      family: getComputedStyle(label).fontFamily,
+      size: getComputedStyle(label).fontSize,
+      faces: faces.map((face) => `${face.style} ${face.weight} ${face.status}`),
+    };
   });
 
-  expect(measure.weight, "the active entry is measured in bold").toBeGreaterThanOrEqual(700);
-  expect(measure.lines, `Agent configs wraps onto ${measure.lines} lines`).toBe(1);
+  expect(drawn.family, "the label's stack").toMatch(/^Inter,/);
+  expect(drawn.size, "the rail's size").toBe("13px");
+  expect(drawn.faces, "the stylesheet's Inter faces").toContain("normal 100 900 loaded");
+
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("DOM.enable");
+  await cdp.send("CSS.enable");
+  const { root } = await cdp.send("DOM.getDocument", { depth: 0 });
+  const { nodeId } = await cdp.send("DOM.querySelector", {
+    nodeId: root.nodeId,
+    selector: `[id="${drawn.id}"]`,
+  });
+  const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
+  expect(
+    fonts.map((font) => `${font.familyName}${font.isCustomFont ? " (web font)" : ""}`),
+    "the fonts Chromium laid the label out in",
+  ).toEqual([expect.stringMatching(/^Inter.* \(web font\)$/)]);
 });
