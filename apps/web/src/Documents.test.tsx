@@ -16,6 +16,7 @@ import { expectWayBack } from "./test/header";
 import { expectCreateGlyph } from "./test/indexes";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectEditorOnRows } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 /**
@@ -551,5 +552,13 @@ describe("the document editor's side panel", () => {
     ).toBeVisible();
     // The main column holds the document itself and nothing the panel says.
     expect(mainCards(panel)).toEqual(["Document", "Body"]);
+  });
+
+  it("draws every field of every card in its main column on a row that names it", async () => {
+    renderApp(`/shops/${SHOP_ID}/setup/documents/guidelines/returns-desk`);
+    const panel = sidePanel(await screen.findByRole("region", { name: "Never in the prompt" }));
+
+    // Enumerated, so a card added to the column is swept too, and nothing is excepted.
+    expect(expectEditorOnRows(panel)).toEqual({ Document: 3, Body: 1 });
   });
 });

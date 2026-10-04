@@ -163,14 +163,21 @@ function amount(value: number): string {
  * arithmetic over the numbers already on screen, so an author sees a quantity change
  * without a round trip. Every save replaces these with the server's own figures.
  */
-export function previewTotals(content: OrderContentSchema): { subtotal: string; total: string } {
+export function previewTotals(content: OrderContentSchema): {
+  subtotal: string;
+  shipping: string;
+  total: string;
+} {
   const subtotal = content.lines.reduce(
     (sum, line) => sum + cents(line.unit_price.amount) * line.quantity,
     0,
   );
+  const shipping = cents(content.shipping_fee.amount);
   return {
     subtotal: amount(subtotal),
-    total: amount(subtotal + cents(content.shipping_fee.amount)),
+    // The fee as the total counts it, so the figures on screen add up even while it is unreadable.
+    shipping: amount(shipping),
+    total: amount(subtotal + shipping),
   };
 }
 

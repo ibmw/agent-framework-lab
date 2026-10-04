@@ -20,7 +20,7 @@ import {
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
-import { Field, FieldRows } from "../components/FieldHint";
+import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
 import { RemoveButton } from "../components/ItemList";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { TicketStatusBadge } from "../components/TicketStatusBadge";
@@ -785,78 +785,92 @@ function LinkedOrders({
       title="Linked orders"
       description="The customer's orders in this shop that the incident is about."
     >
-      {context.resources.orders.length === 0 ? (
-        <p className="text-[13px] text-admin-muted">This customer has no order in this shop yet.</p>
-      ) : (
-        <ul className="grid gap-2 text-[13px]">
-          {context.resources.orders.map((order) => (
-            <li key={order.order_id} className="grid gap-1">
-              <label className="flex items-center gap-2 font-semibold">
-                <input
-                  type="checkbox"
-                  checked={content.linked_order_ids.includes(order.order_id)}
-                  onChange={() => toggleOrder(order.order_id)}
-                />
-                {order.reference}
-              </label>
-              <span className="flex flex-wrap items-center gap-1.5 text-admin-muted">
-                {order.total_amount} {order.currency}
-                <StatusPill tone="payment" label={paymentLabel(order.payment_status)} />
-                <StatusPill tone="fulfilment" label={fulfilmentLabel(order.fulfilment_status)} />
-              </span>
-              {order.shipping_label ? (
-                <span className="text-admin-muted">ship-to: {order.shipping_label}</span>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
-      {/*
-        A link the shop can no longer resolve — a deleted order, or one that moved to
-        another customer — blocks publication, so it has to stay removable. Without a row
-        of its own it would have no checkbox left to uncheck. And since no checkbox puts it
-        back, unlinking it asks twice, as every editor removal does (ADR 0060); a resolved
-        order stays its checkbox, which links it again.
-      */}
-      {unresolvable.length > 0 ? (
-        <ul className="grid gap-1.5 text-[13px]">
-          {unresolvable.map((orderId) => {
-            const unlink = () => toggleOrder(orderId);
-            const notice = `Unlinked order ${orderId} from the draft.`;
-            return removal.isArmed(orderId) ? (
-              <ConfirmRemove
-                key={orderId}
-                as="li"
-                title={`Unlink order ${orderId}?`}
-                consequence={consequenceOf(
-                  "No order of this customer's matches it, so no checkbox links it again.",
-                  pointsAtNothingWithout(orderId) &&
-                    REMOVAL_FINDINGS.ticket_without_resource_reference,
-                  "Nothing is written until you save the ticket, and a published version keeps it.",
-                )}
-                confirmLabel="Unlink"
-                destroys={false}
-                onConfirm={removal.confirm(unlink, notice)}
-                onKeep={removal.keep}
-              />
-            ) : (
-              <li key={orderId} className="flex items-center gap-2">
-                <span className="text-lab-error">Unresolved order</span>
-                <code className="truncate text-admin-muted">{orderId}</code>
-                <button
-                  className={`${subtleButtonClasses} ml-auto`}
-                  type="button"
-                  aria-label={`Unlink order ${orderId}`}
-                  ref={removal.trigger(orderId)}
-                  onClick={removal.ask(orderId, unlink, notice)}
-                >
-                  Unlink
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+      {/* The prototype draws the linked order as a read-out (`Workspace.dc.html` :2266–2289);
+          the row's name is the card's own verb, each box saying whether its order is linked,
+          as *Listed* does for a scenario's documents. The boxes keep the names their labels
+          give them, which the specs check them by (rule 5), and a link the shop no longer
+          resolves stays on the row beneath them with its Unlink. */}
+      <FieldRows>
+        <FieldGroup label="Linked">
+          {context.resources.orders.length === 0 ? (
+            <p className="text-[13px] text-admin-muted">
+              This customer has no order in this shop yet.
+            </p>
+          ) : (
+            <ul className="grid gap-2 text-[13px]">
+              {context.resources.orders.map((order) => (
+                <li key={order.order_id} className="grid gap-1">
+                  <label className="flex items-center gap-2 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={content.linked_order_ids.includes(order.order_id)}
+                      onChange={() => toggleOrder(order.order_id)}
+                    />
+                    {order.reference}
+                  </label>
+                  <span className="flex flex-wrap items-center gap-1.5 text-admin-muted">
+                    {order.total_amount} {order.currency}
+                    <StatusPill tone="payment" label={paymentLabel(order.payment_status)} />
+                    <StatusPill
+                      tone="fulfilment"
+                      label={fulfilmentLabel(order.fulfilment_status)}
+                    />
+                  </span>
+                  {order.shipping_label ? (
+                    <span className="text-admin-muted">ship-to: {order.shipping_label}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {/*
+            A link the shop can no longer resolve — a deleted order, or one that moved to
+            another customer — blocks publication, so it has to stay removable. Without a row
+            of its own it would have no checkbox left to uncheck. And since no checkbox puts it
+            back, unlinking it asks twice, as every editor removal does (ADR 0060); a resolved
+            order stays its checkbox, which links it again.
+          */}
+          {unresolvable.length > 0 ? (
+            <ul className="mt-2 grid gap-1.5 text-[13px]">
+              {unresolvable.map((orderId) => {
+                const unlink = () => toggleOrder(orderId);
+                const notice = `Unlinked order ${orderId} from the draft.`;
+                return removal.isArmed(orderId) ? (
+                  <ConfirmRemove
+                    key={orderId}
+                    as="li"
+                    title={`Unlink order ${orderId}?`}
+                    consequence={consequenceOf(
+                      "No order of this customer's matches it, so no checkbox links it again.",
+                      pointsAtNothingWithout(orderId) &&
+                        REMOVAL_FINDINGS.ticket_without_resource_reference,
+                      "Nothing is written until you save the ticket, and a published version keeps it.",
+                    )}
+                    confirmLabel="Unlink"
+                    destroys={false}
+                    onConfirm={removal.confirm(unlink, notice)}
+                    onKeep={removal.keep}
+                  />
+                ) : (
+                  <li key={orderId} className="flex items-center gap-2">
+                    <span className="text-lab-error">Unresolved order</span>
+                    <code className="truncate text-admin-muted">{orderId}</code>
+                    <button
+                      className={`${subtleButtonClasses} ml-auto`}
+                      type="button"
+                      aria-label={`Unlink order ${orderId}`}
+                      ref={removal.trigger(orderId)}
+                      onClick={removal.ask(orderId, unlink, notice)}
+                    >
+                      Unlink
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </FieldGroup>
+      </FieldRows>
       <RemovalNotice removal={removal} />
     </Card>
   );
@@ -907,36 +921,46 @@ function SuggestedDocuments({
         </>
       }
     >
+      {/* One `FieldGroup` row per kind, named by the kind's chip on the Documents table — the
+          name each group was reached by as a legend — so a policy and an FAQ entry that share a
+          slug stay apart. The boxes keep the titles their labels give them, which the specs
+          check them by (rule 5). */}
       {groups.length === 0 ? (
         <p className="text-[13px] text-admin-muted">
           This shop has no policy, guideline, or FAQ entry yet.
         </p>
       ) : (
-        groups.map(({ shape, documents }) => (
-          <fieldset key={shape.kind} className="grid min-w-0 gap-1.5 text-[13px]">
-            <legend className="mb-1 text-xs font-semibold text-admin-muted">{shape.chip}</legend>
-            {documents.map((document) => (
-              <label key={document.document_id} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={content.suggested_documents.some(
-                    (entry) =>
-                      entry.kind === document.kind && entry.document_id === document.document_id,
-                  )}
-                  onChange={() => toggleDocument(document.kind, document.document_id)}
-                />
-                <span className="font-semibold">{document.title}</span>
-              </label>
-            ))}
-          </fieldset>
-        ))
+        <FieldRows>
+          {groups.map(({ shape, documents }) => (
+            <FieldGroup key={shape.kind} label={shape.chip}>
+              <div className="grid gap-1.5 text-[13px]">
+                {documents.map((document) => (
+                  <label key={document.document_id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={content.suggested_documents.some(
+                        (entry) =>
+                          entry.kind === document.kind &&
+                          entry.document_id === document.document_id,
+                      )}
+                      onChange={() => toggleDocument(document.kind, document.document_id)}
+                    />
+                    <span className="font-semibold">{document.title}</span>
+                  </label>
+                ))}
+              </div>
+            </FieldGroup>
+          ))}
+        </FieldRows>
       )}
       {/*
         A suggestion the shop no longer holds is warned about, as an unresolved order is
         refused, and it has no title to be named by — so it keeps a row of its own, named by
         its kind and slug, with the one action that resolves it. Removing it asks twice, as
         every editor removal does (ADR 0060): no checkbox puts it back, since the shop holds
-        no document to check.
+        no document to check. It stands beneath the kinds' rows rather than in one: a kind's
+        row is drawn only while the shop holds a document of that kind, so its kind may have no
+        row left to hold it.
       */}
       {staleDocuments.length > 0 ? (
         <ul className="grid gap-1.5 text-[13px]">

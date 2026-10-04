@@ -159,7 +159,7 @@ export const addFormClasses = "grid gap-2 border-t border-admin-border pt-3";
  * string beats any width a call site composes after it — `w-full` here made the order line's
  * quantity and the shipping fee fill their cell for as long as they existed, with `w-20` and
  * `w-32` at their call sites doing nothing. With none here, the call site's width is the only
- * one and it is the one drawn: `w-full` almost everywhere, and those two saying otherwise.
+ * one and it is the one drawn: `w-full` almost everywhere, and the few saying otherwise.
  */
 const fieldSurfaceClasses =
   "rounded-[9px] border border-admin-field-border bg-admin-surface px-3.5 text-admin-ink outline-none transition focus:border-lab-primary focus:ring-[3px] focus:ring-lab-primary/20 aria-invalid:border-lab-error disabled:cursor-not-allowed disabled:opacity-65 select-chevron";

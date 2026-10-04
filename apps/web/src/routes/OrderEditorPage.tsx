@@ -129,8 +129,6 @@ export function OrderEditorPage() {
   const [error, setError] = useState<string | null>(null);
   // The order's own Delete (ADR 0060); its two lists hold their own removals.
   const orderRemoval = useRemoval(orderId);
-  // Declared with the other hooks because this component returns early while it loads.
-  const feeRuleId = useId();
 
   const apply = useCallback((response: ShopOrderResponse) => {
     edits.current += 1;
@@ -446,6 +444,34 @@ export function OrderEditorPage() {
                   }
                 />
               </Field>
+              {/* The fee is the one total the operator types, so it is a row of the run, above
+                  the totals it feeds, named "Shipping fee" by its visible label. The rule is
+                  its hint; once it is broken the second line says it as a refusal and the hint
+                  stops describing the box, so it is heard once. Saying it at all is what keeps
+                  "abc" from reading as an accepted fee of zero: the totals below have already
+                  counted it as nothing, because `cents` contributes 0 for anything unparseable
+                  so a half-typed fee cannot turn every line into NaN. */}
+              <Field
+                label="Shipping fee"
+                hint={MONEY_RULE}
+                hintDescribes={!feeRefused}
+                extra={feeRefused ? MONEY_RULE : `Charged in ${content.currency}.`}
+                extraTone={feeRefused ? "error" : "muted"}
+              >
+                <input
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.shipping_fee.amount}
+                  inputMode="decimal"
+                  pattern={MONEY_PATTERN}
+                  title={MONEY_RULE}
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      shipping_fee: { ...content.shipping_fee, amount: event.target.value },
+                    })
+                  }
+                />
+              </Field>
             </FieldRows>
 
             <div className="grid gap-2 border-t border-admin-border pt-3 text-[13px]">
@@ -455,45 +481,14 @@ export function OrderEditorPage() {
                   {totals.subtotal} {content.currency}
                 </span>
               </div>
-              <label className="flex items-center justify-between gap-3">
-                <span className="text-xs font-semibold text-admin-muted">Shipping fee</span>
-                <span className="flex items-center gap-1.5">
-                  <input
-                    className={`${fieldControlClasses} w-32`}
-                    value={content.shipping_fee.amount}
-                    inputMode="decimal"
-                    pattern={MONEY_PATTERN}
-                    title={MONEY_RULE}
-                    aria-label="Shipping fee"
-                    aria-describedby={feeRuleId}
-                    aria-invalid={feeRefused || undefined}
-                    onChange={(event) =>
-                      edit({
-                        ...content,
-                        shipping_fee: { ...content.shipping_fee, amount: event.target.value },
-                      })
-                    }
-                  />
-                  <span className="text-admin-muted">{content.currency}</span>
+              {/* The fee as the totals count it, so the Total adds up on screen. A figure and not
+                  a label, so "Shipping fee" still names the one box on the row above. */}
+              <div className="flex justify-between">
+                <span className="text-admin-muted">Shipping fee</span>
+                <span>
+                  {totals.shipping} {content.currency}
                 </span>
-              </label>
-              {/* The rule, always in the field's accessible description and visible only once
-                  it has been broken — `FieldHint`'s `extra` slot in the one place a card of
-                  totals has no room for a standing hint line. The element and its words stay
-                  put, so an invalid fee announces once rather than on every keystroke; only
-                  the `role` and the styling change.
-
-                  Saying it at all is what keeps "abc" from reading as an accepted fee of
-                  zero: the totals above have already counted it as nothing, because `cents`
-                  contributes 0 for anything unparseable so a half-typed fee cannot turn every
-                  row into NaN. */}
-              <p
-                id={feeRuleId}
-                role={feeRefused ? "alert" : undefined}
-                className={feeRefused ? "text-xs text-lab-error" : "sr-only"}
-              >
-                {MONEY_RULE}
-              </p>
+              </div>
               <div className="flex justify-between font-semibold">
                 <span>Total</span>
                 <span>

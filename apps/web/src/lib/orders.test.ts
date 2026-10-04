@@ -107,7 +107,11 @@ describe("order request projection", () => {
 
 describe("preview totals", () => {
   it("derives the subtotal and total from the line items in exact cents", () => {
-    expect(previewTotals(CONTENT)).toEqual({ subtotal: "498.00", total: "502.90" });
+    expect(previewTotals(CONTENT)).toEqual({
+      subtotal: "498.00",
+      shipping: "4.90",
+      total: "502.90",
+    });
     expect(lineTotal("0.10", 3)).toBe("0.30");
   });
 
@@ -115,13 +119,13 @@ describe("preview totals", () => {
     // "4,90" is what a French keyboard produces first; the lab refuses it on save.
     const totals = previewTotals({ ...CONTENT, shipping_fee: { amount: "4,90", currency: "EUR" } });
 
-    expect(totals).toEqual({ subtotal: "498.00", total: "498.00" });
+    expect(totals).toEqual({ subtotal: "498.00", shipping: "0.00", total: "498.00" });
   });
 
   it("treats an order with no line as free rather than unknown", () => {
     expect(
       previewTotals({ ...CONTENT, lines: [], shipping_fee: { amount: "0.00", currency: "EUR" } }),
-    ).toEqual({ subtotal: "0.00", total: "0.00" });
+    ).toEqual({ subtotal: "0.00", shipping: "0.00", total: "0.00" });
   });
 });
 

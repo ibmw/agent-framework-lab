@@ -18,6 +18,7 @@ import {
   LINE_QUANTITY_RULE,
   LINE_VARIANT_RULE,
   MAX_ORDER_EVENTS,
+  MONEY_RULE,
   ORDER_EVENT_SUMMARY_RULE,
   ORDER_EVENT_TIME_RULE,
   ORDER_EVENTS_CAP_RULE,
@@ -34,6 +35,7 @@ import { expectWayBack } from "./test/header";
 import { indexCard } from "./test/indexes";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import { expectEditorOnRows, expectFieldRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -2672,6 +2674,59 @@ describe("the field pattern on the order editor", () => {
     ]) {
       expect(method).toHaveAccessibleDescription(wholeDescription(ORDER_METHOD_RULE));
     }
+  });
+
+  it("asks for the shipping fee on the payment run's last row, named by its visible label", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+    const payment = card("Line items & payment");
+
+    const fee = within(payment).getByLabelText("Shipping fee");
+    expect(fee).not.toHaveAttribute("aria-label");
+    expect(fee).toHaveAccessibleName("Shipping fee");
+    expectFieldRow(fee, "Shipping fee");
+    // The rule is the row's hint, and the second line says the money it is charged in.
+    expect(fee).toHaveAccessibleDescription(`${MONEY_RULE} Charged in EUR.`);
+    expect(fee).toBeValid();
+
+    // The totals show the fee between Subtotal and Total, so the Total adds up on screen — as a
+    // figure, which names nothing: "Shipping fee" still reaches the one box.
+    const figure = (term: string) =>
+      within(payment).getByText(term, { selector: "span" }).nextElementSibling;
+    await user.clear(fee);
+    await user.type(fee, "4.90");
+    expect(figure("Subtotal")).toHaveTextContent("249.00 EUR");
+    expect(figure("Shipping fee")).toHaveTextContent("4.90 EUR");
+    expect(figure("Total")).toHaveTextContent("253.90 EUR");
+    const terms = ["Subtotal", "Shipping fee", "Total"].map(
+      (term) => within(payment).getByText(term, { selector: "span" }).parentElement,
+    );
+    expect(terms[0]?.nextElementSibling).toBe(terms[1]);
+    expect(terms[1]?.nextElementSibling).toBe(terms[2]);
+    expect(within(payment).getAllByLabelText("Shipping fee")).toEqual([fee]);
+    expect(screen.getAllByLabelText("Shipping fee")).toEqual([fee]);
+
+    // Broken, the second line refuses it in the rule's words, heard once rather than twice.
+    await user.clear(fee);
+    await user.type(fee, "abc");
+    expect(fee).toBeInvalid();
+    expect(fee).toHaveAccessibleDescription(MONEY_RULE);
+    expect(within(payment).getByRole("alert")).toHaveTextContent(MONEY_RULE);
+  });
+
+  it("draws every field of every card in its main column on a row that names it", async () => {
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    const panel = sidePanel(await screen.findByRole("region", { name: "Findings" }));
+    await screen.findByRole("heading", { name: "NS-10482" });
+
+    // Enumerated, so a card added to the column is swept too; the forms below the line items
+    // and the events are left out by the sweep, and nothing else is excepted.
+    expect(expectEditorOnRows(panel)).toEqual({
+      "Line items & payment": 6,
+      "Fulfilment & shipping": 4,
+      "Order events": 3,
+    });
   });
 
   it("puts where the addresses come from in the Ship to select's description", async () => {

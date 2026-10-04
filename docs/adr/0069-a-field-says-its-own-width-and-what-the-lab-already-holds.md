@@ -2,6 +2,12 @@
 
 Status: accepted, amended by ADR 0074 (the order line's quantity is `w-full` in the form below the list) — 2026-09-27
 
+Amendment: 2026-10-04 — The order's shipping fee moved onto a row. It was the totals' one typed
+figure, drawn narrow beside its currency; it is now a `Field` row of the payment run, named by its
+visible label, above the totals it feeds, so it composes `w-full` like every row's control, as the
+order line's quantity did when it left its table's column (ADR 0074). The totals show it as a
+figure between Subtotal and Total. `ui.test.ts` holds that no order field keeps `w-32`.
+
 Amendment: 2026-10-02 — A select is drawn by the workspace, not the browser. The operator asked
 that Safari's select match the others: Safari draws its own rounded, gradient control whatever
 the surface says, so the shared field surface this record settles carries `select-chevron`
@@ -69,7 +75,8 @@ something — 21 of which gain `w-full` in front of what they had (`font-mono`, 
 
 - the order line's quantity keeps `w-20`; (Amended by ADR 0074: the quantity left the table's
   column for the form below the list and composes `w-full`, as the methods handoff draws it.)
-- the shipping fee keeps `w-32`;
+- the shipping fee keeps `w-32`; (Amended 2026-10-04: the fee moved onto a row of the payment
+  run and composes `w-full`.)
 - the results tag box takes the prototype's own values, `w-auto min-w-[130px] flex-1`, in place
   of `w-48`: the rest of its row at a 130px floor, so it sits beside *Add tag* rather than above
   it. `w-48` was never the frame's width, only the nearest fixed one.

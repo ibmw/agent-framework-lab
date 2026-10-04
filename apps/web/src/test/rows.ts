@@ -123,13 +123,15 @@ function sweepCard(card: HTMLElement, except: HTMLElement[]): HTMLElement[] {
 }
 
 /**
- * The add forms below a card's lists (`addFormClasses`), whose labels the rule leaves stacked:
- * "stacked labels only inside an add form". A form that opens a row in place is not one.
+ * The add forms below a card's lists (`addFormClasses`, alone or followed by the form's own
+ * columns, as the variants' `sm:grid-cols-2`), whose labels the rule leaves stacked: "stacked
+ * labels only inside an add form". A form that opens a row in place is not one.
  */
 function addForms(card: HTMLElement): HTMLElement[] {
-  return Array.from(card.querySelectorAll<HTMLElement>("form")).filter(
-    (form) => form.getAttribute("class") === addFormClasses,
-  );
+  return Array.from(card.querySelectorAll<HTMLElement>("form")).filter((form) => {
+    const classes = form.getAttribute("class") ?? "";
+    return classes === addFormClasses || classes.startsWith(`${addFormClasses} `);
+  });
 }
 
 /**

@@ -64,7 +64,7 @@ import {
   refusalElement,
   submitWithoutPressing,
 } from "./test/refused";
-import { expectRunsOpenOnARow } from "./test/rows";
+import { expectEditorOnRows, expectRunsOpenOnARow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -2562,12 +2562,83 @@ describe("the setup checklist beside Shop details", () => {
     expect(panelCards(panel)).toEqual(["Setup checklist"]);
     expect(panelFields(panel)).toEqual([]);
   });
+
+  it("draws every field of every card of Shop details on a row that names it", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const identity = sidePanel(await screen.findByRole("region", { name: "Setup checklist" }));
+    await screen.findByRole("region", { name: "Fulfilment methods" });
+
+    // Enumerated, so a card added to the column is swept too, and nothing is excepted.
+    expect(expectEditorOnRows(identity)).toEqual({
+      Identity: 2,
+      Logo: 39,
+      Commerce: 11,
+      Channels: 3,
+      "Payment methods": 4,
+      "Fulfilment methods": 5,
+    });
+  });
+
+  it("draws every field of every card of Tone of voice on a row that names it", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = sidePanel(await screen.findByRole("region", { name: "Setup checklist" }));
+    await screen.findByRole("region", { name: "Guidelines" });
+    expect(expectEditorOnRows(tone)).toEqual({ Guidelines: 4 });
+  });
 });
 
 /**
  * The product editor's panel: the shop draft publishes, so its first card is the Publish gate —
  * over this product's findings (`issuesForProduct`) — and what publishing freezes is last.
  */
+/**
+ * The product editor's cards on the reference pages' rows, save the variants table: a table's
+ * cells are named by their column and their row, not by a row's label, and ADR 0074 keeps the
+ * table open in place.
+ */
+describe("the product editor's rows", () => {
+  const accessibleNameOf = (control: HTMLElement) =>
+    Array.from((control as HTMLInputElement).labels ?? [])
+      .map((label) => label.textContent)
+      .join(" ");
+
+  it("draws every field of every card in its main column on a row that names it, save the variants table", async () => {
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+    const variants = await screen.findByRole("region", { name: "Variants" });
+    await within(variants).findByLabelText("Price for NS-ASJ-OB-M");
+
+    // Enumerated, so a card added to the column is swept too; each list's form below it, the
+    // variants' add form among them, is left out by the sweep.
+    expect(
+      expectEditorOnRows(panel, { Variants: (card) => [within(card).getByRole("table")] }),
+    ).toEqual({
+      Details: 5,
+      Options: 3,
+      Variants: 0,
+      Media: 3,
+      "Custom attributes (typed)": 4,
+      "Ratings and reviews": 7,
+    });
+    // What the table holds instead: every cell's control named by its column, then its row's
+    // SKU, by a label bound to it.
+    const cells = Array.from(
+      within(variants).getByRole("table").querySelectorAll<HTMLElement>("input, select"),
+    );
+    expect(cells.map((control) => control.getAttribute("aria-label"))).toEqual(
+      cells.map(() => null),
+    );
+    expect(cells.map(accessibleNameOf)).toEqual([
+      "Price for NS-ASJ-OB-M",
+      "Availability for NS-ASJ-OB-M",
+      "Stock for NS-ASJ-OB-M",
+      "Price for NS-ASJ-OB-L",
+      "Availability for NS-ASJ-OB-L",
+      "Stock for NS-ASJ-OB-L",
+    ]);
+  });
+});
+
 describe("the product editor's side panel", () => {
   const PRODUCT = `/shops/${SHOP_ID}/products/alpine-shell-jacket`;
   const SAVED_DRAFT = "Read off the saved draft. Save to check what is on screen.";

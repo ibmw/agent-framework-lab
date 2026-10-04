@@ -32,6 +32,7 @@ import { expectPublicationPill, indexCard } from "./test/indexes";
 import { expectRulesInFieldOrder } from "./test/itemForm";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import { expectEditorOnRows, expectFieldRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1403,6 +1404,53 @@ describe("the field pattern on the customer editor", () => {
       await user.click(remove);
     }
     expect(traits.getByText("No trait yet.")).toBeVisible();
+  });
+
+  it("asks for the marketing opt-in on a row of the account's run, named by its visible label", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    const account = within(screen.getByRole("region", { name: "Account" }));
+
+    const optIn = account.getByRole("checkbox", { name: "Opted in to marketing" });
+    expectFieldRow(optIn, "Opted in to marketing");
+    // Between the account's selects and its notes, where it stood off the rows.
+    const rows = Array.from(
+      (optIn.closest("fieldset, div.border-t") as HTMLElement).parentElement?.children ?? [],
+    );
+    const labels = rows.map((row) => row.querySelector("label")?.textContent);
+    expect(labels.indexOf("Opted in to marketing")).toBe(labels.indexOf("Loyalty tier") + 1);
+    expect(labels.indexOf("Account notes")).toBe(labels.indexOf("Opted in to marketing") + 1);
+
+    expect(optIn).toBeChecked();
+    await user.click(optIn);
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect((savedPayloads[0].account as { marketing_opt_in: boolean }).marketing_opt_in).toBe(
+      false,
+    );
+  });
+
+  it("draws every field of every card in its main column on a row that names it", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    // Enumerated, so a card added to the column is swept too. The persona's traits are a
+    // self-labelling list, `ChipListField`, whose own legend stands beneath the rows by the
+    // rule; each list's form below it is left out by the sweep.
+    expect(
+      expectEditorOnRows(panel, {
+        "Behavioral persona": (card) => [within(card).getByRole("group", { name: "Traits" })],
+      }),
+    ).toEqual({
+      Identity: 5,
+      Account: 5,
+      "Address book": 5,
+      "Behavioral persona": 1,
+      Background: 3,
+      "Hidden simulator facts": 2,
+    });
   });
 
   it("keeps the persona's traits named by their own group, not by a row as well", async () => {

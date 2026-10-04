@@ -24,6 +24,7 @@ import { expectWayBack } from "./test/header";
 import { expectPublicationPill } from "./test/indexes";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import { expectEditorOnRows, expectGroupRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1370,7 +1371,8 @@ describe("what the ticket points at", () => {
     expect(
       within(documents)
         .getAllByRole("group")
-        .map((group) => group.querySelector("legend")?.textContent),
+        .map((group) => group.getAttribute("aria-labelledby"))
+        .map((id) => document.getElementById(id ?? "")?.textContent),
     ).toEqual(["Policies", "Guidelines", "FAQ"]);
     const policies = within(documents).getByRole("group", { name: "Policies" });
     expect(within(policies).getByLabelText("Address-change policy")).toBeChecked();
@@ -1633,7 +1635,10 @@ describe("what the ticket points at", () => {
     await user.click(order);
 
     expect(order).not.toBeChecked();
-    expect(within(linked).queryByRole("group")).toBeNull();
+    // No confirm opens: the only group left is the Linked row itself.
+    expect(within(linked).getAllByRole("group")).toEqual([
+      within(linked).getByRole("group", { name: "Linked" }),
+    ]);
     expect(within(linked).queryByText(/^Unlinked order/)).toBeNull();
     await user.click(order);
     expect(order).toBeChecked();
@@ -1848,5 +1853,121 @@ describe("saving and publishing", () => {
       /has no published version to pin/,
     );
     expect(screen.getByRole("region", { name: "Conversation" })).toBeVisible();
+  });
+});
+
+/**
+ * The ticket editor's cards on the reference pages' rows: *Linked orders* as the Linked row and
+ * *Suggested documents* as one row per kind, each box keeping the name the specs check it by.
+ */
+describe("the ticket editor's rows", () => {
+  it("draws the linked orders as the Linked group row, each box keeping its order's reference", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const linked = await screen.findByRole("region", { name: "Linked orders" });
+
+    const row = within(linked).getByRole("group", { name: "Linked" });
+    expectGroupRow(row, "Linked");
+    // Reached the way the specs reach it: by the reference its wrapping label gives it.
+    const order = await within(row).findByRole("checkbox", { name: "NS-10482" });
+    expect(within(row).getAllByRole("checkbox")).toEqual([order]);
+    expect(within(row).getByText(/ship-to: Bordeaux — previous flat/)).toBeVisible();
+  });
+
+  it("keeps an unresolved link on the Linked row, its Unlink and its confirm named as before", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...DRAFT_CONTENT, linked_order_ids: [ORDER_ID, MISSING_ORDER_ID] };
+    currentPreview = preview({ content: currentContent });
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const linked = await screen.findByRole("region", { name: "Linked orders" });
+    const row = within(linked).getByRole("group", { name: "Linked" });
+
+    const unlink = await within(row).findByRole("button", {
+      name: `Unlink order ${MISSING_ORDER_ID}`,
+    });
+    await user.click(unlink);
+
+    // The confirm takes the entry's place inside the row, as a list item.
+    const confirm = within(row).getByRole("group", { name: `Unlink order ${MISSING_ORDER_ID}?` });
+    expect(confirm.closest("li")?.parentElement?.closest("fieldset")).toBe(row);
+    expect(confirm).toHaveFocus();
+    await user.click(within(confirm).getByRole("button", { name: "Unlink" }));
+    expect(within(row).queryByText("Unresolved order")).toBeNull();
+    expect(within(row).getByRole("checkbox", { name: "NS-10482" })).toBeChecked();
+  });
+
+  it("says inside the Linked row that the customer has no order in the shop", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${TICKET_ID}/context`, () =>
+        HttpResponse.json({ ...CONTEXT, resources: { ...CONTEXT.resources, orders: [] } }),
+      ),
+    );
+    currentContent = { ...DRAFT_CONTENT, linked_order_ids: [] };
+    currentPreview = preview({ content: currentContent });
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const linked = await screen.findByRole("region", { name: "Linked orders" });
+
+    const row = within(linked).getByRole("group", { name: "Linked" });
+    expect(
+      await within(row).findByText("This customer has no order in this shop yet."),
+    ).toBeVisible();
+    expect(within(row).queryByRole("checkbox")).toBeNull();
+  });
+
+  it("draws the suggested documents as one group row per kind, named by the kind's chip", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const documents = await screen.findByRole("region", { name: "Suggested documents" });
+
+    for (const [kind, title] of [
+      ["Policies", "Address-change policy"],
+      ["Guidelines", "Escalating a refund"],
+      ["FAQ", "When will my order arrive?"],
+    ] as const) {
+      const row = await within(documents).findByRole("group", { name: kind });
+      expectGroupRow(row, kind);
+      expect(within(row).getAllByRole("checkbox")).toEqual([
+        within(row).getByRole("checkbox", { name: title }),
+      ]);
+    }
+  });
+
+  it("keeps an unresolved suggestion's Remove and confirm under the rows, named as before", async () => {
+    const user = userEvent.setup();
+    currentContent = {
+      ...DRAFT_CONTENT,
+      suggested_documents: [{ kind: "policy", document_id: "delivery" }],
+    };
+    currentPreview = preview({ content: currentContent });
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const documents = await screen.findByRole("region", { name: "Suggested documents" });
+
+    await user.click(
+      await within(documents).findByRole("button", { name: "Remove suggested policy delivery" }),
+    );
+    const confirm = within(documents).getByRole("group", {
+      name: "Remove the suggested policy delivery?",
+    });
+    expect(confirm.closest("li")).not.toBeNull();
+    // Beneath the kinds' rows rather than inside one: a kind's row is drawn only while the
+    // shop holds a document of that kind, so its kind may have no row left to hold it.
+    expect(confirm.parentElement?.closest("fieldset")).toBeNull();
+    expect(confirm).toHaveFocus();
+  });
+
+  it("draws every field of every card in its main column on a row that names it", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+    await within(card("Linked orders")).findByRole("checkbox", { name: "NS-10482" });
+    await within(card("Suggested documents")).findByRole("checkbox", {
+      name: "When will my order arrive?",
+    });
+
+    // Enumerated, so a card added to the column is swept too. The tags are a self-labelling
+    // list, `ChipListField`, whose own legend stands beneath the rows by the rule; the
+    // thread's composer is the form below the list.
+    expect(
+      expectEditorOnRows(panel, {
+        Incident: (card) => [within(card).getByRole("group", { name: "Tags" })],
+      }),
+    ).toEqual({ Incident: 5, Conversation: 0, "Linked orders": 1, "Suggested documents": 3 });
   });
 });

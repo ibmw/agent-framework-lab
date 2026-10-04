@@ -445,19 +445,16 @@ export function CustomerEditorPage() {
                   <option value="gold">Gold</option>
                 </select>
               </Field>
-            </FieldRows>
-            {/* A lone checkbox says what it means beside itself; a row would give it a label
-                on the left and a tick on the right with nothing between them. It keeps the
-                place it had, between the account's selects and its notes. */}
-            <label className="flex items-center gap-2 text-[13px]">
-              <input
-                type="checkbox"
-                checked={content.account.marketing_opt_in}
-                onChange={(event) => editAccount({ marketing_opt_in: event.target.checked })}
-              />
-              Opted in to marketing
-            </label>
-            <FieldRows>
+              {/* A lone checkbox is a row of its own, its label on the left, as the lab
+                  settings' preferences are; "Opted in to marketing" is the name the label gives
+                  it. It keeps the place it had, between the account's selects and its notes. */}
+              <Field label="Opted in to marketing">
+                <input
+                  type="checkbox"
+                  checked={content.account.marketing_opt_in}
+                  onChange={(event) => editAccount({ marketing_opt_in: event.target.checked })}
+                />
+              </Field>
               <Field label="Account notes" hint={ACCOUNT_NOTES_RULE}>
                 <textarea
                   maxLength={TEXT_MAX_LENGTH}
