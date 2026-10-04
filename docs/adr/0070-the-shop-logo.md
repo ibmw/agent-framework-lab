@@ -7,6 +7,9 @@ and never refused, Brick is offered, and the monogram takes the chosen colours
 (`shop-payload-v3`). See *Amendment — 2026-09-27: the logo's colours are chosen* below; the
 sections it reverses are marked where they stand.
 
+Amendment: 2026-10-03 — The card has a way back to no logo: *Clear logo* beside the preview sets
+the draft's logo to `null`. See *Amendment — 2026-10-03: a way back to no logo* below.
+
 Settles `docs/PLAN-UX.md` Slice 28: an icon from the prototype's twenty-eight marks and a
 background on the shop payload, drawn on the switcher's badge, the shops index and the two
 editors that set it. The plan said to drop the slice "if the badge reads well on initials". It
@@ -283,7 +286,8 @@ a logo: a background starts the monogram in the colour that reads on it, a colou
 Pine, and an icon starts on Pine in White. Choosing the monogram again is not a choice of
 colours, so it does nothing. **The card has no way back to no logo.** The mockup draws none,
 and a monogram on Forest in White looks like the default badge. The API still takes
-`logo: null` or an absent key.
+`logo: null` or an absent key. *(Reversed by the amendment of 2026-10-03: the card now has a
+way back.)*
 
 ### The payload: `shop-payload-v3`, and v2 kept as stored
 
@@ -396,3 +400,53 @@ removed or retyped for anything already stored.
 The shop payload has its second token, and no stored byte moved to get it. This sets a
 precedent for any later optional member of a canonical payload: absent means unwritten, and the
 token names what the document holds.
+
+## Amendment — 2026-10-03: a way back to no logo
+
+**The reversal.** The user asked for a "No logo" choice on the card. A shop that picked a logo
+could not return to none from the workspace, although the API takes `logo: null`, so a logo
+picked to try the card stayed for good. A monogram on Forest in White is near the default
+badge, but it is a logo: it is v3, it is reported as one, and it does not follow `lab-ink`.
+
+**The control is *Clear logo*, a subtle secondary button at the end of the preview row.** The
+user confirmed the button on 2026-10-04, choosing it over a tile in the *Mark* group. Pressing
+it sets the draft's logo to `null`. The card is then exactly what a shop that never chose a logo
+opens on: the monogram tile checked, no background or colour checked, and the initials in white
+on `lab-ink`. Shop details saves `logo: null` and the create page sends no `logo`. The server
+writes either one as `shop-payload-v1`, so a shop published without a logo, given one and then
+cleared, matches its published version again, with the same fingerprint and no changes. The
+next pick starts a logo as the first one did.
+
+- **Why a button, not a "No logo" tile.** A shop with no logo opens with the monogram tile
+  checked, as this ADR and ADR 0064 record. A *No logo* tile in the same radio group would have
+  to be the checked one instead, so the monogram tile would no longer be checked for a shop
+  without a logo. A button beside the preview changes no radio's meaning and keeps that state as
+  recorded.
+- **Why *Clear*, not *Remove*, and no confirm.** *Remove* is a destructive verb in this
+  workspace, on a grey trash that warms to red and asks twice (ADR 0060, ADR 0075). Clearing a
+  draft's logo destroys nothing. A pick gives a logo back, *Discard changes* restores the saved
+  one, and a published version keeps its own. *Clear* is the verb History's *Clear filters*
+  already uses for undoing choices. It is not one of the row verbs `lib/ui.test.ts` refuses, and
+  it takes no glyph, because `buttonIcon` has none for it.
+- **Disabled while there is no logo.** A secondary control that can do nothing keeps native
+  `disabled` (ADR 0063). Its reason is one sentence in two places, as History's *Clear filters*
+  gives it: the preview note it is described by, which now opens "No logo yet:", and its
+  `title`, which repeats that note word for word.
+- **Focus.** The pressed button becomes disabled, which would drop focus. Focus therefore moves
+  to the monogram tile, the *Mark* group's checked radio and its one tab stop. The no-logo note
+  describes that tile, so a reader hears the outcome there.
+
+Drawing is unchanged. `ShopBadge` already draws `null` as the initials on `lab-ink`, and the
+switcher reads the listing again after a save.
+
+### Verification of this amendment
+
+- `test_shop_api.py`: a draft sent `logo: null` answers no logo, lists none, and returns a shop
+  published without a logo to its published fingerprint with no changes.
+- `App.test.tsx`: clearing a chosen logo leaves only the monogram checked, focuses it, and draws
+  the initials on `lab-ink`. *Clear logo* is then disabled, its description and `title` the
+  same "No logo yet:" sentence, and Save sends `logo: null`, after which the switcher draws the
+  initials. Reached by Shift+Tab from the checked mark, Enter and Space both clear, an arrow key
+  from the monogram picks a mark that starts a logo on Pine in White, and *Discard
+  changes* brings back the saved logo without writing. `Shops.test.tsx`: *Clear logo* is
+  disabled on a new shop, and a logo picked and cleared creates the shop without one.

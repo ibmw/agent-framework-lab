@@ -2239,6 +2239,141 @@ describe("a shop's logo, on Shop details", () => {
     expect(logo.getByRole("radio", { name: "White" })).not.toBeChecked();
     expect(badgeOf(region)).toHaveStyle({ backgroundColor: "#a8802a", color: "#16332d" });
   });
+
+  /** Every radio of the card that is checked, by the name its tile carries. */
+  function checkedIn(region: HTMLElement): string[] {
+    return within(region)
+      .getAllByRole("radio")
+      .filter((radio) => (radio as HTMLInputElement).checked)
+      .map((radio) => radio.closest("label")?.title ?? "");
+  }
+
+  /** A lab whose listing draws the logo the last write saved, as the switcher reads it. */
+  function keepingTheLogo() {
+    server.use(
+      http.get("*/api/v1/shops", () =>
+        HttpResponse.json({
+          shops: shops.shops.map((shop) => ({ ...shop, logo: currentContent.logo })),
+        }),
+      ),
+      http.put(`*/api/v1/shops/${SHOP_ID}/draft`, async ({ request }) => {
+        const body = (await request.json()) as { payload: ShopPayloadSchema };
+        savedDrafts.push(body.payload);
+        const logo = body.payload.logo ?? null;
+        currentContent = {
+          ...currentContent,
+          logo:
+            logo === null
+              ? null
+              : { ...logo, mark_colour: logo.mark_colour ?? markColourFor(logo.background) },
+        };
+        return HttpResponse.json(draft(currentContent));
+      }),
+    );
+  }
+
+  const SAVED_LOGO = { mark: "compass", background: "clay", mark_colour: "white" } as const;
+
+  it("clears a chosen logo back to none, saves logo: null, and draws the initials again", async () => {
+    currentContent = { ...currentContent, logo: SAVED_LOGO };
+    keepingTheLogo();
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const switcher = await screen.findByRole("button", { name: /^Switch shop/ });
+    const region = await screen.findByRole("region", { name: "Logo" });
+    const logo = within(region);
+    await waitFor(() =>
+      expect(switcher.querySelector("[data-shop-badge] svg")).toHaveAttribute(
+        "data-mark",
+        "compass",
+      ),
+    );
+    expect(checkedIn(region)).toEqual(["Compass", "Clay", "White"]);
+    const clear = logo.getByRole("button", { name: "Clear logo" });
+    expect(clear).toBeEnabled();
+
+    await user.click(clear);
+
+    // No logo, exactly as a shop that never chose one opens: the monogram tile and nothing
+    // else checked, the initials in white on the lab's own ink, and nothing left to clear.
+    const monogram = logo.getByRole("radio", { name: "Monogram — the first letters of the name" });
+    expect(checkedIn(region)).toEqual(["Monogram — the first letters of the name"]);
+    expect(monogram).toHaveFocus();
+    expect(badgeOf(region)).toHaveTextContent(/^NO$/);
+    expect(badgeOf(region)).toHaveStyle({
+      backgroundColor: "var(--color-lab-ink)",
+      color: "#ffffff",
+    });
+    expect(clear).toBeDisabled();
+    // One reason, in the line it is described by and in its title, as Clear filters says it.
+    const reason =
+      "No logo yet: letters taken from the name, on the lab's own ink until you pick a background. They change if the shop is renamed.";
+    expect(clear).toHaveAccessibleDescription(reason);
+    expect(clear).toHaveAttribute("title", reason);
+    expect(logo.getByText(reason)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved()).toHaveProperty("logo", null);
+    // The switcher reads the listing again after the save, and draws the initials.
+    await waitFor(() => expect(within(switcher).getByText("NO")).toBeInTheDocument());
+    expect(switcher.querySelector("[data-shop-badge] svg")).toBeNull();
+  });
+
+  it("gives a cleared logo back with the next pick, from the keyboard", async () => {
+    currentContent = { ...currentContent, logo: SAVED_LOGO };
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const region = await screen.findByRole("region", { name: "Logo" });
+    const logo = within(region);
+    const clear = logo.getByRole("button", { name: "Clear logo" });
+
+    // Clear logo is the tab stop just before the Mark group's checked tile.
+    logo.getByRole("radio", { name: "Compass" }).focus();
+    await user.tab({ shift: true });
+    expect(clear).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(checkedIn(region)).toEqual(["Monogram — the first letters of the name"]);
+    // Focus is on the checked monogram, the group's one tab stop: an arrow picks the next mark.
+    await user.keyboard("{ArrowRight}");
+
+    const first = logo.getAllByRole("radio")[1] as HTMLInputElement;
+    expect(first).toBeChecked();
+    expect(first).toHaveFocus();
+    // A pick on no logo starts one, on Pine in White, as it does for a shop that never had one.
+    expect(checkedIn(region)).toEqual([first.closest("label")?.title, "Pine", "White"]);
+    expect(clear).toBeEnabled();
+
+    // Space presses it too, tabbed back to from the mark just picked.
+    await user.tab({ shift: true });
+    expect(clear).toHaveFocus();
+    await user.keyboard(" ");
+    expect(checkedIn(region)).toEqual(["Monogram — the first letters of the name"]);
+  });
+
+  it("brings the saved logo back when a clear is discarded", async () => {
+    currentContent = { ...currentContent, logo: SAVED_LOGO };
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const region = await screen.findByRole("region", { name: "Logo" });
+
+    await user.click(within(region).getByRole("button", { name: "Clear logo" }));
+    expect(checkedIn(region)).toEqual(["Monogram — the first letters of the name"]);
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await waitFor(() =>
+      expect(checkedIn(screen.getByRole("region", { name: "Logo" }))).toEqual([
+        "Compass",
+        "Clay",
+        "White",
+      ]),
+    );
+    expect(badgeOf(screen.getByRole("region", { name: "Logo" }))).toHaveStyle({
+      backgroundColor: "#c2532d",
+      color: "#ffffff",
+    });
+    expect(savedDrafts).toHaveLength(0);
+  });
 });
 
 /**

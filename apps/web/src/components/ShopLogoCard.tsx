@@ -1,5 +1,5 @@
 import type { ShopLogoViewSchema, ShopMark } from "@agent-lab/contracts";
-import { useId } from "react";
+import { useId, useRef } from "react";
 import {
   DEFAULT_LOGO_BACKGROUND,
   isLowContrast,
@@ -8,11 +8,13 @@ import {
   MONOGRAM_NAME,
   markColourFor,
   markName,
+  NO_LOGO_NOTE,
   SHOP_LOGO_BACKGROUNDS,
   SHOP_MARK_COLOURS,
   SHOP_MARKS,
   shopInitials,
 } from "../lib/shopLogo";
+import { subtleButtonClasses } from "../lib/ui";
 import { FieldGroup, FieldRows } from "./FieldHint";
 import { ShopBadge, ShopMarkGlyph } from "./ShopBadge";
 import { Card } from "./WorkspaceChrome";
@@ -33,8 +35,9 @@ const swatchClasses =
  *
  * A shop without a logo opens on the monogram with no background and no colour checked, and
  * is drawn as the lab draws it — white on `lab-ink`. The first background, colour or icon
- * picked gives it a logo; the pickers never take one away. A pair under 3:1 is warned about
- * under *Mark colour* and saved all the same.
+ * picked gives it a logo; the pickers never take one away, and *Clear logo* beside the preview
+ * is the way back to none. A pair under 3:1 is warned about under *Mark colour* and saved all
+ * the same.
  */
 export function ShopLogoCard({
   name,
@@ -48,6 +51,7 @@ export function ShopLogoCard({
 }) {
   const group = useId();
   const noteId = `${group}-note`;
+  const monogram = useRef<HTMLInputElement>(null);
   const shownName = name.trim() === "" ? "New shop" : name;
 
   /** The logo a first pick starts: the monogram on Pine, in the colour that reads on it. */
@@ -64,6 +68,15 @@ export function ShopLogoCard({
   // checked there, and a checked radio fires no change, so choosing it again starts nothing.
   function pickMark(mark: ShopMark | null) {
     pick({ mark });
+  }
+
+  // Back to no logo: the draft's logo is `null`, which saves as `logo: null`. Nothing is lost
+  // that a pick or *Discard changes* cannot bring back, so it asks nothing. The button is now
+  // disabled and would drop focus, so focus goes to the monogram tile, the group's checked
+  // radio, which the no-logo note describes.
+  function clear() {
+    onChange(null);
+    monogram.current?.focus();
   }
 
   const lowContrast = logo !== null && isLowContrast(logo.background, logo.mark_colour);
@@ -88,12 +101,25 @@ export function ShopLogoCard({
             <p id={noteId} className="min-w-0 text-[13px] leading-normal text-admin-muted">
               {logoPreviewNote(logo)}
             </p>
+            {/* Secondary, so native `disabled` while there is no logo, with the reason in
+                `title` and in the note beside it, one sentence in both (ADR 0063). */}
+            <button
+              type="button"
+              className={`ml-auto flex-none ${subtleButtonClasses}`}
+              disabled={logo === null}
+              title={logo === null ? NO_LOGO_NOTE : undefined}
+              aria-describedby={logo === null ? noteId : undefined}
+              onClick={clear}
+            >
+              Clear logo
+            </button>
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-[7px]">
             <label className={tileClasses} title={MONOGRAM_NAME}>
               <input
                 type="radio"
                 className="sr-only"
+                ref={monogram}
                 name={`${group}-mark`}
                 checked={logo === null || logo.mark === null}
                 aria-describedby={noteId}

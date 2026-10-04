@@ -688,6 +688,25 @@ describe("the shop logo (ADR 0070)", () => {
     expect(created).not.toHaveProperty("logo");
   });
 
+  it("creates a shop without a logo when the one picked is cleared", async () => {
+    const user = userEvent.setup();
+    renderNewShop();
+    const page = await createShopPage();
+    const logo = within(page.getByRole("region", { name: "Logo" }));
+    expect(logo.getByRole("button", { name: "Clear logo" })).toBeDisabled();
+
+    await user.click(logo.getByRole("radio", { name: "Anchor" }));
+    await user.click(logo.getByRole("button", { name: "Clear logo" }));
+
+    expect(
+      logo.getAllByRole("radio").filter((radio) => (radio as HTMLInputElement).checked),
+    ).toEqual([logo.getByRole("radio", { name: "Monogram — the first letters of the name" })]);
+    await user.type(page.getByLabelText("Name"), "Harbour Lane Supply");
+    await user.click(page.getByRole("button", { name: "Create shop" }));
+    await waitFor(() => expect(created).not.toBeNull());
+    expect(created).not.toHaveProperty("logo");
+  });
+
   it("creates a shop with the logo chosen on the page", async () => {
     const user = userEvent.setup();
     renderNewShop();

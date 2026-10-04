@@ -240,10 +240,17 @@ export const DEFAULT_LOGO_BACKGROUND: ShopLogoBackground = "pine";
 /** The name the prototype gives the first mark tile. */
 export const MONOGRAM_NAME = "Monogram — the first letters of the name";
 
+/**
+ * What the preview says for a shop with no logo. It is also why *Clear logo* is disabled, in
+ * its `title`, so the reason reads the same in both places.
+ */
+export const NO_LOGO_NOTE =
+  "No logo yet: letters taken from the name, on the lab's own ink until you pick a background. They change if the shop is renamed.";
+
 /** What the preview says beside the badge: where the letters come from, or that an icon stays. */
 export function logoPreviewNote(logo: ShopLogoViewSchema | null): string {
   if (logo === null) {
-    return "Letters taken from the name, on the lab's own ink until you pick a background. They change if the shop is renamed.";
+    return NO_LOGO_NOTE;
   }
   if (logo.mark === null) {
     return "Letters taken from the name — they change if the shop is renamed.";

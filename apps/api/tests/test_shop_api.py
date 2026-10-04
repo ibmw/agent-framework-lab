@@ -361,6 +361,34 @@ async def test_a_logo_is_optional_on_every_write_and_always_answered(client: Asy
     assert {"kind": "removed", "path": "logo", "description": "Removed shop logo"} in changes
 
 
+async def test_a_logo_sent_as_null_returns_the_draft_to_no_logo(client: AsyncClient) -> None:
+    """The workspace's way back to no logo sends `logo: null`, and the shop has none again.
+
+    Published without a logo, given one and then sent `null`, the draft is the published
+    version's content again: no logo answered, nothing to publish, the same fingerprint.
+    """
+    shop_id = await create_shop(client)
+    await client.put(f"/api/v1/shops/{shop_id}/draft", json={"payload": PAYLOAD})
+    published = (await client.post(f"/api/v1/shops/{shop_id}/versions")).json()
+    logo = {"mark": None, "background": "pine", "mark_colour": "white"}
+    await client.put(f"/api/v1/shops/{shop_id}/draft", json={"payload": {**PAYLOAD, "logo": logo}})
+    given = (await client.get(f"/api/v1/shops/{shop_id}/draft/preview")).json()
+    assert given["matches_latest_published"] is False
+
+    cleared = await client.put(
+        f"/api/v1/shops/{shop_id}/draft", json={"payload": {**PAYLOAD, "logo": None}}
+    )
+
+    assert cleared.status_code == 200
+    assert cleared.json()["content"]["logo"] is None
+    preview = (await client.get(f"/api/v1/shops/{shop_id}/draft/preview")).json()
+    assert preview["changes"] == []
+    assert preview["matches_latest_published"] is True
+    assert preview["content_fingerprint"] == published["content_fingerprint"]
+    listed = (await client.get("/api/v1/shops")).json()["shops"]
+    assert [shop["logo"] for shop in listed] == [None]
+
+
 async def test_a_shop_is_created_with_its_logo(client: AsyncClient) -> None:
     logo = {"mark": "storefront", "background": "brick", "mark_colour": "white"}
     response = await client.post("/api/v1/shops", json={"identity": IDENTITY, "logo": logo})
