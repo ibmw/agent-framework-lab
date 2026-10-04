@@ -1733,7 +1733,12 @@ describe("shop workspace", () => {
     expect(heading).toBeVisible();
     expect(screen.getByText("published · read only")).toBeVisible();
     // The draft it was published from is the overview's, and that is where the ← goes.
-    await expectWayBack("Overview", `/shops/${SHOP_ID}`, "published version");
+    await expectWayBack(
+      "Overview",
+      `/shops/${SHOP_ID}`,
+      "published version",
+      /published version · frozen .+ · content fingerprint [0-9a-f]{12}…/,
+    );
     const table = screen.getByRole("table");
     expect(within(table).getByText("NS-ASJ-OB-M")).toBeVisible();
     expect(within(table).getByText("249.00 EUR")).toBeVisible();
@@ -2570,7 +2575,13 @@ describe("the product editor's side panel", () => {
   it("goes back to Products from the ← above the product's title", async () => {
     renderAt(PRODUCT);
 
-    await expectWayBack("Products", `/shops/${SHOP_ID}/products`, "editing the draft");
+    await expectWayBack(
+      "Products",
+      `/shops/${SHOP_ID}/products`,
+      "editing the draft",
+      // The rating is the reviews card's title, and the line does not say it again.
+      /^Products · editing the draft$/,
+    );
   });
 
   it("holds the publish gate and what publishing freezes, in that order, and no field", async () => {

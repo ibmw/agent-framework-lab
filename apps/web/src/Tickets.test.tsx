@@ -1053,7 +1053,14 @@ describe("the ticket editor", () => {
   it("goes back to Tickets from the ← above the subject", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
 
-    await expectWayBack("Tickets", `/shops/${SHOP_ID}/tickets`, "ticket");
+    await expectWayBack(
+      "Tickets",
+      `/shops/${SHOP_ID}/tickets`,
+      "ticket",
+      // The channel is the Channel row's; the origin stays on the line, where it is read.
+      /^Tickets · ticket · from /,
+      /draft fingerprint [0-9a-f]{12}…/,
+    );
   });
   it("is its own page, under a pinned header holding the ticket and its actions", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
@@ -1070,7 +1077,9 @@ describe("the ticket editor", () => {
       "href",
       `/shops/${SHOP_ID}/tickets`,
     );
-    expect(within(header).getByText(/Chat · from order page/)).toBeVisible();
+    // The origin is on the header's line; the channel is the Channel row's, not restated.
+    expect(within(header).getByText(/ticket · from order page/)).toBeVisible();
+    expect(within(header).queryByText(/Chat/)).toBeNull();
     expect(within(header).getByText("All changes saved")).toBeVisible();
     expect(within(header).getByRole("button", { name: "Publish v1" })).toBeVisible();
     // No page is drawn around it: it is the page.

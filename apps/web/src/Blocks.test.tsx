@@ -638,7 +638,12 @@ describe("objective block editor", () => {
   it("goes back to Objective blocks from the ← above its title", async () => {
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
-    await expectWayBack("Objective blocks", "/lab/objective-blocks", "objective block");
+    await expectWayBack(
+      "Objective blocks",
+      "/lab/objective-blocks",
+      "objective block",
+      /objective block · draft fingerprint [0-9a-f]{12}…/,
+    );
   });
   it("marks the parameter a scenario must resolve inside its own shop", async () => {
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
@@ -972,7 +977,12 @@ describe("mutation block editor", () => {
   it("goes back to Mutation blocks from the ← above its title", async () => {
     renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
 
-    await expectWayBack("Mutation blocks", "/lab/mutation-blocks", "mutation block");
+    await expectWayBack(
+      "Mutation blocks",
+      "/lab/mutation-blocks",
+      "mutation block",
+      /mutation block · draft fingerprint [0-9a-f]{12}…/,
+    );
   });
   it("shows why a mutation with no timing parameter cannot be published", async () => {
     renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);

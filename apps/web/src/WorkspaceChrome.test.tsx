@@ -17,6 +17,7 @@ import {
 import { PUBLISH_UNSAVED_REASON } from "./lib/definitionEditor";
 import { STICKY_REPORT_ATTRIBUTE, stickyHeaderClasses } from "./lib/stickyHeader";
 import { neutralPillClasses, publishedPillClasses } from "./lib/ui";
+import { expectOneLine } from "./test/header";
 import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 
 /**
@@ -158,9 +159,8 @@ describe("an editor's way back", () => {
       <PageHeader
         title="Resolution quality"
         chips={<span>Draft v2 in progress</span>}
-        back={{ to: "..", label: "Judges", kind: "judge" }}
+        back={{ to: "..", label: "Judges", kind: "judge", detail: "gpt-5-mini" }}
         actions={<button type="button">Save draft</button>}
-        description="gpt-5-mini"
         sticky
       />
     );
@@ -197,7 +197,6 @@ describe("an editor's way back", () => {
       screen.getByRole("heading", { level: 1, name: "Resolution quality" }),
       screen.getByText("Draft v2 in progress"),
       screen.getByRole("button", { name: "Save draft" }),
-      screen.getByText("gpt-5-mini"),
     ];
     for (const [earlier, later] of inOrder
       .slice(1)
@@ -210,6 +209,18 @@ describe("an editor's way back", () => {
     expect(screen.getByText("Draft v2 in progress").parentElement).toBe(
       screen.getByRole("heading", { level: 1 }).parentElement,
     );
+  });
+
+  it("says what else it knows of the record on that same line, and draws no line under the title", () => {
+    renderAtRecord(<JudgeHeader />);
+
+    const header = screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement;
+    const line = within(header).getByRole("link", { name: "Judges" }).parentElement as HTMLElement;
+    // One line, as the prototype draws it (`Workspace.dc.html` :485–487): what the header says
+    // of the record rides on the line above the title rather than on a second one under it.
+    expect(line).toHaveTextContent(/^Judges · judge · gpt-5-mini$/);
+    expect(within(header).getAllByText(/gpt-5-mini/)).toEqual([line]);
+    expectOneLine(header, line);
   });
 
   it("goes back when pressed", async () => {

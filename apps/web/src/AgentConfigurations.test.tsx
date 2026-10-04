@@ -1435,7 +1435,17 @@ describe("the agent configuration editor's side panel", () => {
   it("goes back to Agent configs from the ← above its title", async () => {
     renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
-    await expectWayBack("Agent configs", "/lab/agent-configurations", "configuration");
+    await expectWayBack(
+      "Agent configs",
+      "/lab/agent-configurations",
+      "configuration",
+      "configuration · shop-independent",
+      /draft fingerprint [0-9a-f]{12}…/,
+    );
+    // When variables resolve, which the header used to say, is said by the card that holds them.
+    expect(screen.getByRole("region", { name: "Variables" })).toHaveAccessibleDescription(
+      "Resolved at experiment start; the resolved configuration is pinned to the run.",
+    );
   });
   it("holds the gate, the variables, reproducibility and what publishing freezes, in that order, and no field", async () => {
     renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);

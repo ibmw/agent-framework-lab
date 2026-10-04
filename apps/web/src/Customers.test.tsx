@@ -323,7 +323,12 @@ describe("customer workspace", () => {
   it("goes back to Customers from the ← above the profile's name", async () => {
     renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
 
-    await expectWayBack("Customers", `/shops/${SHOP_ID}/customers`, "profile");
+    await expectWayBack(
+      "Customers",
+      `/shops/${SHOP_ID}/customers`,
+      "profile",
+      /profile · draft fingerprint [0-9a-f]{12}…/,
+    );
   });
   // The card's title says what the list is (a profile is reusable across shops, and this list is the ones attached here), on the header line opposite the search.
   it("titles its card Attached to this shop, opposite the search box", async () => {

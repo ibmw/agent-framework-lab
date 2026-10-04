@@ -121,8 +121,13 @@ export function DocumentEditorPage() {
         // untitled product already uses, for the same reason.
         title={documentTitle(document)}
         chips={<VersionChips preview={preview} />}
-        back={{ to: documentsAt(shopId), label: "Policies & FAQ", kind: "document" }}
-        description={`Editing the shop draft · ${documentKindShape(kind).column}`}
+        back={{
+          to: documentsAt(shopId),
+          label: "Policies & FAQ",
+          kind: "document",
+          // The document's kind is the Kind row's own value and is not restated.
+          detail: "editing the shop draft",
+        }}
         actions={
           <EditorSaveActions
             tone="accent"

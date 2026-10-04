@@ -1220,7 +1220,12 @@ describe("the judge editor's side panel", () => {
   it("goes back to Judges from the ← above its title", async () => {
     renderAt(`/lab/judges/${JUDGE_ID}`);
 
-    await expectWayBack("Judges", "/lab/judges", "judge");
+    await expectWayBack(
+      "Judges",
+      "/lab/judges",
+      "judge",
+      /judge · draft fingerprint [0-9a-f]{12}…/,
+    );
   });
   it("holds the gate and anonymity, in that order, and no field", async () => {
     renderAt(`/lab/judges/${JUDGE_ID}`);

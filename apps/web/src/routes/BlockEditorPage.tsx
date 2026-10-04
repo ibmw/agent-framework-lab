@@ -163,18 +163,18 @@ function BlockEditor<
       <PageHeader
         title={content.name}
         chips={<VersionChips preview={preview} />}
-        back={{ to: "..", label: backLabel, kind: noun }}
-        description={
-          <>
-            {content.statement || "No statement yet"}
-            {preview ? (
-              <>
-                {" "}
-                · draft fingerprint <Fingerprint value={preview.content_fingerprint} />
-              </>
-            ) : null}
-          </>
-        }
+        // The line says what no row below does: the draft's fingerprint. The statement is the
+        // Statement row's own value.
+        back={{
+          to: "..",
+          label: backLabel,
+          kind: noun,
+          detail: preview ? (
+            <>
+              draft fingerprint <Fingerprint value={preview.content_fingerprint} />
+            </>
+          ) : null,
+        }}
         actions={
           <>
             <EditorSaveActions

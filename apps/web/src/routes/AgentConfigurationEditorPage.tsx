@@ -366,19 +366,23 @@ export function AgentConfigurationEditorPage() {
       <PageHeader
         title={content.name}
         chips={<VersionChips preview={preview} />}
-        back={{ to: "..", label: "Agent configs", kind: "configuration" }}
-        description={
-          <>
-            Shop-independent — variables resolve at experiment start, and the resolved configuration
-            is pinned to the run.
-            {preview ? (
-              <>
-                {" "}
-                · draft fingerprint <Fingerprint value={preview.content_fingerprint} />
-              </>
-            ) : null}
-          </>
-        }
+        // When the variables resolve is the Variables card's to say, beside them.
+        back={{
+          to: "..",
+          label: "Agent configs",
+          kind: "configuration",
+          detail: (
+            <>
+              shop-independent
+              {preview ? (
+                <>
+                  {" "}
+                  · draft fingerprint <Fingerprint value={preview.content_fingerprint} />
+                </>
+              ) : null}
+            </>
+          ),
+        }}
         actions={
           <>
             <EditorSaveActions
@@ -800,7 +804,11 @@ export function AgentConfigurationEditorPage() {
             <IssueList issues={preview?.issues ?? []} />
           </GateCard>
 
-          <Card title="Variables" label="Variables" description="Resolved at experiment start.">
+          <Card
+            title="Variables"
+            label="Variables"
+            description="Resolved at experiment start; the resolved configuration is pinned to the run."
+          >
             {Object.entries(GROUP_LABELS).map(([group, label]) => (
               <VariableGroup
                 key={group}

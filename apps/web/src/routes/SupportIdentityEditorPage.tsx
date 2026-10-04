@@ -142,14 +142,12 @@ export function SupportIdentityEditorPage() {
           to: "..",
           label: "Support identities",
           kind: content.role.title.trim() === "" ? "identity" : content.role.title,
-        }}
-        description={
-          preview ? (
+          detail: preview ? (
             <>
-              Draft fingerprint <Fingerprint value={preview.content_fingerprint} />
+              draft fingerprint <Fingerprint value={preview.content_fingerprint} />
             </>
-          ) : null
-        }
+          ) : null,
+        }}
         actions={
           <>
             <EditorSaveActions

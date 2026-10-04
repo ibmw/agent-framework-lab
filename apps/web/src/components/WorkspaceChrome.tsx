@@ -118,6 +118,12 @@ export function VersionChips({ preview }: { preview: VersionProvenance | null })
  * and the "Index · kind" line above the title, which is `HeaderBack` — the create page's own
  * piece — so an editor and the create page beside it are left the same way. The setup pages,
  * the indexes and the lab's own surfaces have nowhere to go back to and take none.
+ *
+ * A header with a way back has no `description`: the line above its title is its one line, as
+ * the prototype draws it (`Workspace.dc.html` :388–392, :485–487, :892–894, :1748–1750), and
+ * what an editor says about its record beyond its kind — the draft's fingerprint, the date a
+ * version was frozen — rides on that line as `back.detail`. A second line under the title
+ * repeated the first, and cost a pinned header the room its actions need (ADR 0066).
  */
 export function PageHeader({
   title,
@@ -133,12 +139,21 @@ export function PageHeader({
   actions?: ReactNode;
   /** What the header's actions report — a failure, a publish, a refusal — beneath them. */
   reasons?: ReactNode;
-  description?: ReactNode;
-  /** Where the ← and the line above the title go back to: the index this record is listed in. */
-  back?: HeaderBackTarget;
   /** Pin the header to the top of the scrolling pane: true on an editor. */
   sticky?: boolean;
-}) {
+} & (
+  | {
+      /** Where the ← and the line above the title go back to: the index this record is listed in. */
+      back: HeaderBackTarget;
+      /** The line above the title is the header's one line: what it says goes in `back.detail`. */
+      description?: never;
+    }
+  | {
+      back?: undefined;
+      /** The line under the title, on a page with no way back. */
+      description?: ReactNode;
+    }
+)) {
   // The chain step of a tour lights the page's own name: it is the one element every surface
   // has, and it is what the step is about — where you have arrived.
   const name = (
@@ -188,6 +203,15 @@ export interface HeaderBackTarget {
    * its kind here ("scenario"), since the page's own name is already its title.
    */
   kind: ReactNode;
+  /**
+   * What else the line says about this record, after its kind: the fingerprint, a derived
+   * fact no row on the page shows (the date a version was frozen, that a document edits the
+   * shop draft), and the agent configuration's "shop-independent". Never a repeat of the kind,
+   * and never a value a row on the page shows — with one exception, the ticket's origin, which
+   * the Incident card's rows also show and which the specs read here (ADR 0066, amended
+   * 2026-10-04). A link may stand on it too: the scenario's way to its starting states.
+   */
+  detail?: ReactNode;
 }
 
 /**
@@ -205,6 +229,7 @@ export function HeaderBack({
   to,
   label,
   kind,
+  detail,
   children,
 }: HeaderBackTarget & {
   /** The title, and what stands beside it — the chips on an editor, the chip on a create page. */
@@ -234,6 +259,7 @@ export function HeaderBack({
             {label}
           </Link>{" "}
           · {kind}
+          {detail ? <> · {detail}</> : null}
         </p>
         <div className="mt-[3px] flex flex-wrap items-center gap-2.5">{children}</div>
       </div>

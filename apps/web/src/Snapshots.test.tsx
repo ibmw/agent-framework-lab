@@ -413,6 +413,13 @@ describe("starting states", () => {
       `/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`,
       "scenario",
     );
+    // What a snapshot is, which the page used to say under its title, is said by the card that
+    // lists them.
+    expect(await screen.findByRole("region", { name: "Snapshots" })).toHaveAccessibleDescription(
+      "A snapshot pins every published version it reaches and copies the orders nothing pinned, " +
+        "then fingerprints the two together. Each arm of an experiment runs in its own clone of " +
+        "one snapshot.",
+    );
   });
 
   it("freezes the newest published version by default", async () => {

@@ -415,16 +415,16 @@ for (const [label, size, href, message] of [
   });
 }
 
-test("at 1100×420 the first keystroke does not let go of a header that was pinned", async ({
+test("at 960×420 the first keystroke does not let go of a header that was pinned", async ({
   page,
   lab,
 }) => {
   // Clean, the customer editor's actions row fits and its header is within a third of the pane.
   // Dirty, "All changes saved" becomes Discard and Save and the row wraps: were the decision
-  // made again on that, the header would let go at the moment Save appeared. The pane is
-  // 1100px wide because the way back above the title takes the width a 960px pane had spare:
-  // there the clean header already wraps and is more than a third of the pane.
-  await page.setViewportSize({ width: 1100, height: 420 });
+  // made again on that, the header would let go at the moment Save appeared. The header's one
+  // line is the "Index · kind" line above the title, as the prototype draws it — a second line
+  // under the title is what once made the clean header more than a third of this pane.
+  await page.setViewportSize({ width: 960, height: 420 });
   await page.goto(`/shops/${lab.shopId}/customers/${lab.profileId}`);
   const header = pageHeader(page);
   await expect(header).toBeVisible();

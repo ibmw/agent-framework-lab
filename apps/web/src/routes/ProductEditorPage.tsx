@@ -442,8 +442,8 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
         // link uses the same stand-in, from the same place.
         title={productTitle(product)}
         chips={<VersionChips preview={preview} />}
+        // The rating is the reviews card's title, and the line does not restate it.
         back={{ to: "..", label: "Products", kind: "editing the draft" }}
-        description={ratingLabel(product)}
         actions={
           <>
             {/* Frame 2c's pair, ahead of Save. The confirm stands under the header rather than

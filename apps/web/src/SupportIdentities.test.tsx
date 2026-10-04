@@ -789,6 +789,7 @@ describe("the support identity editor's side panel", () => {
       "Support identities",
       "/lab/support-identities",
       "Customer support representative",
+      /Customer support representative · draft fingerprint [0-9a-f]{12}…/,
     );
   });
   it("holds the gate and what publishing freezes, in that order, and no field", async () => {

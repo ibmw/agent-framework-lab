@@ -274,18 +274,18 @@ export function CustomerEditorPage() {
       <PageHeader
         title={content.display_name}
         chips={<VersionChips preview={preview} />}
-        back={{ to: "..", label: "Customers", kind: "profile" }}
-        description={
-          <>
-            Synthetic profile · customer since {content.account.customer_since}
-            {preview ? (
-              <>
-                {" "}
-                · draft fingerprint <Fingerprint value={preview.content_fingerprint} />
-              </>
-            ) : null}
-          </>
-        }
+        // The line says what no row below does: the draft's fingerprint. "Synthetic profile" said
+        // the kind again, and the customer-since date is the Customer since row's own value.
+        back={{
+          to: "..",
+          label: "Customers",
+          kind: "profile",
+          detail: preview ? (
+            <>
+              draft fingerprint <Fingerprint value={preview.content_fingerprint} />
+            </>
+          ) : null,
+        }}
         actions={
           <>
             <EditorSaveActions

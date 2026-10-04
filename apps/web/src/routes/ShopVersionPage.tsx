@@ -93,13 +93,17 @@ export function ShopVersionPage() {
         }
         // The draft this version was published from is edited from the overview, which is
         // where its Review and Publish are.
-        back={{ to: `/shops/${shopId}`, label: "Overview", kind: "published version" }}
-        description={
-          <>
-            Frozen {formatTimestamp(published.published_at)} · content fingerprint{" "}
-            <Fingerprint value={published.content_fingerprint} />
-          </>
-        }
+        back={{
+          to: `/shops/${shopId}`,
+          label: "Overview",
+          kind: "published version",
+          detail: (
+            <>
+              frozen {formatTimestamp(published.published_at)} · content fingerprint{" "}
+              <Fingerprint value={published.content_fingerprint} />
+            </>
+          ),
+        }}
       />
 
       <div className={editorColumnsClasses}>

@@ -200,18 +200,18 @@ export function JudgeConfigurationEditorPage() {
       <PageHeader
         title={content.name}
         chips={<VersionChips preview={preview} />}
-        back={{ to: "..", label: "Judges", kind: "judge" }}
-        description={
-          <>
-            {content.model.model_id}
-            {preview ? (
-              <>
-                {" "}
-                · draft fingerprint <Fingerprint value={preview.content_fingerprint} />
-              </>
-            ) : null}
-          </>
-        }
+        // The line says what no row below does: the draft's fingerprint. The model is the Model
+        // card's own value.
+        back={{
+          to: "..",
+          label: "Judges",
+          kind: "judge",
+          detail: preview ? (
+            <>
+              draft fingerprint <Fingerprint value={preview.content_fingerprint} />
+            </>
+          ) : null,
+        }}
         actions={
           <>
             <EditorSaveActions

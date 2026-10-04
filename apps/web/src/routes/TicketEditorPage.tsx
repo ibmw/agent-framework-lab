@@ -187,24 +187,31 @@ function TicketEditorPage({ ticketId }: { ticketId: string }) {
             <VersionChips preview={preview} />
           </>
         }
-        back={{ to: `/shops/${shopId}/tickets`, label: "Tickets", kind: "ticket" }}
-        description={
-          <>
-            {channelLabel(content.channel)} · from {originLabel(content.origin.kind)}
-            {content.origin.product_handle ? (
-              <>
-                {" "}
-                <OriginProduct handle={content.origin.product_handle} context={context} />
-              </>
-            ) : null}
-            {preview ? (
-              <>
-                {" "}
-                · draft fingerprint <Fingerprint value={preview.content_fingerprint} />
-              </>
-            ) : null}
-          </>
-        }
+        // The channel is the Channel row's own value and is not restated. The origin is, although
+        // the Incident card's Origin and Product rows show it too: the header is where the specs
+        // read the origin's product, resolved by its title or said to be unresolved.
+        back={{
+          to: `/shops/${shopId}/tickets`,
+          label: "Tickets",
+          kind: "ticket",
+          detail: (
+            <>
+              from {originLabel(content.origin.kind)}
+              {content.origin.product_handle ? (
+                <>
+                  {" "}
+                  <OriginProduct handle={content.origin.product_handle} context={context} />
+                </>
+              ) : null}
+              {preview ? (
+                <>
+                  {" "}
+                  · draft fingerprint <Fingerprint value={preview.content_fingerprint} />
+                </>
+              ) : null}
+            </>
+          ),
+        }}
         actions={
           <>
             <EditorSaveActions

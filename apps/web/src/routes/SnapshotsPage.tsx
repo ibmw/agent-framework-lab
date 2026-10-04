@@ -169,13 +169,6 @@ export function SnapshotsPage() {
         // the scenario and goes back to it, so the title no longer has to carry it.
         title="Starting states"
         back={{ to: "..", label: name === "" ? "Scenario" : name, kind: "scenario" }}
-        description={
-          <>
-            A snapshot pins every published version it reaches and copies the orders nothing pinned,
-            then fingerprints the two together. Each arm of an experiment runs in its own clone of
-            one snapshot.
-          </>
-        }
       />
 
       {loadError || error ? (
@@ -265,7 +258,18 @@ export function SnapshotsPage() {
           </Card>
 
           {/* Busy while a version is frozen: the snapshot it makes is about to join this list. */}
-          <Card title="Snapshots" busy={working}>
+          {/* What a snapshot is, said by the card that lists them. */}
+          <Card
+            title="Snapshots"
+            busy={working}
+            description={
+              <>
+                A snapshot pins every published version it reaches and copies the orders nothing
+                pinned, then fingerprints the two together. Each arm of an experiment runs in its
+                own clone of one snapshot.
+              </>
+            }
+          >
             {/* As above: a listing that could not be read has not said nothing was frozen. */}
             {loadError ? null : snapshots.length === 0 ? (
               <p className="text-[13px] text-admin-muted">

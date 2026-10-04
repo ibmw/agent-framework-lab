@@ -243,22 +243,25 @@ export function ScenarioEditorPage() {
       <PageHeader
         title={content.name}
         chips={<VersionChips preview={preview} />}
-        back={{ to: "..", label: "Scenarios", kind: "scenario" }}
-        description={
-          <>
-            Built on ticket <span className="font-mono">{resolution?.ticket_reference ?? "—"}</span>
-            {preview ? (
-              <>
-                {" "}
-                · draft fingerprint <Fingerprint value={preview.content_fingerprint} />
-              </>
-            ) : null}{" "}
-            ·{" "}
-            <Link className="font-semibold text-lab-ink" to="snapshots">
-              Starting states
-            </Link>
-          </>
-        }
+        // The ticket it is built on is the Ticket row's own value; the line keeps the draft's
+        // fingerprint and the way to the scenario's starting states.
+        back={{
+          to: "..",
+          label: "Scenarios",
+          kind: "scenario",
+          detail: (
+            <>
+              {preview ? (
+                <>
+                  draft fingerprint <Fingerprint value={preview.content_fingerprint} /> ·{" "}
+                </>
+              ) : null}
+              <Link className="font-semibold text-lab-ink" to="snapshots">
+                Starting states
+              </Link>
+            </>
+          ),
+        }}
         actions={
           <>
             <EditorSaveActions

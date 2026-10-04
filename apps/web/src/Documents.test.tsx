@@ -305,7 +305,13 @@ describe("the document editor", () => {
   it("goes back to Policies & FAQ from the ← above the document's title", async () => {
     renderApp(`/shops/${SHOP_ID}/setup/documents/guidelines/returns-desk`);
 
-    await expectWayBack("Policies & FAQ", `/shops/${SHOP_ID}/setup/policies`, "document");
+    await expectWayBack(
+      "Policies & FAQ",
+      `/shops/${SHOP_ID}/setup/policies`,
+      "document",
+      // The kind is the Kind row's, and the line does not say it again.
+      /^Policies & FAQ · document · editing the shop draft$/,
+    );
   });
   it("shows the kind and the slug as values, and never asks for either", async () => {
     renderApp(`/shops/${SHOP_ID}/setup/documents/guidelines/returns-desk`);

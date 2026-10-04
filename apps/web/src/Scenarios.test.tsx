@@ -1182,7 +1182,17 @@ describe("scenario editor", () => {
   it("goes back to Scenarios from the ← above its title", async () => {
     renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
 
-    await expectWayBack("Scenarios", `/shops/${SHOP_ID}/scenarios`, "scenario");
+    // The ticket it is built on is the Ticket row's, and the line does not say it again.
+    const line = await expectWayBack(
+      "Scenarios",
+      `/shops/${SHOP_ID}/scenarios`,
+      "scenario",
+      /^Scenarios · scenario · draft fingerprint [0-9a-f]{12}… · Starting states$/,
+    );
+    expect(within(line).getByRole("link", { name: "Starting states" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/snapshots`,
+    );
   });
   it("pairs the publish gate with the state publishing would freeze", async () => {
     renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);

@@ -2,6 +2,10 @@
 
 Status: accepted, amended by ADR 0073 (the ticket editor is its own page) — 2026-09-27
 
+Amendment: 2026-10-04 — An editor's header has one line, the "Index · kind" line above its title,
+and the first-keystroke case is measured at 960×420 again. See *Amendment — 2026-10-04: one line
+in an editor's header* below.
+
 Settles `docs/PLAN-UX.md` Slice 25: `PageHeader` sticks on every editor, as the create page's
 header already did (`Workspace.dc.html` :207, :387, :483, :890, :1197, :1328, :1638, :1746). It
 builds on ADR 0063, whose `PublishReasons` says why Publish is refused, and on the create page
@@ -167,12 +171,56 @@ thousands). No dropdown or toast is positioned inside the pane.
   on-screen position at the foot of the reviews card — a failed Save and a failed and a
   successful Publish reported in view, a failed Save inside the pinned header on every one of the
   twelve editors, a failure that does not unpin the header at 1366×620 and 1280×720, a first
-  keystroke that does not unpin it at 1100×420, the ticket editor's Save in reach at 1600px, the
+  keystroke that does not unpin it at 960×420, the ticket editor's Save in reach at 1600px, the
   Shift+Tab clearance on an editor and a create page, the third-of-the-pane rule at 390×844 and
   960×540, a tour step under the header and one taller than the room under it, the document that
   never scrolls, and the 43-surface enumeration with the ticket editor. `tour-anchors` still finds
   `data-tour="page-name"` on every toured surface.
 - The first-keystroke case was measured at 960×420 until every editor's header took its way back
-  above the title. The customer editor's clean header is now more than a third of that pane, so
-  the case moved to 1100×420, where the premise holds on both sides.
+  above the title, moved to 1100×420 while a description under the title made the customer
+  editor's clean header more than a third of that pane, and is back at 960×420 since that line
+  folded into the one above the title (amendment of 2026-10-04).
 - A new editor passes `sticky`, puts its outcome lines in `reasons`, and joins the sweep's list.
+
+## Amendment — 2026-10-04: one line in an editor's header
+
+**The decision.** A header with a way back draws one line of text about its record: the
+"Index · kind" line above the title, as the prototype draws it (`Workspace.dc.html` :388–392,
+:485–487, :892–894, :1748–1750). `PageHeader` no longer takes a `description` beside `back` —
+the props refuse the pair — and what the line says after the kind is `back.detail`.
+
+The line carries, after the kind: the fingerprint — the draft's, or a shop version's content
+fingerprint; a derived fact no row on the page shows — the date a version was frozen, that a
+document edits the shop draft; and the agent configuration's "shop-independent". The scenario's
+*Starting states* link stands on it too, as a way somewhere rather than a value.
+
+It does not carry a repeat of the kind ("Synthetic profile" beside "profile"), nor a value a row
+on the page shows: a judge's model (the Model card), a block's statement (the Statement row), a
+customer's since-date (the Customer since row), a document's kind (the Kind row), the ticket a
+scenario is built on (the Ticket row), a product's rating (the reviews card's title) and a
+ticket's channel (the Channel row) are all dropped. The one exception is the ticket's origin,
+which the Incident card's Origin and Product rows also show: the specs read the origin's
+product, resolved by its title or said to be unresolved, in the header, and rule 5 keeps it
+there. The customer-since date goes for two reasons: it is a row's value, and on the line it
+wrapped the line and cost the premise below.
+
+The agent configuration's and the starting states' explanatory sentences move onto the card
+they explain (*Variables*, *Snapshots*).
+
+**Why.** The second line under the title predated the way back, partly repeated the line above
+it and the rows below it, and was the growth that pushed the customer editor's clean header past
+a third of a 960×420 pane.
+
+**Consequences.**
+
+- `sticky-header.spec.ts` measures the first keystroke at 960×420 again. Measured there on the
+  customer editor: 115px clean and 161px dirty against the pane's 121px third. Its line holds on
+  one row in the 394px column beside the ←; only the title's chips wrap.
+- That measurement was taken on macOS (Chromium, with the workspace's shipped Inter). The title
+  is set in Georgia, which a Linux runner does not have and falls back from, so the title row's
+  height there is not the one measured; the run was not repeated on Linux.
+- The margin is narrow: a fact added to the customer editor's line that wraps it puts the clean
+  header back over the third. The line sits in the header's left column
+  (`flex-[1_1_16rem]`), so at narrow widths a long line — the ticket's — wraps.
+- The Vitest suites hold, per editor, what its line carries and that no other line of text sits
+  in its header (`test/header.ts`, `expectOneLine`).
