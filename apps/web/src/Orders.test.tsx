@@ -951,31 +951,77 @@ describe("the new-order page", () => {
     );
   });
 
-  it("refuses a suggested reference past the lab's cap, on the field and on Create", async () => {
+  it.each([
+    {
+      why: "a series that ends at the cap",
+      name: "Northstar Outfitters",
+      orders: [`N${"S".repeat(60)}-99`],
+      // One character too many beside the prefix whole: the prefix gives it up, not the number.
+      expected: `N${"S".repeat(59)}-100`,
+    },
+    {
+      why: "a series too long to be a number",
+      name: "Northstar Outfitters",
+      orders: [`NS-${"9".repeat(30)}`],
+      expected: `NS-1${"0".repeat(30)}`,
+    },
+    {
+      why: "a shop whose name has more initials than a reference holds",
+      name: Array.from({ length: 70 }, (_, at) => `Word${at}`).join(" "),
+      orders: [],
+      expected: `${"W".repeat(SLUG_MAX_LENGTH - 2)}-1`,
+    },
+  ])(
+    "suggests a reference the lab keeps for $why, and creates it",
+    async ({ name, orders, expected }) => {
+      const user = userEvent.setup();
+      expect(expected.length).toBeLessThanOrEqual(SLUG_MAX_LENGTH);
+      const content = { ...SHOP_CONTENT, identity: { ...SHOP_CONTENT.identity, name } };
+      server.use(
+        http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
+          HttpResponse.json({
+            shop_id: SHOP_ID,
+            lifecycle_state: "draft",
+            content,
+            created_at: "2026-08-23T12:00:00+00:00",
+            updated_at: "2026-08-23T12:05:00+00:00",
+          } satisfies ShopDraftResponse),
+        ),
+        http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () =>
+          HttpResponse.json({
+            orders: orders.map((reference) => ({ ...ORDERS.orders[0], reference })),
+          }),
+        ),
+      );
+      await newOrder();
+
+      await screen.findByRole("option", { name: "Maya Laurent" });
+      await user.selectOptions(screen.getByLabelText("Customer"), PROFILE_ID);
+      await user.selectOptions(screen.getByLabelText("Variant"), "NS-ASJ-OB-M");
+      const field = screen.getByLabelText("Reference");
+      await waitFor(() => expect(field).toHaveValue(expected));
+
+      expect(field).toBeValid();
+      expect(field).not.toHaveAttribute("aria-invalid");
+      expect(field).not.toHaveAccessibleDescription(/at most/);
+      const create = screen.getByRole("button", { name: "Create order" });
+      expectNotRefused(create);
+      await user.click(create);
+      await waitFor(() => expect(createdOrders).toHaveLength(1));
+      expect(createdOrders[0]).toMatchObject({ reference: expected });
+    },
+  );
+
+  it("refuses a reference an uppercased ß lengthened past the cap, on the field and on Create", async () => {
     const user = userEvent.setup();
-    // The shop's series ends at the 64 characters a reference may hold, so the next one it
-    // suggests is 65 — which `require_business_reference` would answer with a 422.
-    const last = `N${"S".repeat(60)}-99`;
-    server.use(
-      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () =>
-        HttpResponse.json({ orders: [{ ...ORDERS.orders[0], reference: last }] }),
-      ),
-    );
     await newOrder();
 
     await screen.findByRole("option", { name: "Maya Laurent" });
     await user.selectOptions(screen.getByLabelText("Customer"), PROFILE_ID);
     await user.selectOptions(screen.getByLabelText("Variant"), "NS-ASJ-OB-M");
     const field = screen.getByLabelText("Reference");
-    await waitFor(() => expect(field).toHaveValue(`N${"S".repeat(60)}-100`));
-
-    const refusal = tooLongMessage(SLUG_MAX_LENGTH + 1, SLUG_MAX_LENGTH);
-    expect(field).toBeInvalid();
-    expect(field).toHaveAccessibleDescription(new RegExp(refusal));
+    await waitFor(() => expect(field).toHaveValue("NS-10483"));
     const create = screen.getByRole("button", { name: "Create order" });
-    expectRefused(create, refusal);
-    await user.click(create);
-    expect(createdOrders).toEqual([]);
 
     // Typed, a character the field uppercases into two lengthens the value past the cap, which
     // `maxLength` cannot stop: "ß" is "SS". It stops the *next* keystroke only, so 64 of them

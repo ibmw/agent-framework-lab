@@ -113,37 +113,89 @@ export function uniqueVariantSku(
 }
 
 /**
- * The next free business reference for a prefix (`NS-10483`, `T-2042`).
+ * The next free business reference for a prefix (`NS-10483`, `T-2042`), within the cap
+ * `require_business_reference` keeps.
  *
  * Sibling of `uniqueId`: that suffixes a slug (`alpine-shell-jacket-2`); this increments the
  * numbered series a shop already quotes. References that do not match `{prefix}-{digits}`
- * are ignored, so `NS-ABC` does not steal the next `NS-n`.
+ * are ignored, so `NS-ABC` does not steal the next `NS-n`. The series number is read as a
+ * `BigInt`, so a series of any length is continued exactly, never as a float.
  *
- * Unlike `uniqueId` it does not clamp, because cutting the prefix would break the
- * `seriesPrefix` lookup; a reference over `SLUG_MAX_LENGTH` is refused on its field instead
- * (`DerivedIdField`), before the lab would answer it with a 422.
+ * The number is never cut; the prefix is, and only as far as that number needs: a prefix
+ * that leaves room for `-{next}` within `SLUG_MAX_LENGTH` is kept whole, so the series
+ * `seriesPrefix` finds goes on unchanged while it fits. A longer one is cut, never leaving a
+ * trailing hyphen, and the number is then also past every reference already in the cut
+ * prefix's series, so the suggestion is free; the next suggestion is cut the same way and
+ * keeps counting from both.
+ *
+ * When no prefix of even one character leaves room for the next number — a series whose
+ * next number needs sixty-three digits — no reference past the series fits, and the answer
+ * is the lowest number free under the prefix cut for it: within the cap and free, but not
+ * past the series.
  */
 export function nextReference(prefix: string, taken: readonly string[]): string {
   if (!prefix) {
     return "";
   }
+  let head = prefix;
+  let next = highestInSeries(prefix, taken) + 1n;
+  for (;;) {
+    const digits = next.toString();
+    const cut = clampSlug(prefix, SLUG_MAX_LENGTH - 1 - digits.length);
+    if (!cut) {
+      return lowestFreeReference(prefix, taken);
+    }
+    if (cut === head) {
+      return `${head}-${digits}`;
+    }
+    head = cut;
+    const pastCut = highestInSeries(cut, taken) + 1n;
+    if (pastCut > next) {
+      next = pastCut;
+    }
+  }
+}
+
+/** The highest number `taken` quotes as `{prefix}-{digits}`, or `0n`. */
+function highestInSeries(prefix: string, taken: readonly string[]): bigint {
   const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(`^${escaped}-(\\d+)$`);
-  let max = 0;
+  let max = 0n;
   for (const value of taken) {
     const match = pattern.exec(value);
     if (match) {
-      max = Math.max(max, Number(match[1]));
+      const number = BigInt(match[1]);
+      if (number > max) {
+        max = number;
+      }
     }
   }
-  return `${prefix}-${max + 1}`;
+  return max;
 }
+
+/** `{prefix}-{n}` for the lowest `n` that is free, its prefix cut to fit as `nextReference` cuts. */
+function lowestFreeReference(prefix: string, taken: readonly string[]): string {
+  const held = new Set(taken);
+  for (let number = 1n; ; number += 1n) {
+    const digits = number.toString();
+    const candidate = `${clampSlug(prefix, SLUG_MAX_LENGTH - 1 - digits.length)}-${digits}`;
+    if (!held.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+/** The longest prefix a reference can carry with a number after it: `{prefix}-1`. */
+export const REFERENCE_PREFIX_MAX_LENGTH = SLUG_MAX_LENGTH - 2;
 
 /**
  * The uppercase prefix a new shop's first order takes from its name: "Harbour Lane Supply"
  * becomes `HLS`. Once a shop already quotes references, `seriesPrefix` continues that series
  * instead — Northstar's `NS-10482` stays `NS`, even though the name's initials are `NO`.
  * Ticket references use a fixed `T`.
+ *
+ * At most `SLUG_MAX_LENGTH - 2` characters, the most that still carries `-1` within the cap;
+ * `nextReference` cuts it further only for a number that needs the room.
  */
 export function referencePrefix(name: string, fallback = "REF"): string {
   const initials = name
@@ -152,7 +204,8 @@ export function referencePrefix(name: string, fallback = "REF"): string {
     .map((word) => word.charAt(0))
     .join("")
     .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, REFERENCE_PREFIX_MAX_LENGTH);
   return initials || fallback;
 }
 

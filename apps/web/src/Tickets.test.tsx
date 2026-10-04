@@ -738,6 +738,49 @@ describe("the create page", () => {
     expect(createdTickets).toHaveLength(0);
   });
 
+  it.each([
+    {
+      why: "a series as long as a reference can hold beside T",
+      last: `T-${"9".repeat(61)}`,
+      // Exact: read as a `Number`, it would be `T-1e+62`.
+      expected: `T-1${"0".repeat(61)}`,
+    },
+    {
+      // Past the series no reference fits, so the lowest free one is offered instead.
+      why: "a series already at the cap",
+      last: `T-${"9".repeat(62)}`,
+      expected: "T-1",
+    },
+  ])(
+    "suggests a reference the lab keeps after $why, and creates it",
+    async ({ last, expected }) => {
+      const user = userEvent.setup();
+      server.use(
+        twoCustomers(),
+        http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
+          HttpResponse.json({
+            tickets: [{ ...TICKETS.tickets[0], reference: last }],
+          } satisfies TicketListResponse),
+        ),
+      );
+      renderAt(`/shops/${SHOP_ID}/tickets/new`);
+      await screen.findByRole("option", { name: "Jonas Berg" });
+      const field = screen.getByLabelText("Reference");
+      await waitFor(() => expect(field).toHaveValue(expected));
+      expect(expected.length).toBeLessThanOrEqual(SLUG_MAX_LENGTH);
+      await user.type(screen.getByLabelText("Subject"), "Late delivery");
+      await user.selectOptions(screen.getByLabelText("Customer"), SECOND_PROFILE_ID);
+
+      expect(field).toBeValid();
+      expect(field).not.toHaveAttribute("aria-invalid");
+      expect(field).not.toHaveAccessibleDescription(/at most/);
+      expectNotRefused(createButton());
+      await user.click(createButton());
+      await waitFor(() => expect(createdTickets).toHaveLength(1));
+      expect(createdTickets[0]).toMatchObject({ reference: expected });
+    },
+  );
+
   it("refuses a reference an uppercased ß lengthened past the cap, on the field and on Create", async () => {
     const user = userEvent.setup();
     server.use(twoCustomers());

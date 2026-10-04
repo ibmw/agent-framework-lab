@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useLayoutEffect, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { DerivedIdField } from "./components/DerivedIdField";
-import { nextReference, SLUG_MAX_LENGTH, uniqueSuggestion } from "./lib/entryIds";
+import { SLUG_MAX_LENGTH, uniqueSuggestion } from "./lib/entryIds";
 import { tooLongMessage } from "./lib/fieldRules";
 
 /**
@@ -111,12 +111,19 @@ function Racing({ suggested }: { suggested: string }) {
 }
 
 /**
- * A reference suggested from the series a shop already quotes, as the order and ticket create
- * pages suggest one. `nextReference` does not clamp, so a series whose last reference sits at
- * the cap suggests one character past it.
+ * A field handed a suggestion past its cap. `nextReference` cuts its prefix so its own never
+ * is, but the field does not take that on trust: a value the page wrote is refused on the
+ * field in words whatever wrote it, as one `normalize` lengthened is.
  */
-function Series({ taken, onSubmit }: { taken: readonly string[]; onSubmit: () => void }) {
-  const suggested = nextReference(`N${"S".repeat(60)}`, taken);
+function Series({
+  suggested,
+  taken,
+  onSubmit,
+}: {
+  suggested: string;
+  taken: readonly string[];
+  onSubmit: () => void;
+}) {
   const [value, setValue] = useState("");
   return (
     <form
@@ -299,13 +306,18 @@ describe("DerivedIdField", () => {
   it("refuses a suggestion past the cap on the field, and holds the form back", async () => {
     const user = userEvent.setup();
     const submitted: string[] = [];
-    // The series' last reference is 64 characters; the next one is 65.
-    const last = `N${"S".repeat(60)}-99`;
-    expect(last).toHaveLength(SLUG_MAX_LENGTH);
-    render(<Series taken={[last]} onSubmit={() => submitted.push("create")} />);
+    // One character past the 64 the lab keeps.
+    const suggested = `N${"S".repeat(60)}-100`;
+    expect(suggested).toHaveLength(SLUG_MAX_LENGTH + 1);
+    render(
+      <Series
+        suggested={suggested}
+        taken={[`N${"S".repeat(60)}-99`]}
+        onSubmit={() => submitted.push("create")}
+      />,
+    );
     const field = screen.getByLabelText("Reference");
 
-    const suggested = `N${"S".repeat(60)}-100`;
     await waitFor(() => expect(field).toHaveValue(suggested));
     const refusal = tooLongMessage(SLUG_MAX_LENGTH + 1, SLUG_MAX_LENGTH);
     expect(field).toHaveAccessibleDescription(new RegExp(refusal));

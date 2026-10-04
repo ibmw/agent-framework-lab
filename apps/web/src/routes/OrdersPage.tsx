@@ -373,7 +373,8 @@ export function NewOrderPage() {
               ? "The order needs a reference before it can be created."
               : referencesTakenBesides(made).includes(reference)
                 ? alreadyTakenMessage(reference, ORDER_REFERENCE_TAKEN_PLACE)
-                : // Only a value the page wrote or normalized can be this long.
+                : // Only a typed value `normalize` lengthened can be this long ("ß" is "SS"):
+                  // `maxLength` stops a keystroke, and `nextReference` cuts its prefix to fit.
                   reference.length > SLUG_MAX_LENGTH
                   ? tooLongMessage(reference.length, SLUG_MAX_LENGTH)
                   : catalog.length === 0
