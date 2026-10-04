@@ -1607,7 +1607,9 @@ describe("experiment setup", () => {
     await waitFor(() =>
       expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toContain(failed),
     );
-    expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
+    // Free once the arm's own read has answered: until then Start waits on it (ADR 0063).
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expectNotRefused(start));
 
     const arm = screen.getByRole("group", { name: "Arm A" });
     await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
@@ -1642,8 +1644,8 @@ describe("experiment setup", () => {
         expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toContain(message),
       );
       const start = screen.getByRole("button", { name: "Start experiment" });
-      expectNotRefused(start);
-      expect(startReasons(start)).not.toContain(message);
+      // Free once the arm's own read has answered: until then Start waits on it (ADR 0063).
+      await waitFor(() => expectNotRefused(start));
 
       const arm = screen.getByRole("group", { name: "Arm A" });
       await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
@@ -1702,7 +1704,8 @@ describe("experiment setup", () => {
     await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
     await waitFor(() => expect(answered).toBeGreaterThan(0));
     await waitFor(() => expect(screen.queryByText(gone)).not.toBeInTheDocument());
-    expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
+    // Free once version 2's own read has answered: until then Start waits on it (ADR 0063).
+    await waitFor(() => expectNotRefused(start));
   });
 
   it("leaves an error the preview did not raise to what raised it", async () => {
@@ -1720,7 +1723,10 @@ describe("experiment setup", () => {
     await scenarioChosen();
     await chooseArm(user, 0, "cfg-atlas");
     await nameAs(user, "Prompt comparison");
-    await user.click(screen.getByRole("button", { name: "Start experiment" }));
+    // A press while Start waits on the arm's read is swallowed, so it is pressed once free.
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expectNotRefused(start));
+    await user.click(start);
     const refused = "this experiment cannot be started";
     await waitFor(() =>
       expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toContain(refused),
@@ -2179,6 +2185,12 @@ describe("experiment setup's defaults", () => {
     await waitFor(() =>
       expect(previewed.some((body) => body.scenario_id === SCENARIO_ID)).toBe(true),
     );
+    // Both arms' reads have answered, so they are named whatever the scenario does next.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Name")).toHaveValue(
+        "Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2",
+      ),
+    );
 
     await user.selectOptions(scenario, "Damaged on arrival");
     const version = within(row("Scenario")).getByRole("combobox", { name: "Published version" });
@@ -2324,6 +2336,8 @@ describe("what the experiment setup resolves against", () => {
     await waitFor(() => expect(scenarioRead.asked.count).toBe(1));
     await waitFor(() => expect(judgedCount).toBeGreaterThanOrEqual(1));
     await reachabilityRead();
+    // Both arms are named once both arms' reads have answered, not when they were asked.
+    await waitFor(() => expect(nameValue()).toBe("cfg-atlas v2 vs cfg-beacon v2"));
     await settle();
     // The gate has answered and the arms are read: only the scenario's name is outstanding,
     // and a run started now would be named without it. A wait, never a refusal (ADR 0063).
@@ -2857,8 +2871,10 @@ describe("experiment setup and the provider the lab can reach", () => {
     await nameAs(user, "Prompt comparison");
     await chooseArm(user, 0, "cfg-beacon");
     await reachabilityRead();
-    expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
-    await user.click(screen.getByRole("button", { name: "Start experiment" }));
+    // Free once the chosen version's own read has answered, which names the provider.
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expectNotRefused(start));
+    await user.click(start);
 
     await waitFor(() => expect(started).toHaveLength(1));
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
@@ -2914,7 +2930,8 @@ describe("experiment setup and the provider the lab can reach", () => {
       await reachabilityRead();
 
       const start = screen.getByRole("button", { name: "Start experiment" });
-      expectNotRefused(start);
+      // Free once the chosen version's own read has answered, which names the provider.
+      await waitFor(() => expectNotRefused(start));
       expect(start).not.toHaveAttribute("title");
       expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
     });
@@ -2937,7 +2954,8 @@ describe("experiment setup and the provider the lab can reach", () => {
     await chooseArm(user, 0, "cfg-atlas");
     await reachabilityRead();
 
-    expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
+    // Free once the chosen version's read has failed: a read in flight is still a wait.
+    await waitFor(() => expectNotRefused(screen.getByRole("button", { name: "Start experiment" })));
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
 
@@ -2965,12 +2983,13 @@ describe("experiment setup and the provider the lab can reach", () => {
     const arm = screen.getByRole("group", { name: "Arm A" });
     await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
     await waitFor(() => expect(versionReads).toBeGreaterThan(reads));
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    // Version 1's note went with version 1: nothing refuses Start while version 2 is read.
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+    expect(startReasons(start)).toEqual([]);
 
-    // What the lab knows about version 2 is nothing, so it says nothing about it.
-    expectNotRefused(start);
+    // What the lab knows about version 2 is nothing, so it says nothing about it — once the
+    // read has failed: asked is not answered, and until then Start waits on it.
+    await waitFor(() => expectNotRefused(start));
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
 
@@ -2985,9 +3004,11 @@ describe("experiment setup and the provider the lab can reach", () => {
       await nameAs(user, "Prompt comparison");
       await chooseArm(user, 0, "cfg-atlas");
       await reachabilityRead();
-      expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
+      // Free once the chosen version's own read has answered, which names the provider.
+      const start = screen.getByRole("button", { name: "Start experiment" });
+      await waitFor(() => expectNotRefused(start));
       expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
-      await user.click(screen.getByRole("button", { name: "Start experiment" }));
+      await user.click(start);
 
       await waitFor(() => expect(started).toHaveLength(1));
     });
