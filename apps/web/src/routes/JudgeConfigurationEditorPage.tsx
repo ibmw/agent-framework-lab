@@ -14,7 +14,7 @@ import {
   readJudgeConfigurationResources,
   replaceJudgeConfigurationDraft,
 } from "../api/judgeConfigurations";
-import { Field, FieldRows } from "../components/FieldHint";
+import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
 import { ProvenModelField } from "../components/ProvenModelField";
 import {
   Card,
@@ -408,27 +408,33 @@ export function JudgeConfigurationEditorPage() {
               </>
             }
           >
-            <ul className="grid gap-2">
-              {(resources?.evidence ?? []).map((scope) => (
-                <li key={scope}>
-                  <label className="flex items-start gap-2 text-[13px] text-admin-ink-soft">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={content.evidence.includes(scope)}
-                      onChange={() => toggleScope(scope)}
-                    />
-                    <span>
-                      <span className="font-semibold text-lab-ink">
-                        {JUDGE_EVIDENCE_SCOPE[scope].label}
-                      </span>
-                      <br />
-                      {JUDGE_EVIDENCE_SCOPE[scope].explanation}
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
+            {/* The prototype's *Shown to the judge* row (`Workspace.dc.html` :537–550), without
+                its hint: that the record is anonymised is the Anonymity card's to say. */}
+            <FieldRows>
+              <FieldGroup label="Shown to the judge">
+                <ul className="grid gap-2">
+                  {(resources?.evidence ?? []).map((scope) => (
+                    <li key={scope}>
+                      <label className="flex items-start gap-2 text-[13px] text-admin-ink-soft">
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={content.evidence.includes(scope)}
+                          onChange={() => toggleScope(scope)}
+                        />
+                        <span>
+                          <span className="font-semibold text-lab-ink">
+                            {JUDGE_EVIDENCE_SCOPE[scope].label}
+                          </span>
+                          <br />
+                          {JUDGE_EVIDENCE_SCOPE[scope].explanation}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </FieldGroup>
+            </FieldRows>
           </Card>
         </div>
 

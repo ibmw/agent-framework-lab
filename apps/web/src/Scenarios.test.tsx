@@ -31,7 +31,7 @@ import {
   expectRefused,
   submitWithoutPressing,
 } from "./test/refused";
-import { expectCardOnRows, expectFieldRow } from "./test/rows";
+import { expectEditorOnRows, expectFieldRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1772,7 +1772,6 @@ describe("the scenario editor's rows", () => {
     expect(shop).toHaveAccessibleDescription(
       /The shop's newest published version, which is what the scenario resolves against today\./,
     );
-    expectCardOnRows(builtOn);
   });
 
   it("draws Completion's statement and turn cap on rows", async () => {
@@ -1782,7 +1781,32 @@ describe("the scenario editor's rows", () => {
     for (const label of ["A resolved incident looks like", "Turn cap"]) {
       expectFieldRow(within(completion).getByLabelText(label), label);
     }
-    expectCardOnRows(completion);
+  });
+
+  it("draws every field of every card in its main column on a row that names it, save two", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+    await waitFor(() => expect(screen.getByLabelText("Ticket")).toHaveTextContent("T-204"));
+    await within(screen.getByRole("region", { name: "Context documents" })).findAllByRole(
+      "checkbox",
+    );
+
+    // Enumerated, so a card added to the column is swept too. The two left out are off the
+    // rows and owned by no slice yet (`docs/design-direction.md`, *Every editor section is on
+    // rows*): the context documents' checkbox list and the hidden facts' bare textarea.
+    expect(
+      expectEditorOnRows(panel, {
+        "Context documents": (card) => [card.querySelector("ul") as HTMLElement],
+        "Hidden facts — operator only": (card) => [within(card).getByLabelText("Hidden facts")],
+      }),
+    ).toEqual({
+      "Built on": 4,
+      "Context documents": 0,
+      "Hidden facts — operator only": 0,
+      Objectives: 0,
+      Mutations: 0,
+      Completion: 2,
+    });
   });
 });
 

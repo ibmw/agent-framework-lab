@@ -327,6 +327,24 @@ describe("Field", () => {
     expect(left.className).toContain("min-w-0");
     expect(right.className).toContain("min-w-0");
   });
+
+  it("puts a wide control under its label, on the same row and with the same wiring", () => {
+    const { container } = render(
+      <Field label="Prompt template" hint="A template." wide>
+        <textarea />
+      </Field>,
+    );
+    const { element, left, right } = row(container);
+
+    expect(element.className).toContain("flex-wrap");
+    expect(left).toContainElement(screen.getByText("Prompt template"));
+    // A basis of the whole row, so the control wraps under the label rather than beside it.
+    expect(right.className).toContain("flex-[1_1_100%]");
+    expect(right.className).toContain("min-w-0");
+    const control = screen.getByLabelText("Prompt template");
+    expect(right).toContainElement(control);
+    expect(control).toHaveAccessibleDescription(/^A template\./);
+  });
 });
 
 describe("FieldGroup", () => {

@@ -55,6 +55,7 @@ import {
   editorMainClasses,
   editorPanelClasses,
   fieldControlClasses,
+  readOnlyTextClasses,
   readOnlyValueClasses,
   subtleButtonClasses,
   textAreaClasses,
@@ -551,28 +552,35 @@ export function AgentConfigurationEditorPage() {
                   </output>
                 </Field>
               )}
+              {/* The card is built around this editor, so it takes the row's whole width under
+                  its label. The label is the name the specs fill it by (rule 5). */}
+              <Field label="Prompt template" wide>
+                <textarea
+                  maxLength={PROMPT_MAX_LENGTH}
+                  ref={promptRef}
+                  // The size is `!` because it has to beat the one it overrides: `textAreaClasses`
+                  // sets `text-[14px]` (UI-7), and which of two `text-…` utilities wins is
+                  // Tailwind's own emit order — lexical on the candidate text for arbitrary values
+                  // — not the order a caller writes them. `12.5` sorts before `14`, so a plain
+                  // `text-[12.5px]` here would lose to the shared string and silently enlarge the
+                  // template editor. Lexical, not numeric: the built sheet emits `.text-[14.5px]`
+                  // *before* `.text-[14px]`, so an override is not safe merely because its number
+                  // is smaller.
+                  className={`${textAreaClasses} w-full min-h-56 font-mono text-[12.5px]!`}
+                  value={content.prompt}
+                  onChange={(event) => edit({ ...content, prompt: event.target.value })}
+                />
+              </Field>
+              {/* Shown rather than asked, so an `<output>` on a row, as wide as the template it
+                  resolves; the region is the name the specs read it by (rule 5). */}
+              <section aria-label="Resolved prompt">
+                <Field label="Resolved prompt" wide>
+                  <output className={readOnlyTextClasses}>
+                    <ResolvedPrompt prompt={content.prompt} values={values} />
+                  </output>
+                </Field>
+              </section>
             </FieldRows>
-            <textarea
-              maxLength={PROMPT_MAX_LENGTH}
-              ref={promptRef}
-              aria-label="Prompt template"
-              // The size is `!` because it has to beat the one it overrides: `textAreaClasses`
-              // sets `text-[14px]` (UI-7), and which of two `text-…` utilities wins is Tailwind's
-              // own emit order — lexical on the candidate text for arbitrary values — not the
-              // order a caller writes them. `12.5` sorts before `14`, so a plain `text-[12.5px]`
-              // here would lose to the shared string and silently enlarge the template editor.
-              // Lexical, not numeric: the built sheet emits `.text-[14.5px]` *before*
-              // `.text-[14px]`, so an override is not safe merely because its number is smaller.
-              className={`${textAreaClasses} w-full min-h-56 font-mono text-[12.5px]!`}
-              value={content.prompt}
-              onChange={(event) => edit({ ...content, prompt: event.target.value })}
-            />
-            <section aria-label="Resolved prompt" className="grid gap-1">
-              <h3 className="text-xs font-semibold text-admin-muted">Resolved</h3>
-              <div className="rounded-lg border border-admin-border bg-admin-canvas p-3 text-[13px] leading-relaxed whitespace-pre-wrap">
-                <ResolvedPrompt prompt={content.prompt} values={values} />
-              </div>
-            </section>
           </Card>
 
           <Card title="Tone of voice">
@@ -677,35 +685,44 @@ export function AgentConfigurationEditorPage() {
               </>
             }
           >
-            <ul className="grid gap-2">
-              {/*
-               * The published set, not the resolution: whether a tool is enabled is the
-               * draft's own answer, and a resolution that failed to load must not hide a
-               * binding the payload will still save. Only "permitted" needs the resolution.
-               */}
-              {(resources?.tools ?? []).map((tool) => (
-                <li key={tool.name} className="grid gap-0.5">
-                  <label className="flex items-center gap-2 text-[13px]">
-                    <input
-                      type="checkbox"
-                      checked={enabled.has(tool.name)}
-                      onChange={() => toggleTool(tool.name)}
-                    />
-                    <span className="font-mono text-[12.5px]">{tool.name}</span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-admin-border/60 px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
-                      <span aria-hidden>{tool.effect === "write" ? "✎" : "◎"}</span>
-                      {tool.effect}
-                    </span>
-                    {tool.required_permission && permitted.get(tool.name) === false ? (
-                      <span className="text-[11.5px] font-semibold text-lab-error">
-                        needs {labelOf(SUPPORT_PERMISSION, tool.required_permission)}
-                      </span>
-                    ) : null}
-                  </label>
-                  <span className="pl-6 text-xs text-admin-muted">{tool.summary}</span>
-                </li>
-              ))}
-            </ul>
+            {/*
+             * The prototype's *Enabled* row (`Workspace.dc.html` :452–466), without its hint:
+             * "different from a permission refusal, which the agent has to handle" is its own
+             * lab's, and this gate refuses such a binding at publication, as the card says.
+             */}
+            <FieldRows>
+              <FieldGroup label="Enabled">
+                <ul className="grid gap-2">
+                  {/*
+                   * The published set, not the resolution: whether a tool is enabled is the
+                   * draft's own answer, and a resolution that failed to load must not hide a
+                   * binding the payload will still save. Only "permitted" needs the resolution.
+                   */}
+                  {(resources?.tools ?? []).map((tool) => (
+                    <li key={tool.name} className="grid gap-0.5">
+                      <label className="flex items-center gap-2 text-[13px]">
+                        <input
+                          type="checkbox"
+                          checked={enabled.has(tool.name)}
+                          onChange={() => toggleTool(tool.name)}
+                        />
+                        <span className="font-mono text-[12.5px]">{tool.name}</span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-admin-border/60 px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
+                          <span aria-hidden>{tool.effect === "write" ? "✎" : "◎"}</span>
+                          {tool.effect}
+                        </span>
+                        {tool.required_permission && permitted.get(tool.name) === false ? (
+                          <span className="text-[11.5px] font-semibold text-lab-error">
+                            needs {labelOf(SUPPORT_PERMISSION, tool.required_permission)}
+                          </span>
+                        ) : null}
+                      </label>
+                      <span className="pl-6 text-xs text-admin-muted">{tool.summary}</span>
+                    </li>
+                  ))}
+                </ul>
+              </FieldGroup>
+            </FieldRows>
           </Card>
 
           <Card title="LLM and runtime">

@@ -20,7 +20,7 @@ import { expectPublicationPill } from "./test/indexes";
 import { expectRulesInFieldOrder } from "./test/itemForm";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
-import { expectCardOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
+import { expectEditorOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -818,7 +818,6 @@ describe("the support identity editor's rows", () => {
     expect(within(role).getByLabelText("Remit")).toHaveAccessibleDescription(
       /^Tone of voice is not authored here: it belongs to the shop, and an agent configuration selects the shop default or a named override\./,
     );
-    expectCardOnRows(role);
   });
 
   it("asks for the permissions as two groups named Read and Act by their rows", async () => {
@@ -838,7 +837,6 @@ describe("the support identity editor's rows", () => {
         "Change shipping address — redirect an order that has not shipped",
       ),
     ).toBeChecked();
-    expectCardOnRows(card);
   });
 
   it("puts the escalation target on a row above the conditions", async () => {
@@ -846,6 +844,18 @@ describe("the support identity editor's rows", () => {
     const escalation = await screen.findByRole("region", { name: "Escalation" });
 
     expectFieldRow(within(escalation).getByLabelText("Escalate to"), "Escalate to");
-    expectCardOnRows(escalation, [within(escalation).getByRole("group", { name: "Conditions" })]);
+  });
+
+  it("draws every field of every card in its main column on a row that names it", async () => {
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+
+    // Enumerated, so a card added to the column is swept too. The escalation conditions are a
+    // self-labelling list, `ChipListField`, whose own legend stands beneath the rows by the rule.
+    expect(
+      expectEditorOnRows(panel, {
+        Escalation: (card) => [within(card).getByRole("group", { name: "Conditions" })],
+      }),
+    ).toEqual({ Role: 3, Permissions: 9, Guidance: 2, Escalation: 1 });
   });
 });

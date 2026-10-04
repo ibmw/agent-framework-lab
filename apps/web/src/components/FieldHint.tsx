@@ -6,6 +6,7 @@ import {
   fieldRowHintClasses,
   fieldRowLabelClasses,
   fieldRowLabelTextClasses,
+  fieldRowWideControlClasses,
 } from "../lib/ui";
 
 type ControlProps = {
@@ -300,6 +301,7 @@ export function Field({
   extraId: givenExtraId,
   optional = false,
   hintDescribes,
+  wide = false,
   children,
 }: {
   label: string;
@@ -313,6 +315,11 @@ export function Field({
   optional?: boolean;
   /** As on `FieldHint`. */
   hintDescribes?: boolean;
+  /**
+   * The control takes the row's whole width, under its label (`fieldRowWideControlClasses`):
+   * the same row, label and wiring, for a control a card is built around.
+   */
+  wide?: boolean;
   children: ReactElement<ControlProps>;
 }) {
   const { controlId, hintId, extraId, control } = useBoundControl(children, {
@@ -336,7 +343,7 @@ export function Field({
           </p>
         ) : null}
       </div>
-      <div className={fieldRowControlClasses}>
+      <div className={wide ? fieldRowWideControlClasses : fieldRowControlClasses}>
         {control}
         {/* 7px and 13px are the prototype's own second line under a control; the weight is the
             handoff's, which sets a validation message at 600 and leaves a preview at normal. */}

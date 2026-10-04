@@ -227,8 +227,18 @@ export const textAreaClasses = `box-border min-h-24 py-[11px] text-[14px] leadin
  * it; the border is the card's rather than the field's, which is the whole distinction the
  * row is drawing.
  */
-export const readOnlyValueClasses =
-  "box-border flex min-h-[44px] w-full items-center rounded-[9px] border border-admin-border bg-admin-canvas px-3.5 text-[14px] text-admin-ink-soft";
+const readOnlyBoxClasses =
+  "box-border min-h-[44px] w-full rounded-[9px] border border-admin-border bg-admin-canvas px-3.5 text-admin-ink-soft";
+
+export const readOnlyValueClasses = `${readOnlyBoxClasses} flex items-center text-[14px]`;
+
+/**
+ * The same box for a value that runs to several lines — the system prompt resolved against the
+ * preview context, its variables drawn as chips in the flow of its text. A flex box would make
+ * every run of text and every chip an item of its own, so this one is a block that keeps the
+ * text's own line breaks, at the textarea's vertical padding.
+ */
+export const readOnlyTextClasses = `${readOnlyBoxClasses} block py-[11px] text-[13px] leading-relaxed whitespace-pre-wrap`;
 
 /**
  * A stacked field: its label, its control and the lines under it, packed at the top.
@@ -302,6 +312,13 @@ export const fieldRowHintClasses =
 
 /** The right column: the control, and any second line directly beneath it. */
 export const fieldRowControlClasses = "min-w-0 flex-[2_1_330px]";
+
+/**
+ * The right column, taking the row's whole width: the control wraps under its label rather
+ * than beside it. For the one control a card is built around — the system prompt's template —
+ * which a 330px column would cut to a few words a line.
+ */
+export const fieldRowWideControlClasses = "min-w-0 flex-[1_1_100%]";
 
 /**
  * The ring every control shows a keyboard reader, on the refresh's pine rather than the clay

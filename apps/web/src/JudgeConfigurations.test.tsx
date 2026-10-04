@@ -4,6 +4,7 @@ import type {
   JudgeConfigurationPreviewResponse,
   JudgeConfigurationResourcesResponse,
   JudgeConfigurationVersionResponse,
+  JudgeEvidenceScope,
   ModelConnectionSource,
   ShopDraftResponse,
   ShopListResponse,
@@ -14,13 +15,14 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { JUDGE_EVIDENCE_SCOPE } from "./lib/enumLabels";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
 import { expectWayBack } from "./test/header";
 import { expectPublicationPill } from "./test/indexes";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
-import { expectCardOnRows, expectFieldRow } from "./test/rows";
+import { expectEditorOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1265,8 +1267,42 @@ describe("the judge editor's rows", () => {
     for (const label of ["Provider", "Model", "Temperature"]) {
       expectFieldRow(within(model).getByLabelText(label), label);
     }
-    expectCardOnRows(rubric);
-    expectCardOnRows(model);
+  });
+
+  it("draws every field of every card in its main column on a row that names it, with no exception", async () => {
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+    await within(screen.getByRole("region", { name: "Evidence" })).findAllByRole("checkbox");
+
+    // Enumerated, so a card added to the column is swept too, and each count says its fields
+    // were seen rather than the card passing empty.
+    expect(expectEditorOnRows(panel)).toEqual({ Rubric: 3, Model: 3, Evidence: 4 });
+  });
+
+  it("asks for the evidence as the Shown to the judge group row, each scope named as before", async () => {
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+    const evidence = await screen.findByRole("region", { name: "Evidence" });
+
+    const shown = within(evidence).getByRole("group", { name: "Shown to the judge" });
+    expectGroupRow(shown, "Shown to the judge");
+    // Each box is reached as the tests above reach one: by its scope's label at the front of the
+    // name its wrapping label gives it, what that scope puts in front of the judge after.
+    const boxes = await within(shown).findAllByRole("checkbox");
+    const scopes: JudgeEvidenceScope[] = [
+      "customer_turns",
+      "agent_replies",
+      "tool_calls",
+      "state_changes",
+    ];
+    expect(boxes).toEqual(
+      scopes.map((scope) => {
+        const { label, explanation = "" } = JUDGE_EVIDENCE_SCOPE[scope];
+        expect(explanation, `${scope} says what it shows the judge`).not.toBe("");
+        return within(shown).getByRole("checkbox", {
+          name: (name) => name.startsWith(label) && name.includes(explanation),
+        });
+      }),
+    );
   });
 
   it("keeps each model rule in its control's description, the zero default under the temperature", async () => {

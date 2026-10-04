@@ -32,7 +32,7 @@ import {
   expectRefused,
   submitWithoutPressing,
 } from "./test/refused";
-import { expectCardOnRows, expectFieldRow } from "./test/rows";
+import { expectEditorOnRows, expectFieldRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1341,7 +1341,6 @@ describe("the block editor's rows", () => {
     expect(within(template).getByLabelText("Statement")).toHaveAccessibleDescription(
       /A scenario renders each bound instance as this statement followed by what it was bound to/,
     );
-    expectCardOnRows(template);
   });
 
   it("asks how an objective is assessed on rows, and says under the choice what a judge scores", async () => {
@@ -1352,7 +1351,6 @@ describe("the block editor's rows", () => {
 
     expectFieldRow(assessedBy, "Assessed by");
     expectFieldRow(within(assessment).getByLabelText("Evidence"), "Evidence");
-    expectCardOnRows(assessment);
     expect(assessedBy).not.toHaveAccessibleDescription(/scored on a rubric dimension/);
 
     await user.selectOptions(assessedBy, "judge");
@@ -1366,7 +1364,28 @@ describe("the block editor's rows", () => {
     const effect = await screen.findByRole("region", { name: "Effect" });
 
     expectFieldRow(within(effect).getByLabelText("Perturbs"), "Perturbs");
-    expectCardOnRows(effect);
+  });
+
+  it("draws every field of every card in an objective's main column on a row that names it", async () => {
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+    await within(screen.getByRole("region", { name: "Parameters" })).findAllByRole("button", {
+      name: /^Edit /,
+    });
+
+    // Enumerated, so a card added to the column is swept too; the parameters' add form below
+    // the list keeps its stacked labels, by the rule, and is left out by the sweep itself.
+    expect(expectEditorOnRows(panel)).toEqual({ Template: 3, Assessment: 2, Parameters: 3 });
+  });
+
+  it("draws every field of every card in a mutation's main column on a row that names it", async () => {
+    renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+    await within(screen.getByRole("region", { name: "Parameters" })).findAllByRole("button", {
+      name: /^Edit /,
+    });
+
+    expect(expectEditorOnRows(panel)).toEqual({ Template: 3, Effect: 1, Parameters: 3 });
   });
 });
 

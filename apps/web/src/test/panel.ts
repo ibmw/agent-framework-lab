@@ -21,10 +21,15 @@ export function panelCards(panel: HTMLElement): (string | null)[] {
   return Array.from(panel.children).map((card) => card.getAttribute("aria-label"));
 }
 
+/** The main column's cards themselves, top to bottom, beside the panel. */
+export function mainCardElements(panel: HTMLElement): HTMLElement[] {
+  const main = panel.parentElement?.children[0] as HTMLElement;
+  return Array.from(main.children) as HTMLElement[];
+}
+
 /** The main column's cards, top to bottom, beside the panel. */
 export function mainCards(panel: HTMLElement): (string | null)[] {
-  const main = panel.parentElement?.children[0] as HTMLElement;
-  return Array.from(main.children).map((card) => card.getAttribute("aria-label"));
+  return mainCardElements(panel).map((card) => card.getAttribute("aria-label"));
 }
 
 /**

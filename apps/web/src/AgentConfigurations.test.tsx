@@ -14,13 +14,14 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { fieldRowWideControlClasses, readOnlyTextClasses } from "./lib/ui";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
 import { expectWayBack } from "./test/header";
 import { expectPublicationPill, indexCard } from "./test/indexes";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
-import { expectCardOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
+import { expectEditorOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1486,12 +1487,72 @@ describe("the agent configuration editor's rows", () => {
     expect(within(tone).getByLabelText("Source")).toBe(
       within(tone).getByRole("combobox", { name: "Tone of voice source" }),
     );
+  });
 
-    expectCardOnRows(identity);
-    // The template is the prompt editor, the width of the card, and not a row.
-    expectCardOnRows(prompt, [within(prompt).getByLabelText("Prompt template")]);
-    expectCardOnRows(tone);
-    expectCardOnRows(runtime);
+  it("draws every field of every card in its main column on a row that names it, with no exception", async () => {
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+    await within(screen.getByRole("region", { name: "System prompt" })).findByLabelText(
+      "Preview context",
+    );
+    // The bindings are read off the resources, so the sweep waits for them as the judge's does.
+    await within(screen.getByRole("region", { name: /Tool bindings/ })).findAllByRole("checkbox");
+
+    // Enumerated, so a card added to the column is swept too, and each count says its fields
+    // were seen rather than the card passing empty.
+    expect(expectEditorOnRows(panel)).toEqual({
+      Identity: 5,
+      "System prompt": 3,
+      "Tone of voice": 1,
+      "Tool bindings · 1 enabled": 2,
+      "LLM and runtime": 7,
+    });
+  });
+
+  it("draws the prompt template on a row of its own width, under its visible label", async () => {
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+    const prompt = await screen.findByRole("region", { name: "System prompt" });
+
+    // The name the specs fill it by is the label drawn over it, and nothing else names it.
+    const template = within(prompt).getByRole("textbox", { name: "Prompt template" });
+    expect(template.tagName).toBe("TEXTAREA");
+    expect(template).not.toHaveAttribute("aria-label");
+    expectFieldRow(template, "Prompt template");
+    expect(template.parentElement).toHaveClass(fieldRowWideControlClasses, { exact: true });
+  });
+
+  it("shows the resolved prompt as an output on a row of the same width, in its own region", async () => {
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+    const prompt = await screen.findByRole("region", { name: "System prompt" });
+
+    // The region the specs read the chips in keeps its name, and holds the row.
+    const region = within(prompt).getByRole("region", { name: "Resolved prompt" });
+    const shown = within(region).getByLabelText("Resolved prompt");
+    expect(shown.tagName).toBe("OUTPUT");
+    expectFieldRow(shown, "Resolved prompt");
+    expect(shown.parentElement).toHaveClass(fieldRowWideControlClasses, { exact: true });
+    expect(shown).toHaveClass(readOnlyTextClasses, { exact: true });
+    expect(await within(shown).findByText("shop.name: Northstar Outfitters")).toBeVisible();
+  });
+
+  it("asks for the tool bindings as the Enabled group row, each binding named as before", async () => {
+    const user = userEvent.setup();
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+    const bindings = await screen.findByRole("region", { name: /Tool bindings/ });
+
+    const enabled = within(bindings).getByRole("group", { name: "Enabled" });
+    expectGroupRow(enabled, "Enabled");
+    // Reached the way the specs reach a binding: by the tool's name at the front of the name
+    // its wrapping label gives it, with what the identity lacks for it after.
+    const read = await within(enabled).findByRole("checkbox", { name: /^orders\.read_order/ });
+    const write = await within(enabled).findByRole("checkbox", {
+      name: /^orders\.propose_address_change.*needs Change shipping address/,
+    });
+    expect(within(enabled).getAllByRole("checkbox")).toEqual([read, write]);
+    expect(read).toBeChecked();
+    await user.click(write);
+    expect(write).toBeChecked();
+    expect(bindings).toHaveAccessibleName("Tool bindings · 2 enabled");
   });
 
   it("asks for the memory as a group named by its row", async () => {

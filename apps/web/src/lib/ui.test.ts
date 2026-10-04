@@ -33,6 +33,7 @@ import {
   itemIconButtonClasses,
   itemMoveButtonClasses,
   itemRemoveButtonClasses,
+  readOnlyTextClasses,
   readOnlyValueClasses,
   searchFieldClasses,
   searchFieldIconClasses,
@@ -371,6 +372,18 @@ describe("field controls", () => {
     expect(readOnlyValueClasses).not.toContain("admin-field-border");
     expect(readOnlyValueClasses).not.toContain("bg-admin-surface");
     expect(readOnlyValueClasses).not.toContain("focus");
+  });
+
+  it("shows a decided value of several lines in the same box, in the flow of its text", () => {
+    for (const shared of ["min-h-[44px]", "rounded-[9px]", "px-3.5", "border-admin-border"]) {
+      expect(readOnlyTextClasses).toContain(shared);
+    }
+    expect(readOnlyTextClasses).not.toContain("admin-field-border");
+    expect(readOnlyTextClasses).not.toContain("focus");
+    // A block that keeps the text's breaks, not a flex row splitting it into items.
+    expect(readOnlyTextClasses.split(" ")).toContain("block");
+    expect(readOnlyTextClasses.split(" ")).not.toContain("flex");
+    expect(readOnlyTextClasses).toContain("whitespace-pre-wrap");
   });
 
   /**
@@ -1000,8 +1013,9 @@ const FORM_OPENING_ON_THE_RULE =
   /<form\b(?:[^>{]|\{(?:[^{}]|\{[^{}]*\})*\})*?className=\{?["`][^"`]*\bborder-t border-admin-border pt-3\b/;
 
 describe("the add form", () => {
+  // The test helpers read the class to find the forms the rows sweep leaves out; they draw none.
   const consumers = Object.entries(sources).filter(
-    ([path]) => !path.includes(".test.") && path !== "./ui.ts",
+    ([path]) => !path.includes(".test.") && !path.startsWith("../test/") && path !== "./ui.ts",
   );
 
   it("opens on a rule, so the saved entries above it end where the blank form begins", () => {
