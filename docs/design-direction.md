@@ -332,18 +332,18 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   claims a severity its gate did not give; a mirrored gate sentence is the gate's, character for
   character, pinned from both ends in `lib/fieldRules.ts`.
 - **Identifiers are derived, never asked first.** `DerivedIdField` follows its source until
-  edited, resumes when emptied, previews as "Saved as `…`", refuses a taken value audibly, and
-  stays closed while the list it derives from is loading. Every one stops at the cap the lab's
-  rule keeps (`maxLength`, required, swept in `lib/idFieldCaps.test.ts`), and a longer value
-  the page wrote or normalized — an uppercased "ß" — is refused on the field in words. A
-  suggested reference always fits: its number is counted exactly, past the series, and its
-  prefix is cut only as far as that number needs, never ending on a hyphen; when no prefix
-  leaves room past the series, the lowest free number is suggested. A saved entry's identifier
-  is displayed and never asked; a SKU is its own key and says so, and a product image is the
-  one its upload returned, never typed (ADR 0076).
-  A value that is taken is held on its field and never written, and the page's Save names the
-  field's line; the shop slug is refused on Shop details off the listing the create page reads,
-  and only when the operator changes it (ADR 0069).
+  edited, resumes when emptied, never fills a field the operator holds empty, previews as "Saved
+  as `…`", refuses a taken value audibly, and stays closed while the list it derives from is
+  loading. Every one stops at the cap the lab's rule keeps (`maxLength`, required, swept in
+  `lib/idFieldCaps.test.ts`), and a longer value the page wrote or normalized — an uppercased "ß"
+  — is refused on the field in words. A suggested reference always fits: its number is counted
+  exactly, past the series, and its prefix is cut only as far as that number needs, never ending
+  on a hyphen; when no prefix leaves room past the series, the lowest free number is suggested. A
+  saved entry's identifier is displayed and never asked; a SKU is its own key and says so, and a
+  product image is the one its upload returned, never typed (ADR 0076). A value that is taken is
+  held on its field and never written, and the page's Save names the field's line; the shop slug
+  is refused on Shop details off the listing the create page reads, and only when the operator
+  changes it (ADR 0069).
 - **A text stops where the lab's rule does, and is sent as the lab strips it.** Every control
   that types a text the lab caps carries that rule's `maxLength` — `require_label`'s 200,
   `require_text`'s 4000, or the `max_length` a field passes it (a system prompt's 20000, a

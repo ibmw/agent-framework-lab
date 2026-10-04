@@ -309,3 +309,51 @@ by the version it left; nothing while the customer read is held; each of the thr
 a version switch taking the last version's line down while the next is read; and a scenario
 switch whose abandoned read answers while the next scenario's versions are still being read,
 landing nothing.
+
+## Amendment — 2026-10-04: the proposed name while its reads are out
+
+The amendment above made the proposal wait on the pinned-version reads, and left three gaps
+between the proposal and the Name field, all from one cause: the field held a *copy* of the
+proposal, written back by `DerivedIdField`'s follow effect a commit after the proposal moved.
+
+- **A pending proposal is a wait, not a missing name.** On every first load the reads are out,
+  the proposal is `""`, the field copied it, and Start was refused for *name the experiment* —
+  `checking` applies only where nothing refuses. The page now knows the name is coming: while
+  the field follows the proposal and a read it is made from is still out (the scenario's
+  versions or its pinned version, an arm's versions or its pinned version), `startRefusals`
+  takes `labelPending` and says nothing about the name, and Start is busy under ADR 0063. A
+  failed arm read settles the proposal on no name at all — whatever the other arm's read says —
+  so the refusal stands there, at once. The sweep in `lib/experimentStart.test.ts` gains the
+  pending name, empty or whitespace only: 4 · 16 · 7 · 3 · 3 · 2 · 2 = 16128.
+- **The name sent is the proposal, not the copy.** The page holds what the operator *typed*, or
+  `null` while the field follows; the name is `typed ?? proposal`, computed in the render that
+  draws Start. A press in the commit that frees Start — before any effect of that commit runs —
+  sends the proposal on screen, never the one before it. To tell its own following from typing,
+  `DerivedIdField`'s `onChange` now says who wrote the value: `"operator"` for a keystroke, a
+  paste or an emptying, `"suggestion"` where the field followed or handed back `suggested`. The
+  experiment is the only follower whose copy could be *sent* stale. Every other follower's
+  source is another field, whose follow effect React flushes before the next discrete event, or
+  a listing read under `pending` (Tickets, Orders, New shop), whose copy is still the empty value
+  a create left for the one commit that reopens the field — a press there is refused for a
+  missing value, never sent with an old one. They ignore the second argument.
+- **A field the operator holds empty is theirs.** Emptying a field set it unedited, so a
+  proposal arriving before the next keystroke was written in, and the typing appended to it.
+  `pending` would have stopped that only by disabling the input and saying *Reading what is
+  already taken…*, which is wrong for a display name and would block typing while the reads
+  run. Instead, `DerivedIdField` writes no moved suggestion into a field the operator has
+  emptied, or stepped into while it was empty, and is still in; leaving it hands back whatever
+  is suggested by then. Stepping into an empty field reports `("", "operator")`, so the page
+  stops following too. The rule is the component's, for every user, and changes nothing where
+  the source is another field: to type there the operator has left this one.
+
+Verified in `DerivedIdField.test.tsx` — a suggestion that moves while an emptied field is held
+waits, and the next one after leaving follows; an empty field stepped into keeps what is typed;
+a field held without typing still follows; who wrote each value — and in `Experiments.test.tsx`,
+*what the experiment setup resolves against*: every read held, Start busy with no reason and no
+*name the experiment*; a failed arm read asking for a name while the other arm is still read;
+the name emptied, or stepped into empty, while its proposal is coming, keeping what is typed;
+Start pressed in the commit the last read frees it, sending the proposal that read completed.
+Each was proved by mutation. `VERSION_LATENCY_MS` stays opt-in (`docs/testing-strategy.md`): a
+test that does not wait for these reads fails under it only some of the time, so a permanent
+latency would make the default suite flaky rather than failing, at about 40% on
+`Experiments.test.tsx` and nothing on the suite's total.

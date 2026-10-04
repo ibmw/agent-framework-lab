@@ -86,6 +86,11 @@ export interface StartState {
   seed: string;
   label: string;
   /**
+   * The name is the proposal, and a read the proposal is made from is still out: no name *yet*,
+   * which is a wait rather than a refusal.
+   */
+  labelPending: boolean;
+  /**
    * Every arm in the form, in order, and whether the chosen configuration's published versions
    * are still being read — which, like the scenario's, is a wait rather than a refusal.
    */
@@ -119,7 +124,7 @@ export function startRefusals(state: StartState): string[] {
       reasons.push(noArmVersion(position));
     }
   });
-  if (pythonStrip(state.label) === "") {
+  if (pythonStrip(state.label) === "" && !state.labelPending) {
     reasons.push(NO_NAME);
   }
   if (state.seed.trim() === "") {

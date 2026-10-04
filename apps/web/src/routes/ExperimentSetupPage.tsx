@@ -169,9 +169,11 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   const [scenarios, setScenarios] = useState<ScenarioSummarySchema[]>([]);
   const [configurations, setConfigurations] = useState<AgentConfigurationSummarySchema[]>([]);
   const [experiments, setExperiments] = useState<ExperimentSummarySchema[]>([]);
-  // Empty until the field proposes one: the name is derived from what is chosen, and a seeded
-  // constant would be a name every experiment quietly carried whichever scenario it ran.
-  const [label, setLabel] = useState("");
+  // The name the operator typed, or `null` while the field follows the proposal — which is
+  // then the name, read from the proposal itself rather than from the copy the field writes
+  // back a commit later (ADR 0064, *the proposed name while its reads are out*). No seeded
+  // constant: that would be a name every experiment quietly carried whichever scenario it ran.
+  const [typedLabel, setTypedLabel] = useState<string | null>(null);
   const [scenarioId, setScenarioId] = useState("");
   const [scenarioVersion, setScenarioVersion] = useState("");
   // `null` while the chosen scenario's versions are being read — or while none is chosen.
@@ -452,6 +454,44 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     );
   };
 
+  // Every part is named as its chosen version was published: the scenario once its version has
+  // answered, and each arm once its pinned version has. A scenario whose version failed to
+  // answer is left out. A settled proposal never leaves an arm out, since it would then state a
+  // run with one arm fewer than it has: a failed arm read proposes nothing, and the operator
+  // names the run. While an arm's read is pending the proposal lacks it for that moment, and
+  // Start is busy meanwhile — a wait (ADR 0063), never a run started under that proposal.
+  const armAnswers = arms.map(armReadOf);
+  const armFailed = armAnswers.some((read) => read?.pinned === null);
+  const proposedName = armFailed
+    ? ""
+    : proposedExperimentName(
+        pinned?.scenarioName ?? "",
+        arms.map((arm, position) => ({
+          configuration: armAnswers[position]?.pinned?.name ?? "",
+          version: arm.version,
+        })),
+      );
+
+  // The name as it stands: what the operator typed, or the proposal while the field follows it.
+  const label = typedLabel ?? proposedName;
+  // A version being read is not chosen *yet*: a wait, like the gate's, rather than a refusal.
+  const scenarioVersionPending = scenarioId !== "" && scenarioVersions === null;
+  const armStates = arms.map((arm) => ({
+    ...arm,
+    versionPending: arm.configurationId !== "" && armVersions[arm.configurationId] === undefined,
+  }));
+  // Nor is the chosen scenario version's own name read yet, which the proposal waits on: a run
+  // started in that moment would be named without its scenario. A wait, not a refusal.
+  const scenarioNamePending = scenario !== undefined && scenarioVersion !== "" && pinned === null;
+  const versionsPending =
+    scenarioVersionPending || scenarioNamePending || armStates.some((arm) => arm.versionPending);
+  // The proposal is not settled yet: a read it is made from is still out. A field following it
+  // is then waiting for its name rather than missing one, and Start is busy, never refused for
+  // it (ADR 0063). A failed arm read settles it — on no name at all, which Start does refuse.
+  const proposalPending =
+    !armFailed && (versionsPending || armAnswers.some((read) => read === undefined));
+  const namePending = typedLabel === null && proposalPending;
+
   // What the operator calls the experiment and which starting state it freezes. The gate
   // reads the scenario version and the arms and judges neither of these, so they travel in a
   // ref and the preview below does not re-ask the server a question it has already answered
@@ -505,23 +545,6 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     return () => controller.abort();
   }, [shopId, setup]);
 
-  // Every part is named as its chosen version was published: the scenario once its version has
-  // answered, and each arm once its pinned version has. A scenario whose version failed to
-  // answer is left out. A settled proposal never leaves an arm out, since it would then state a
-  // run with one arm fewer than it has: a failed arm read proposes nothing, and the operator
-  // names the run. While an arm's read is pending the proposal lacks it for that moment, and
-  // Start is busy meanwhile — a wait (ADR 0063), never a run started under that proposal.
-  const armAnswers = arms.map(armReadOf);
-  const proposedName = armAnswers.some((read) => read?.pinned === null)
-    ? ""
-    : proposedExperimentName(
-        pinned?.scenarioName ?? "",
-        arms.map((arm, position) => ({
-          configuration: armAnswers[position]?.pinned?.name ?? "",
-          version: arm.version,
-        })),
-      );
-
   // Why Start will not start: a chosen arm pins a version naming a provider this lab cannot
   // reach, which the advance would refuse with 422 and no recorded turn (ADR 0053). One
   // sentence per provider, so two arms on one unreachable provider are one reason, not two.
@@ -531,17 +554,6 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     armAnswers.map((read) => read?.pinned?.provider ?? null),
     unreachable,
   );
-  // A version being read is not chosen *yet*: a wait, like the gate's, rather than a refusal.
-  const scenarioVersionPending = scenarioId !== "" && scenarioVersions === null;
-  const armStates = arms.map((arm) => ({
-    ...arm,
-    versionPending: arm.configurationId !== "" && armVersions[arm.configurationId] === undefined,
-  }));
-  // Nor is the chosen scenario version's own name read yet, which the proposal waits on: a run
-  // started in that moment would be named without its scenario. A wait, not a refusal.
-  const scenarioNamePending = scenario !== undefined && scenarioVersion !== "" && pinned === null;
-  const versionsPending =
-    scenarioVersionPending || scenarioNamePending || armStates.some((arm) => arm.versionPending);
   // The gate has not answered for the setup on screen yet. Start is then a press in flight
   // rather than a refusal (ADR 0063) — unless something else already refuses it, which is said
   // meanwhile, and the gate's own errors join it when it answers.
@@ -553,6 +565,7 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     scenarioVersionPending,
     seed,
     label,
+    labelPending: namePending,
     arms: armStates,
     gateIssues: answered ? (preview?.issues ?? []) : [],
     previewRefusal: answered ? (judged?.refusal ?? null) : null,
@@ -565,7 +578,8 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   const reachPending =
     wholeArms.length > 0 &&
     (reachability.status === "loading" || armAnswers.some((read) => read === undefined));
-  const checking = (gatePending || reachPending || versionsPending) && reasons.length === 0;
+  const checking =
+    (gatePending || reachPending || versionsPending || namePending) && reasons.length === 0;
 
   const start = async (event: FormEvent) => {
     event.preventDefault();
@@ -724,7 +738,7 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
                 suggested={proposedName}
                 maxLength={EXPERIMENT_LABEL_MAX_LENGTH}
                 preview={false}
-                onChange={setLabel}
+                onChange={(next, by) => setTypedLabel(by === "operator" ? next : null)}
               />
 
               <Field label="Seed" hint={SEED_RULE}>

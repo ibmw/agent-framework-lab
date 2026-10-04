@@ -227,7 +227,7 @@ describe("DerivedIdField", () => {
     expect(screen.getByLabelText("Handle")).toHaveValue("alpine-shell-jacket");
   });
 
-  it("follows the source again on the next source change once emptied", async () => {
+  it("follows the source again on the next source change once emptied and left", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<Harness source="alpine-shell-jacket" />);
 
@@ -235,9 +235,100 @@ describe("DerivedIdField", () => {
     await user.type(screen.getByLabelText("Handle"), "alpine-custom");
     await user.clear(screen.getByLabelText("Handle"));
     expect(screen.getByLabelText("Handle")).toHaveValue("");
+    await user.tab();
 
     rerender(<Harness source="alpine-jacket" />);
     expect(screen.getByLabelText("Handle")).toHaveValue("alpine-jacket");
+  });
+
+  it("writes no suggestion that moves into a field the operator has emptied and is still in", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<Harness source="alpine-shell-jacket" />);
+    const field = screen.getByLabelText("Handle");
+
+    await user.clear(field);
+    // The suggestion moves while they are in it — a read answering late, say.
+    rerender(<Harness source="alpine-jacket" />);
+    expect(field).toHaveValue("");
+    await user.type(field, "harbour");
+    expect(field).toHaveValue("harbour");
+
+    // Emptied again and left, it hands back what is suggested by then.
+    await user.clear(field);
+    rerender(<Harness source="alpine-shell" />);
+    expect(field).toHaveValue("");
+    await user.tab();
+    expect(field).toHaveValue("alpine-shell");
+  });
+
+  it("keeps an empty field the operator stepped into before anything was suggested for them", async () => {
+    const user = userEvent.setup();
+    function Late({ suggested }: { suggested: string }) {
+      const [value, setValue] = useState("");
+      return (
+        <DerivedIdField
+          label="Name"
+          hint="Derived until you edit it."
+          value={value}
+          suggested={suggested}
+          maxLength={SLUG_MAX_LENGTH}
+          onChange={setValue}
+        />
+      );
+    }
+    const { rerender } = render(<Late suggested="" />);
+    const field = screen.getByLabelText("Name");
+
+    await user.click(field);
+    rerender(<Late suggested="atlas vs beacon" />);
+    expect(field).toHaveValue("");
+    await user.type(field, "Mine");
+    expect(field).toHaveValue("Mine");
+  });
+
+  it("says who wrote each value: the operator, or the field handing its suggestion over", async () => {
+    const user = userEvent.setup();
+    const writes: [string, string][] = [];
+    function Told({ suggested }: { suggested: string }) {
+      const [value, setValue] = useState("");
+      return (
+        <DerivedIdField
+          label="Name"
+          hint="Derived until you edit it."
+          value={value}
+          suggested={suggested}
+          maxLength={SLUG_MAX_LENGTH}
+          onChange={(next, by) => {
+            writes.push([next, by]);
+            setValue(next);
+          }}
+        />
+      );
+    }
+    const { rerender } = render(<Told suggested="atlas" />);
+    rerender(<Told suggested="atlas vs beacon" />);
+    const field = screen.getByLabelText("Name");
+    await user.clear(field);
+    await user.type(field, "a");
+    await user.clear(field);
+    await user.tab();
+    expect(writes).toEqual([
+      ["atlas", "suggestion"],
+      ["atlas vs beacon", "suggestion"],
+      ["", "operator"],
+      ["a", "operator"],
+      ["", "operator"],
+      ["atlas vs beacon", "suggestion"],
+    ]);
+  });
+
+  it("follows a suggestion that moves while the operator is in it without having typed", () => {
+    const { rerender } = render(<Harness source="alpine-shell-jacket" />);
+    const field = screen.getByLabelText("Handle");
+
+    field.focus();
+    rerender(<Harness source="alpine-jacket" />);
+    expect(field).toHaveValue("alpine-jacket");
   });
 
   it("offers the next free id and says why when the source is taken", () => {

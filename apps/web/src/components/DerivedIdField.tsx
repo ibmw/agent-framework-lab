@@ -13,7 +13,16 @@ import { type Arrangement, FieldHint } from "./FieldHint";
  * component is the follow / resume / refuse behaviour those pages used to each write themselves.
  *
  * Emptying does not refill between the operator and their next keystroke. The suggestion
- * returns on blur-while-empty, or on the next source change while the field is unedited.
+ * returns on blur-while-empty, or on the next source change while the field is unedited — but
+ * never into a field the operator has emptied, or stepped into empty, and is still in: a
+ * suggestion that moves then, whether a source changed or a read answered late, waits for them
+ * to leave it, so what they type next starts a value of their own rather than being appended
+ * to it.
+ *
+ * `onChange` says who wrote the value: `"operator"` for a keystroke, a paste or an emptying,
+ * `"suggestion"` where the field wrote `suggested` itself — following it, or handing it back.
+ * A parent that derives its own value from `suggested` while the field follows — rather than
+ * from the copy this field writes back a commit later — reads it from there (ADR 0064).
  *
  * `pending` is for the parent whose suggestion is derived from something still loading — a
  * shop's ticket or order list. A suggestion that is not known *yet* is the one case `edited`
@@ -110,7 +119,7 @@ export function DerivedIdField({
   refusedBy?: string;
   /** An identifier is read character by character, so it is drawn in the monospace face. */
   monospace?: boolean;
-  onChange: (value: string) => void;
+  onChange: (value: string, by: "operator" | "suggestion") => void;
   /**
    * The field was left, after an empty one has had its suggestion handed back. For a parent
    * that keeps something about the operator's current run of typing and ends it here.
@@ -133,6 +142,8 @@ export function DerivedIdField({
   // something to land. Once the operator has touched it, emptying it is their own act and it
   // stays empty until they say otherwise.
   const [touched, setTouched] = useState(false);
+  const touchedRef = useRef(touched);
+  touchedRef.current = touched;
   const shown = touched ? value : value || suggested;
 
   // A closed field is nobody's. Without this the invariant holds only on the first open: an
@@ -188,7 +199,19 @@ export function DerivedIdField({
     if (input && input.value !== renderedRef.current) {
       return;
     }
-    onChangeRef.current(suggested);
+    // Emptied by the operator, or stepped into empty, and still held: theirs, and about to be
+    // typed into. A suggestion that moves now — a read answering late is the case — would be
+    // written in ahead of their next keystroke. It waits for them to leave, which hands back
+    // whatever is suggested then.
+    if (
+      input &&
+      touchedRef.current &&
+      renderedRef.current === "" &&
+      input.ownerDocument.activeElement === input
+    ) {
+      return;
+    }
+    onChangeRef.current(suggested, "suggestion");
   }, [suggested, follows]);
 
   // Both refusals hold the form back natively, as a `required` field left empty does.
@@ -204,17 +227,17 @@ export function DerivedIdField({
     setTouched(true);
     if (normalized === "") {
       setEdited(false);
-      onChange("");
+      onChange("", "operator");
       return;
     }
     setEdited(true);
-    onChange(normalized);
+    onChange(normalized, "operator");
   }
 
   function restoreIfEmpty() {
     if (value === "") {
       setEdited(false);
-      onChange(suggested);
+      onChange(suggested, "suggestion");
     }
   }
 
@@ -261,6 +284,16 @@ export function DerivedIdField({
         aria-invalid={colliding || refused || tooLong || refusedBy !== undefined || undefined}
         aria-describedby={refusedBy}
         onChange={(event) => change(event.target.value)}
+        // Stepping into a field with nothing in it is the operator's first act there, as
+        // emptying one is: it is theirs from here, and a suggestion arriving now — nothing was
+        // suggested yet — waits for them to leave rather than landing ahead of their typing.
+        // The parent is told it holds an empty value of the operator's own.
+        onFocus={() => {
+          if (shown === "") {
+            setTouched(true);
+            onChange("", "operator");
+          }
+        }}
         onBlur={() => {
           restoreIfEmpty();
           onLeave?.();

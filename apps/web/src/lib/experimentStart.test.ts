@@ -82,12 +82,18 @@ const AXES: readonly Axis[] = [
   // The form's order (ADR 0064): scenario, arm A, arm B, name, seed.
   ARM_AXIS,
   [
-    [{ label: "  " }, [NO_NAME]],
+    [{ label: "", labelPending: false }, [NO_NAME]],
+    // The proposal it follows is still being read: no name *yet*, a wait that refuses nothing.
+    [{ label: "", labelPending: true }, []],
+    [{ label: "  ", labelPending: false }, [NO_NAME]],
+    // Pending wins over what the label holds: it is the proposal still being made, never the
+    // operator's (a typed name is never pending), so it is waited for, not refused.
+    [{ label: "  ", labelPending: true }, []],
     // Empty to Python's `str.strip()`, which `require_label` reads, and not to `trim()`.
-    [{ label: "\x85\x1c\u2028" }, [NO_NAME]],
+    [{ label: "\x85\x1c\u2028", labelPending: false }, [NO_NAME]],
     // Kept by `str.strip()`, so the lab stores it, though `trim()` would empty it.
-    [{ label: "\ufeff" }, []],
-    [{ label: "Prompt comparison" }, []],
+    [{ label: "\ufeff", labelPending: false }, []],
+    [{ label: "Prompt comparison", labelPending: false }, []],
   ],
   [
     [{ seed: "" }, [NO_SEED]],
@@ -129,8 +135,8 @@ describe("what Start waits for", () => {
       expect(startRefusals(state as StartState), JSON.stringify(state)).toEqual(reasons);
       swept += 1;
     }
-    // 4 · 16 · 4 · 3 · 3 · 2 · 2: a sweep that silently shrank would pass on nothing.
-    expect(swept).toBe(9216);
+    // 4 · 16 · 7 · 3 · 3 · 2 · 2: a sweep that silently shrank would pass on nothing.
+    expect(swept).toBe(16128);
   });
 
   it("waits for nothing once each cause is answered", () => {
@@ -141,6 +147,7 @@ describe("what Start waits for", () => {
         scenarioVersionPending: false,
         seed: "0",
         label: "x",
+        labelPending: false,
         arms: [WHOLE, EMPTY],
         gateIssues: [GATE_WARNING],
         previewRefusal: null,

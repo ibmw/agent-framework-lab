@@ -9,7 +9,8 @@ Choose the fastest test that proves the behavior:
 3. React Testing Library tests with MSW for visible states and network failures;
    `VERSION_LATENCY_MS=60 pnpm test` (in `apps/web`) answers every scenario, ticket,
    customer-profile and agent-configuration version read 60 ms late, exposing a test that
-   asserts on such a read without waiting for it; run it whenever a page or test reads one;
+   asserts on such a read without waiting for it; run it, more than once, whenever a page or
+   test reads one;
 4. Playwright only for essential human journeys involving authoring/publication, experiment start
    and resume, split-view interaction, or confirmed actions.
 

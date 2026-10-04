@@ -1746,7 +1746,11 @@ describe("experiment setup", () => {
     await scenarioChosen();
     await chooseArm(user, 0, "cfg-atlas");
     await nameAs(user, "Prompt comparison");
-    await user.click(screen.getByRole("button", { name: "Start experiment" }));
+    // Pressed once it can work: a press while a read is out is swallowed, as busy is.
+    await reachabilityRead();
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expectNotRefused(start));
+    await user.click(start);
 
     await waitFor(() => expect(started).toHaveLength(1));
     expect(started[0]).toMatchObject({
@@ -1773,7 +1777,11 @@ describe("experiment setup", () => {
     await scenarioChosen();
     await chooseArm(user, 0, "cfg-atlas");
     await nameAs(user, "Prompt comparison");
-    await user.click(screen.getByRole("button", { name: "Start experiment" }));
+    // Pressed once it can work: a press while a read is out is swallowed, as busy is.
+    await reachabilityRead();
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expectNotRefused(start));
+    await user.click(start);
 
     expect(
       await screen.findByText(/tone-of-voice guideline this shop does not publish/),
@@ -2348,10 +2356,159 @@ describe("what the experiment setup resolves against", () => {
 
     scenarioRead.release();
     await waitFor(() => expectNotRefused(start));
-    // The field follows the proposal a commit after it moves (DerivedIdField's effect).
     await waitFor(() =>
       expect(nameValue()).toBe("Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2"),
     );
+  });
+
+  /** Every pinned-version read the proposal is made from, held until released. */
+  function holdEveryProposalRead() {
+    const scenarioRead = holdable();
+    const armRead = holdable();
+    server.use(
+      http.get(
+        `*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/versions/:version`,
+        async ({ params }) => {
+          scenarioRead.asked.count += 1;
+          await scenarioRead.released;
+          return HttpResponse.json(scenarioVersion(Number(params.version)));
+        },
+      ),
+      http.get(
+        "*/api/v1/agent-configurations/:configurationId/versions/:version",
+        async ({ params }) => {
+          versionReads += 1;
+          armRead.asked.count += 1;
+          await armRead.released;
+          return HttpResponse.json(
+            publishedVersion(String(params.configurationId), Number(params.version)),
+          );
+        },
+      ),
+    );
+    return { scenarioRead, armRead };
+  }
+
+  it("waits for the name while every read it is proposed from is out, and never refuses for it", async () => {
+    const { scenarioRead, armRead } = holdEveryProposalRead();
+    renderSetup();
+
+    await scenarioChosen();
+    await waitFor(() => {
+      expect(scenarioRead.asked.count).toBe(1);
+      expect(armRead.asked.count).toBe(2);
+    });
+    await settle();
+    // Nothing is proposed yet, and the operator has not named the run: a wait (ADR 0063).
+    expect(nameValue()).toBe("");
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    expect(startReasons(start)).toEqual([]);
+    expect(screen.queryByText(NO_NAME)).toBeNull();
+    expectBusy(start);
+
+    scenarioRead.release();
+    armRead.release();
+    await waitFor(() =>
+      expect(nameValue()).toBe("Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2"),
+    );
+    await reachabilityRead();
+    await waitFor(() => expectNotRefused(start));
+  });
+
+  it("keeps what the operator types into the name they emptied while its proposal was still coming", async () => {
+    const user = userEvent.setup();
+    const { scenarioRead, armRead } = holdEveryProposalRead();
+    renderSetup();
+
+    await scenarioChosen();
+    await waitFor(() => expect(armRead.asked.count).toBe(2));
+    armRead.release();
+    await waitFor(() => expect(nameValue()).toBe("cfg-atlas v2 vs cfg-beacon v2"));
+    const field = screen.getByLabelText("Name");
+    await user.clear(field);
+    // The scenario's name answers while the operator is in the field they emptied.
+    scenarioRead.release();
+    expect(
+      await within(scenarioRow()).findByText(
+        "Resolves against shop v3, ticket T-204 v1, customer Maya Laurent v2.",
+      ),
+    ).toBeVisible();
+    await settle();
+    expect(nameValue()).toBe("");
+    await user.type(field, "Prompt comparison");
+    expect(nameValue()).toBe("Prompt comparison");
+
+    await reachabilityRead();
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expectNotRefused(start));
+    await user.click(start);
+    await waitFor(() => expect(started).toHaveLength(1));
+    expect(started[0]).toMatchObject({ label: "Prompt comparison" });
+  });
+
+  it("keeps what the operator types into an empty name they stepped into before anything was proposed", async () => {
+    const user = userEvent.setup();
+    const { scenarioRead, armRead } = holdEveryProposalRead();
+    renderSetup();
+
+    await scenarioChosen();
+    await waitFor(() => expect(armRead.asked.count).toBe(2));
+    expect(nameValue()).toBe("");
+    await user.click(screen.getByLabelText("Name"));
+    scenarioRead.release();
+    armRead.release();
+    expect(
+      await within(scenarioRow()).findByText(
+        "Resolves against shop v3, ticket T-204 v1, customer Maya Laurent v2.",
+      ),
+    ).toBeVisible();
+    await reachabilityRead();
+    await settle();
+    expect(nameValue()).toBe("");
+    await user.type(screen.getByLabelText("Name"), "Prompt comparison");
+    expect(nameValue()).toBe("Prompt comparison");
+  });
+
+  it("starts under the proposal on screen when Start is pressed the moment the last read answers", async () => {
+    const scenarioRead = holdable();
+    server.use(
+      http.get(
+        `*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/versions/:version`,
+        async ({ params }) => {
+          scenarioRead.asked.count += 1;
+          await scenarioRead.released;
+          return HttpResponse.json(scenarioVersion(Number(params.version)));
+        },
+      ),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await waitFor(() => expect(scenarioRead.asked.count).toBe(1));
+    await reachabilityRead();
+    await waitFor(() => expect(nameValue()).toBe("cfg-atlas v2 vs cfg-beacon v2"));
+    await settle();
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    expectBusy(start);
+
+    // Pressed in the very commit that frees Start — before any effect of that commit has run,
+    // which is where a name copied into the field a commit late would still be the last one.
+    const pressed = new Promise<void>((resolve) => {
+      const observer = new MutationObserver(() => {
+        if (!start.hasAttribute("aria-disabled")) {
+          observer.disconnect();
+          start.click();
+          resolve();
+        }
+      });
+      observer.observe(start, { attributes: true, attributeFilter: ["aria-disabled"] });
+    });
+    scenarioRead.release();
+    await waitFor(() => expect(started).toHaveLength(1));
+    await pressed;
+    expect(started[0]).toMatchObject({
+      label: "Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2",
+    });
   });
 
   it("names each arm as its pinned version was published, after the configuration was renamed", async () => {
@@ -2507,6 +2664,41 @@ describe("what the experiment setup resolves against", () => {
     const start = screen.getByRole("button", { name: "Start experiment" });
     await waitFor(() => expect(startReasons(start)).toEqual([NO_NAME]));
     expectRefused(start, NO_NAME);
+  });
+
+  it("asks for a name as soon as one arm's pinned version cannot be read, while the other's still is", async () => {
+    const beacon = holdable();
+    server.use(
+      http.get(
+        "*/api/v1/agent-configurations/:configurationId/versions/:version",
+        async ({ params }) => {
+          versionReads += 1;
+          const configurationId = String(params.configurationId);
+          if (configurationId === ATLAS_ID) {
+            return HttpResponse.json(
+              {
+                code: "internal_error",
+                message: "The lab could not complete it.",
+                request_id: "r",
+              },
+              { status: 500 },
+            );
+          }
+          beacon.asked.count += 1;
+          await beacon.released;
+          return HttpResponse.json(publishedVersion(configurationId, Number(params.version)));
+        },
+      ),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await waitFor(() => expect(beacon.asked.count).toBe(1));
+    // No proposal can come of it whatever arm B's read says: the name is missing, not coming.
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start)).toEqual([NO_NAME]));
+    expectRefused(start, NO_NAME);
+    beacon.release();
   });
 
   it("never names an arm by the version it has moved off while the new one is read", async () => {
