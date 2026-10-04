@@ -2,6 +2,13 @@
 
 Status: accepted, amended by ADR 0077 (a shop that never published can be deleted, with everything it holds) — 2026-09-23
 
+Amendment: 2026-10-04 — A ticket's unresolved linked order is not trivially re-added — no order
+of the ticket's customer in this shop matches it, whether it was deleted or moved to another
+customer, so no checkbox links it again — so its *Unlink* asks twice, on the grey panel a detach
+uses (`destroys={false}`, the press *Unlink*), and names it in the list's notice. Unlinking
+the ticket's last link on an origin that names nothing raises `ticket_without_resource_reference`,
+whose clause is now in `REMOVAL_FINDINGS`. A resolved linked order stays its checkbox, one press.
+
 Settles `docs/design-direction.md`'s rule *Removing is deliberate* (`form-decisions.md` 9.2) for
 every Remove, Delete and Detach in the workspace, and the sixth browser preference that governs
 it. It is the confirm policy `docs/PLAN-UX.md` says a slice writes an ADR for.
@@ -263,6 +270,10 @@ says so once the detach has landed.
   ADR 0061 — kept through a rename; the notice clears when *Discard changes* puts the variant back.
 - `SupportIdentities.test.tsx` and `Tickets.test.tsx`: an escalation condition and the first
   message ask, while `ChipListField.test.tsx` still removes an option value on one press.
+  `Tickets.test.tsx` (amendment of 2026-10-04): an unresolved linked order's *Unlink* asks twice,
+  *Keep it* keeps it, and an order of another customer is named the same way; the
+  `ticket_without_resource_reference` clause is said only for the last link on an origin that
+  names nothing; a resolved order still unlinks on one press.
 - `Documents.test.tsx`, `Orders.test.tsx`: a document and an order are named on the list the page
   lands on, with focus there; the document confirm tells a scenario's error from a ticket's
   warning; a carried notice is not said again on a return through history.

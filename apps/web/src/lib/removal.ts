@@ -341,6 +341,8 @@ export const REMOVAL_FINDINGS = {
   binding_product_missing_from_catalog:
     "A scenario with a block bound to it is refused at publication once the draft is saved, because it names a product the catalog no longer has.",
   // domain/ticket.py
+  ticket_without_resource_reference:
+    "It is the ticket's last link and its origin names no product or order, which the publish gate warns about: the agent has nothing to resolve from the incident itself.",
   ticket_without_trigger:
     "It is the message every arm receives at experiment start, and a ticket without one is refused at publication. An earlier message does not take its place.",
   // domain/scenario.py

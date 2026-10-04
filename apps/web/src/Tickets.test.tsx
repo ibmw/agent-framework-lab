@@ -33,6 +33,8 @@ const TICKET_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
 const OTHER_TICKET_ID = "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d";
 /** An order the ticket still links but the shop no longer resolves. */
 const MISSING_ORDER_ID = "0b1c2d3e-4f50-4617-8829-3a4b5c6d7e8f";
+/** An order the shop still holds, which now belongs to another customer. */
+const OTHER_CUSTOMER_ORDER_ID = "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b";
 const HISTORY_AT = "2026-08-21T09:14:00.000000Z";
 const TRIGGER_AT = "2026-08-21T13:40:00.000000Z";
 
@@ -1494,21 +1496,147 @@ describe("what the ticket points at", () => {
     }
   });
 
-  it("keeps a link the shop can no longer resolve removable", async () => {
+  it("keeps a link the shop can no longer resolve removable, and unlinks it on a second press", async () => {
     // A deleted order blocks publication; without a row of its own the author would have no
-    // checkbox left to uncheck.
+    // checkbox left to uncheck — and, with none to check, unlinking it asks twice (ADR 0060).
     const user = userEvent.setup();
     currentContent = { ...DRAFT_CONTENT, linked_order_ids: [ORDER_ID, MISSING_ORDER_ID] };
     currentPreview = preview({ content: currentContent });
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
     const linked = await screen.findByRole("region", { name: "Linked orders" });
+    const unlink = () =>
+      within(linked).getByRole("button", { name: `Unlink order ${MISSING_ORDER_ID}` });
 
     expect(within(linked).getByText("Unresolved order")).toBeVisible();
+    expect(unlink()).toHaveTextContent("Unlink");
+    await user.click(unlink());
+
+    const confirm = within(linked).getByRole("group", {
+      name: `Unlink order ${MISSING_ORDER_ID}?`,
+    });
+    expect(confirm).toHaveFocus();
+    expect(confirm).toHaveAccessibleDescription(/no checkbox links it again/);
+    // A resolved link stays beside it, so the incident still points at something.
+    expect(confirm).not.toHaveAccessibleDescription(/last link/);
+    expect(within(linked).queryByText("Unresolved order")).toBeNull();
+
+    await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
+    expect(within(linked).getByText("Unresolved order")).toBeVisible();
+    expect(within(linked).getByText(MISSING_ORDER_ID)).toBeVisible();
+    expect(unlink()).toHaveFocus();
+
+    await user.click(unlink());
     await user.click(
-      within(linked).getByRole("button", { name: `Unlink order ${MISSING_ORDER_ID}` }),
+      within(
+        within(linked).getByRole("group", { name: `Unlink order ${MISSING_ORDER_ID}?` }),
+      ).getByRole("button", { name: "Unlink" }),
     );
 
     expect(within(linked).queryByText("Unresolved order")).toBeNull();
+    const notice = within(linked).getByText(`Unlinked order ${MISSING_ORDER_ID} from the draft.`);
+    expect(notice).toHaveFocus();
+    // The resolved order it stood beside is still linked.
+    expect(within(linked).getByRole("checkbox", { name: "NS-10482" })).toBeChecked();
+  });
+
+  it("says unlinking the last link leaves an incident whose origin names nothing warned about", async () => {
+    const user = userEvent.setup();
+    currentContent = {
+      ...DRAFT_CONTENT,
+      origin: { kind: "support_entry", product_handle: null, order_id: null },
+      linked_order_ids: [MISSING_ORDER_ID],
+    };
+    currentPreview = preview({ content: currentContent });
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const linked = await screen.findByRole("region", { name: "Linked orders" });
+
+    await user.click(
+      await within(linked).findByRole("button", { name: `Unlink order ${MISSING_ORDER_ID}` }),
+    );
+
+    expect(
+      within(linked).getByRole("group", { name: `Unlink order ${MISSING_ORDER_ID}?` }),
+    ).toHaveAccessibleDescription(/last link .* the publish gate warns about/);
+  });
+
+  it("asks twice to unlink an order that moved to another customer, without saying it is gone", async () => {
+    // The shop still holds the order; the editor's list holds only this customer's orders.
+    const user = userEvent.setup();
+    currentContent = { ...DRAFT_CONTENT, linked_order_ids: [ORDER_ID, OTHER_CUSTOMER_ORDER_ID] };
+    currentPreview = preview({
+      content: currentContent,
+      publishable: false,
+      issues: [
+        {
+          severity: "error",
+          code: "linked_order_of_another_customer",
+          message: `order ${OTHER_CUSTOMER_ORDER_ID} belongs to another customer`,
+          path: "linked_order_ids",
+        },
+      ],
+    });
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const linked = await screen.findByRole("region", { name: "Linked orders" });
+
+    await user.click(
+      await within(linked).findByRole("button", {
+        name: `Unlink order ${OTHER_CUSTOMER_ORDER_ID}`,
+      }),
+    );
+
+    const confirm = within(linked).getByRole("group", {
+      name: `Unlink order ${OTHER_CUSTOMER_ORDER_ID}?`,
+    });
+    expect(confirm).toHaveAccessibleDescription(/No order of this customer's matches it/);
+    expect(confirm).not.toHaveAccessibleDescription(/no longer holds/);
+  });
+
+  it.each([
+    [
+      "an order page naming the order",
+      { kind: "order_page", product_handle: null, order_id: ORDER_ID },
+    ],
+    [
+      "a product page naming the product",
+      { kind: "product_page", product_handle: "alpine-shell-jacket", order_id: null },
+    ],
+  ] as const)(
+    "says no last-link clause when the only link goes but the origin is %s",
+    async (_, origin) => {
+      const user = userEvent.setup();
+      currentContent = { ...DRAFT_CONTENT, origin, linked_order_ids: [MISSING_ORDER_ID] };
+      currentPreview = preview({ content: currentContent });
+      renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+      const linked = await screen.findByRole("region", { name: "Linked orders" });
+
+      await user.click(
+        await within(linked).findByRole("button", { name: `Unlink order ${MISSING_ORDER_ID}` }),
+      );
+
+      const confirm = within(linked).getByRole("group", {
+        name: `Unlink order ${MISSING_ORDER_ID}?`,
+      });
+      expect(confirm).toHaveAccessibleDescription(/no checkbox links it again/);
+      expect(confirm).not.toHaveAccessibleDescription(/last link/);
+    },
+  );
+
+  it("unlinks a resolved order on one press, since its checkbox links it again", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...DRAFT_CONTENT, linked_order_ids: [ORDER_ID] };
+    currentPreview = preview({ content: currentContent });
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const linked = await screen.findByRole("region", { name: "Linked orders" });
+    const order = await within(linked).findByRole("checkbox", { name: "NS-10482" });
+
+    expect(order).toBeChecked();
+    await user.click(order);
+
+    expect(order).not.toBeChecked();
+    expect(within(linked).queryByRole("group")).toBeNull();
+    expect(within(linked).queryByText(/^Unlinked order/)).toBeNull();
+    await user.click(order);
+    expect(order).toBeChecked();
   });
 
   it("lists this customer's other tickets inside the customer's card", async () => {

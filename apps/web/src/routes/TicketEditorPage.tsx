@@ -272,7 +272,9 @@ function TicketEditorPage({ ticketId }: { ticketId: string }) {
             customerName={context?.customer.display_name ?? "Customer"}
             onEdit={edit}
           />
-          {context ? <LinkedOrders content={content} context={context} onEdit={edit} /> : null}
+          {context ? (
+            <LinkedOrders scope={ticketId} content={content} context={context} onEdit={edit} />
+          ) : null}
           {context ? (
             <SuggestedDocuments
               scope={ticketId}
@@ -749,16 +751,25 @@ function OriginProduct({
 }
 
 function LinkedOrders({
+  scope,
   content,
   context,
   onEdit,
 }: {
+  /** The ticket, so a confirm never follows the operator to another one. */
+  scope: string;
   content: TicketContentSchema;
   context: TicketContextSchema;
   onEdit: (next: TicketContentSchema) => void;
 }) {
   const resolvable = new Set(context.resources.orders.map((order) => order.order_id));
   const unresolvable = content.linked_order_ids.filter((orderId) => !resolvable.has(orderId));
+  const removal = useRemoval(scope);
+  // The last link, on an origin that names nothing, leaves the incident pointing at nothing.
+  const pointsAtNothingWithout = (orderId: string) =>
+    content.origin.product_handle === null &&
+    content.origin.order_id === null &&
+    content.linked_order_ids.every((entry) => entry === orderId);
 
   function toggleOrder(orderId: string) {
     onEdit({
@@ -803,26 +814,50 @@ function LinkedOrders({
       {/*
         A link the shop can no longer resolve — a deleted order, or one that moved to
         another customer — blocks publication, so it has to stay removable. Without a row
-        of its own it would have no checkbox left to uncheck.
+        of its own it would have no checkbox left to uncheck. And since no checkbox puts it
+        back, unlinking it asks twice, as every editor removal does (ADR 0060); a resolved
+        order stays its checkbox, which links it again.
       */}
       {unresolvable.length > 0 ? (
         <ul className="grid gap-1.5 text-[13px]">
-          {unresolvable.map((orderId) => (
-            <li key={orderId} className="flex items-center gap-2">
-              <span className="text-lab-error">Unresolved order</span>
-              <code className="truncate text-admin-muted">{orderId}</code>
-              <button
-                className={`${subtleButtonClasses} ml-auto`}
-                type="button"
-                aria-label={`Unlink order ${orderId}`}
-                onClick={() => toggleOrder(orderId)}
-              >
-                Unlink
-              </button>
-            </li>
-          ))}
+          {unresolvable.map((orderId) => {
+            const unlink = () => toggleOrder(orderId);
+            const notice = `Unlinked order ${orderId} from the draft.`;
+            return removal.isArmed(orderId) ? (
+              <ConfirmRemove
+                key={orderId}
+                as="li"
+                title={`Unlink order ${orderId}?`}
+                consequence={consequenceOf(
+                  "No order of this customer's matches it, so no checkbox links it again.",
+                  pointsAtNothingWithout(orderId) &&
+                    REMOVAL_FINDINGS.ticket_without_resource_reference,
+                  "Nothing is written until you save the ticket, and a published version keeps it.",
+                )}
+                confirmLabel="Unlink"
+                destroys={false}
+                onConfirm={removal.confirm(unlink, notice)}
+                onKeep={removal.keep}
+              />
+            ) : (
+              <li key={orderId} className="flex items-center gap-2">
+                <span className="text-lab-error">Unresolved order</span>
+                <code className="truncate text-admin-muted">{orderId}</code>
+                <button
+                  className={`${subtleButtonClasses} ml-auto`}
+                  type="button"
+                  aria-label={`Unlink order ${orderId}`}
+                  ref={removal.trigger(orderId)}
+                  onClick={removal.ask(orderId, unlink, notice)}
+                >
+                  Unlink
+                </button>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
+      <RemovalNotice removal={removal} />
     </Card>
   );
 }
@@ -897,8 +932,8 @@ function SuggestedDocuments({
         ))
       )}
       {/*
-        A suggestion the shop no longer holds blocks publication, as an unresolved order
-        does, and it has no title to be named by — so it keeps a row of its own, named by
+        A suggestion the shop no longer holds is warned about, as an unresolved order is
+        refused, and it has no title to be named by — so it keeps a row of its own, named by
         its kind and slug, with the one action that resolves it. Removing it asks twice, as
         every editor removal does (ADR 0060): no checkbox puts it back, since the shop holds
         no document to check.
