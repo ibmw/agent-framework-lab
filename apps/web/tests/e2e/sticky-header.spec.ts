@@ -13,7 +13,31 @@ import { webOrigin } from "./support/stack";
  * underneath it (WCAG 2.2, 2.4.11).
  */
 
-const test = base.extend<object, { lab: BuiltLab & { judgeId: string } }>({
+/**
+ * The name of the agent configuration whose header the third-of-the-pane tests measure.
+ *
+ * Fixed, because the header's steady height follows how its title wraps, and the chain's own
+ * names carry a timestamp: at 390×844 one name in six wrapped the title and its chips 2px under
+ * the pane's third, and the header pinned. This one is measured in the middle of a run of
+ * lengths that wrap alike: 350px at 390×844, against a third of 262.67px, and 131px at 960×540,
+ * against a third of 161.33px. Those figures were measured in Chromium on macOS, where the title
+ * is set in Georgia; on CI's Ubuntu runner the title's Georgia and the fingerprint's monospace
+ * fall back to other fonts, so the wrap there is the margins' to absorb.
+ *
+ * It is a deliberate exception to the per-spec suffix rule of `docs/testing-strategy.md`: the
+ * configuration is opened only by its id, so a duplicate left by a restarted worker is harmless.
+ */
+const SIZED_NAME = "Frontline A, sized header";
+
+/** How far a measured header must sit from the pane's third, so a drift fails by name. */
+const MARGIN = 15;
+
+/** How far the 960×540 header with its report must sit over the third (see that test). */
+const REPORT_MARGIN = 10;
+
+type Lab = BuiltLab & { judgeId: string; sizedConfigurationId: string };
+
+const test = base.extend<object, { lab: Lab }>({
   lab: [
     async ({ playwright }, use, workerInfo) => {
       const api = await playwright.request.newContext({
@@ -26,7 +50,36 @@ const test = base.extend<object, { lab: BuiltLab & { judgeId: string } }>({
       });
       expect(judge.ok(), await judge.text()).toBe(true);
       const { judge_id: judgeId } = (await judge.json()) as { judge_id: string };
-      await use({ ...lab, judgeId });
+      // An arm's configuration as the chain writes one — drafted, then published — under a name
+      // of known width, so its header is the same height on every run.
+      const created = await api.post("/api/v1/agent-configurations", {
+        data: { name: SIZED_NAME, support_identity_id: lab.identityId },
+      });
+      expect(created.ok(), await created.text()).toBe(true);
+      const sized = (await created.json()) as {
+        configuration_id: string;
+        content: Record<string, unknown>;
+      };
+      const drafted = await api.put(
+        `/api/v1/agent-configurations/${sized.configuration_id}/draft`,
+        {
+          data: {
+            payload: {
+              ...sized.content,
+              prompt:
+                "You are {{support_identity.role}} for {{shop.name}}.\n\n" +
+                "Write in the shop's tone of voice: {{shop.tone_of_voice}}.",
+            },
+          },
+        },
+      );
+      expect(drafted.ok(), await drafted.text()).toBe(true);
+      const published = await api.post(
+        `/api/v1/agent-configurations/${sized.configuration_id}/versions`,
+        { data: {} },
+      );
+      expect(published.ok(), await published.text()).toBe(true);
+      await use({ ...lab, judgeId, sizedConfigurationId: sized.configuration_id });
       await api.dispose();
     },
     // The chain is some forty writes, on a stack that may still be warming up.
@@ -143,7 +196,7 @@ async function steadyHeight(page: Page): Promise<number> {
   });
 }
 
-function hrefOf(lab: BuiltLab & { judgeId: string }, name: string): string {
+function hrefOf(lab: Lab, name: string): string {
   const found = surfaces(lab).find(([surface]) => surface === name);
   if (found === undefined) throw new Error(`no surface called ${name}`);
   return found[1];
@@ -157,7 +210,7 @@ test("at 390×844 a header taller than a third of the pane scrolls away, and a s
   await page.setViewportSize({ width: 390, height: 844 });
   const main = page.locator("main");
 
-  await page.goto(hrefOf(lab, "agent configuration editor"));
+  await page.goto(`/lab/agent-configurations/${lab.sizedConfigurationId}`);
   await expect(pageHeader(page)).toBeVisible();
   await expect.poll(() => pinning(page)).toEqual({ position: "static", clearance: "" });
   // Measured more than a third, and unpinning does not change the measurement: it stays
@@ -167,7 +220,11 @@ test("at 390×844 a header taller than a third of the pane scrolls away, and a s
     () => new Promise((settled) => requestAnimationFrame(() => requestAnimationFrame(settled))),
   );
   expect(await pinning(page)).toEqual({ position: "static", clearance: "" });
-  expect(await steadyHeight(page)).toBeGreaterThan((await box(main)).height / 3);
+  const third = (await box(main)).height / 3;
+  expect(
+    await steadyHeight(page),
+    `the header of "${SIZED_NAME}" is no longer ${MARGIN}px over the pane's third of ${third.toFixed(2)}px`,
+  ).toBeGreaterThanOrEqual(third + MARGIN);
 
   await page.goto(hrefOf(lab, "product editor"));
   await expect(pageHeader(page)).toBeVisible();
@@ -182,19 +239,28 @@ test("at 960×540 a header is held on its name and actions, and its report rides
   page,
   lab,
 }) => {
-  // A 1080p screen at 200% zoom. The agent configuration editor's header is 203 of 484px with
+  // A 1080p screen at 200% zoom. The agent configuration editor's header is 176 of 484px with
   // the lines under Publish, and within a third without them: it holds, and the pane clears
   // the whole of it, lines included.
   await page.setViewportSize({ width: 960, height: 540 });
   const main = page.locator("main");
-  await page.goto(hrefOf(lab, "agent configuration editor"));
+  await page.goto(`/lab/agent-configurations/${lab.sizedConfigurationId}`);
   await expect(pageHeader(page)).toBeVisible();
   await expect.poll(async () => (await pinning(page)).position).toBe("sticky");
+  // The report as the gate settles it, rather than the shorter "Checking the draft…" before it.
+  await expect(pageHeader(page).getByText(/identical to v1/)).toBeVisible();
 
   const third = (await box(main)).height / 3;
   const whole = (await box(pageHeader(page))).height;
-  expect(await steadyHeight(page)).toBeLessThanOrEqual(third);
-  expect(whole).toBeGreaterThan(third);
+  expect(
+    await steadyHeight(page),
+    `the header of "${SIZED_NAME}" is no longer ${MARGIN}px under the pane's third of ${third.toFixed(2)}px`,
+  ).toBeLessThanOrEqual(third - MARGIN);
+  // The report row adds at most ~15px over the third, so this asserts less.
+  expect(
+    whole,
+    `the header of "${SIZED_NAME}" with its report is no longer ${REPORT_MARGIN}px over the pane's third of ${third.toFixed(2)}px`,
+  ).toBeGreaterThanOrEqual(third + REPORT_MARGIN);
   expect(Number.parseFloat((await pinning(page)).clearance)).toBeCloseTo(whole + 8, -0.5);
 });
 
@@ -574,7 +640,7 @@ type Held = (typeof HELD)[number];
  * header — the shop's setup pages among them — a create page pins its own, and everything else —
  * the indexes, the overview, the bench, the results, the settings — scrolls it away.
  */
-function surfaces(lab: BuiltLab & { judgeId: string }): [string, string, Held | null][] {
+function surfaces(lab: Lab): [string, string, Held | null][] {
   const shop = `/shops/${lab.shopId}`;
   return [
     ["product editor", `${shop}/products/alpine-shell-jacket`, "an editor"],
