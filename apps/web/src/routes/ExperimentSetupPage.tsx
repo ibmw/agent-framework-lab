@@ -16,6 +16,7 @@ import {
   listAgentConfigurationVersions,
 } from "../api/agentConfigurations";
 import { describeApiError, LabApiError } from "../api/client";
+import { getCustomerProfileVersion } from "../api/customerProfiles";
 import { listExperiments, previewExperiment, startExperiment } from "../api/experiments";
 import { getScenarioVersion, listScenarios, listScenarioVersions } from "../api/scenarios";
 import { getTicketVersion } from "../api/tickets";
@@ -67,6 +68,32 @@ const ARM_B_HINT =
 const NAME_HINT =
   "How this run is named in History. Derived from the scenario and the arms until you edit it.";
 const SCENARIO_HINT = "Only published scenarios can run.";
+
+/**
+ * The names the chosen scenario version was published under. `resolves` is `null` until the
+ * ticket version has answered, and stays so if it fails.
+ */
+interface PinnedNames {
+  /** `null` where the scenario version could not be read. */
+  scenarioName: string | null;
+  resolves: string | null;
+}
+
+/** What an arm's pinned version says: the provider it names and the name it was published under. */
+interface ArmPinned {
+  provider: string;
+  name: string;
+}
+
+/**
+ * An answer to an arm's version read, with the choice it was read for: what the pinned version
+ * says, or `null` where the read failed.
+ */
+interface ArmRead {
+  configurationId: string;
+  version: string;
+  pinned: ArmPinned | null;
+}
 
 /**
  * One arm as the form holds it: a published configuration and the version to pin.
@@ -151,8 +178,8 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   const [scenarioVersions, setScenarioVersions] = useState<DefinitionVersionSummarySchema[] | null>(
     null,
   );
-  // What the chosen scenario version resolves against, once it has been read.
-  const [resolves, setResolves] = useState<string | null>(null);
+  // What the chosen scenario version was published as, once its reads have answered.
+  const [pinned, setPinned] = useState<PinnedNames | null>(null);
   const [seed, setSeed] = useState(String(DEFAULT_SEED));
   // Arm A and arm B, always both: arm B left empty is a one-arm run.
   const [arms, setArms] = useState<ArmDraft[]>(() => [emptyArm(), emptyArm()]);
@@ -177,11 +204,27 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
-  // The provider each arm's pinned version names, by arm, as the arm reads it. Held here
-  // rather than in the picker because Start is what it blocks.
-  // `undefined` while the arm's pinned version is being read: not yet known, which is not the
-  // same as `null`, the answer for an arm with nothing to read or whose read failed.
-  const [armProviders, setArmProviders] = useState<Record<string, string | null | undefined>>({});
+  // The last answer each arm's version read gave, by arm, with the choice it answered for: the
+  // provider the version names, which Start is blocked by, and the name the configuration was
+  // published under, which the proposal names the arm by. Held here rather than in the picker
+  // because both are the page's. Read through `armReadOf`, never directly.
+  const [armReads, setArmReads] = useState<Record<string, ArmRead>>({});
+  /**
+   * An arm's read for the choice on screen: `null` where nothing is chosen, `undefined` while
+   * it is being read — which an answer for the arm's previous choice still is, since it says
+   * nothing about this one — and the answer once it has come, `pinned: null` if it failed.
+   */
+  const armReadOf = (arm: ArmDraft): ArmRead | null | undefined => {
+    if (arm.configurationId === "" || arm.version === "") {
+      return null;
+    }
+    const read = armReads[arm.id];
+    return read !== undefined &&
+      read.configurationId === arm.configurationId &&
+      read.version === arm.version
+      ? read
+      : undefined;
+  };
   const reachability = useReachability();
   const unreachable = reachability.status === "loaded" ? reachability.unreachable : null;
   const startNoteId = useId();
@@ -235,7 +278,7 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     setScenarioId(next);
     setScenarioVersion("");
     setScenarioVersions(null);
-    setResolves(null);
+    setPinned(null);
   };
 
   const publishedScenarios = scenarios.filter(
@@ -274,42 +317,71 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
 
   const scenario = scenarios.find((entry) => entry.scenario_id === scenarioId);
 
-  // What the chosen version resolves against: the shop and ticket versions it pinned, and the
-  // customer version that ticket version pinned in turn. A read that fails says nothing.
+  // What the chosen version resolves against, every name as the pinned version was published
+  // under it: the scenario version's own name and its shop and ticket pins, the ticket version's
+  // reference and the customer version it pinned, and that customer version's display name. The
+  // listing's names are today's, which a rename moves off what the version froze, so none of
+  // them is said here — not while the reads are in flight, nor after one fails (ADR 0064).
   useEffect(() => {
-    setResolves(null);
+    setPinned(null);
     if (scenario === undefined || scenarioVersion === "") {
       return;
     }
     const controller = new AbortController();
-    const { scenario_id, ticket_id, ticket_reference, customer_display_name } = scenario;
-    getScenarioVersion(shopId, scenario_id, Number(scenarioVersion), controller.signal)
-      .then(async (pinned) => {
-        const againstTicket = `shop v${pinned.shop_version}, ticket ${ticket_reference} v${pinned.ticket_version}`;
-        try {
-          const ticket = await getTicketVersion(
-            shopId,
-            ticket_id,
-            pinned.ticket_version,
-            controller.signal,
-          );
-          setResolves(
-            `Resolves against ${againstTicket}, customer ${customer_display_name} v${ticket.customer_profile_version}.`,
-          );
-        } catch {
-          if (!controller.signal.aborted) {
-            setResolves(`Resolves against ${againstTicket}.`);
-          }
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setResolves(null);
-        }
-      });
+    // Latest read wins: an answer for a choice the operator has since left lands nowhere, even
+    // one that fails late — an abandoned customer read would otherwise say a ticket-only line.
+    const settle = (names: PinnedNames) => {
+      if (!controller.signal.aborted) {
+        setPinned(names);
+      }
+    };
+    const { scenario_id } = scenario;
+    void (async () => {
+      let version: Awaited<ReturnType<typeof getScenarioVersion>>;
+      try {
+        version = await getScenarioVersion(
+          shopId,
+          scenario_id,
+          Number(scenarioVersion),
+          controller.signal,
+        );
+      } catch {
+        // Nothing is known that the version froze: nothing is said, and nothing is waited on.
+        settle({ scenarioName: null, resolves: null });
+        return;
+      }
+      const scenarioName = version.content.name;
+      // The proposal can carry the scenario's name while the ticket is still being read.
+      settle({ scenarioName, resolves: null });
+      let ticket: Awaited<ReturnType<typeof getTicketVersion>>;
+      try {
+        ticket = await getTicketVersion(
+          shopId,
+          version.content.ticket_id,
+          version.ticket_version,
+          controller.signal,
+        );
+      } catch {
+        return; // The ticket's frozen reference is unknown, so no line names it.
+      }
+      const againstTicket = `shop v${version.shop_version}, ticket ${ticket.content.reference} v${ticket.version}`;
+      try {
+        const customer = await getCustomerProfileVersion(
+          ticket.content.customer_profile_id,
+          ticket.customer_profile_version,
+          controller.signal,
+        );
+        settle({
+          scenarioName,
+          resolves: `Resolves against ${againstTicket}, customer ${customer.content.display_name} v${customer.version}.`,
+        });
+      } catch {
+        // Every name it would say is the one its version froze; it stops before the customer.
+        settle({ scenarioName, resolves: `Resolves against ${againstTicket}.` });
+      }
+    })();
     return () => controller.abort();
   }, [shopId, scenario, scenarioVersion]);
-
   // Each configuration an arm names has its published versions read once, and an arm waiting
   // on one opens on the newest when it answers. Only an arm with no version is written: an
   // operator's choice is never replaced by a list arriving after it.
@@ -433,12 +505,22 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     return () => controller.abort();
   }, [shopId, setup]);
 
-  const configurationOf = (arm: ArmChoice) =>
-    configurations.find((configuration) => configuration.configuration_id === arm.configurationId);
-  const proposedName = proposedExperimentName(
-    scenario?.name ?? "",
-    arms.map((arm) => ({ configuration: configurationOf(arm)?.name ?? "", version: arm.version })),
-  );
+  // Every part is named as its chosen version was published: the scenario once its version has
+  // answered, and each arm once its pinned version has. A scenario whose version failed to
+  // answer is left out. A settled proposal never leaves an arm out, since it would then state a
+  // run with one arm fewer than it has: a failed arm read proposes nothing, and the operator
+  // names the run. While an arm's read is pending the proposal lacks it for that moment, and
+  // Start is busy meanwhile — a wait (ADR 0063), never a run started under that proposal.
+  const armAnswers = arms.map(armReadOf);
+  const proposedName = armAnswers.some((read) => read?.pinned === null)
+    ? ""
+    : proposedExperimentName(
+        pinned?.scenarioName ?? "",
+        arms.map((arm, position) => ({
+          configuration: armAnswers[position]?.pinned?.name ?? "",
+          version: arm.version,
+        })),
+      );
 
   // Why Start will not start: a chosen arm pins a version naming a provider this lab cannot
   // reach, which the advance would refuse with 422 and no recorded turn (ADR 0053). One
@@ -446,7 +528,7 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   // A note on this machine, never an issue: the preview's issues are the gate's, and the gate
   // answers identically wherever it is asked.
   const startBlocked = unreachableArmsNote(
-    arms.map((arm) => armProviders[arm.id] ?? null),
+    armAnswers.map((read) => read?.pinned?.provider ?? null),
     unreachable,
   );
   // A version being read is not chosen *yet*: a wait, like the gate's, rather than a refusal.
@@ -455,7 +537,11 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     ...arm,
     versionPending: arm.configurationId !== "" && armVersions[arm.configurationId] === undefined,
   }));
-  const versionsPending = scenarioVersionPending || armStates.some((arm) => arm.versionPending);
+  // Nor is the chosen scenario version's own name read yet, which the proposal waits on: a run
+  // started in that moment would be named without its scenario. A wait, not a refusal.
+  const scenarioNamePending = scenario !== undefined && scenarioVersion !== "" && pinned === null;
+  const versionsPending =
+    scenarioVersionPending || scenarioNamePending || armStates.some((arm) => arm.versionPending);
   // The gate has not answered for the setup on screen yet. Start is then a press in flight
   // rather than a refusal (ADR 0063) — unless something else already refuses it, which is said
   // meanwhile, and the gate's own errors join it when it answers.
@@ -478,8 +564,7 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   const wholeArms = arms.filter((arm) => arm.configurationId !== "" && arm.version !== "");
   const reachPending =
     wholeArms.length > 0 &&
-    (reachability.status === "loading" ||
-      wholeArms.some((arm) => armProviders[arm.id] === undefined));
+    (reachability.status === "loading" || armAnswers.some((read) => read === undefined));
   const checking = (gatePending || reachPending || versionsPending) && reasons.length === 0;
 
   const start = async (event: FormEvent) => {
@@ -558,7 +643,7 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
                     ? loading
                       ? "Loading scenarios…"
                       : "This shop has no scenario yet. Author and publish one first."
-                    : (resolves ?? undefined)
+                    : (pinned?.resolves ?? undefined)
                 }
               >
                 <div className="flex flex-wrap gap-3">
@@ -627,9 +712,7 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
                     chooseConfiguration(position, configurationId)
                   }
                   onVersion={(version) => chooseVersion(position, version)}
-                  onProvider={(provider) =>
-                    setArmProviders((current) => ({ ...current, [arm.id]: provider }))
-                  }
+                  onRead={(read) => setArmReads((current) => ({ ...current, [arm.id]: read }))}
                 />
               ))}
 
@@ -805,7 +888,7 @@ function ArmPicker({
   hint,
   onConfiguration,
   onVersion,
-  onProvider,
+  onRead,
 }: {
   position: number;
   arm: ArmDraft;
@@ -814,11 +897,8 @@ function ArmPicker({
   hint: string;
   onConfiguration: (configurationId: string) => void;
   onVersion: (version: string) => void;
-  /**
-   * The provider the pinned version names; `undefined` while it is being read; `null` where no
-   * version is chosen or the read failed.
-   */
-  onProvider: (provider: string | null | undefined) => void;
+  /** Each answer to the pinned version's read, with the choice it was read for. */
+  onRead: (read: ArmRead) => void;
 }) {
   const name = armLetter(position);
   const selected = configurations.find(
@@ -826,25 +906,35 @@ function ArmPicker({
   );
   const newest = newestVersion(versions ?? []);
 
-  // The version is what the arm runs, so the provider is read off the version rather than the
-  // draft, which may since have moved on. A failed read says nothing rather than something.
-  // Held in a ref so a parent re-rendering with a new callback does not read the version again.
-  const reportProvider = useRef(onProvider);
-  reportProvider.current = onProvider;
+  // The version is what the arm runs, so the provider and the name are read off the version
+  // rather than the draft or the listing, which may since have moved on. A failed read names
+  // no provider, and withholds the proposal, which the operator then names. Held in a ref so a parent re-rendering with a new callback
+  // does not read the version again. Only answers are reported, each with the choice it was
+  // read for: the page reads an answer for another choice as not yet read, so nothing has to
+  // be cleared when the choice moves.
+  const reportRead = useRef(onRead);
+  reportRead.current = onRead;
   useEffect(() => {
-    if (arm.configurationId === "" || arm.version === "") {
-      reportProvider.current(null);
+    const configurationId = arm.configurationId;
+    const version = arm.version;
+    if (configurationId === "" || version === "") {
       return;
     }
-    // Being read: neither reachable nor not, until the version answers.
-    reportProvider.current(undefined);
     const controller = new AbortController();
-    getAgentConfigurationVersion(arm.configurationId, Number(arm.version), controller.signal)
-      .then((published) => reportProvider.current(published.content.model.provider))
-      .catch(() => {
-        // Read and unknown: it says nothing, and holds nothing up.
+    getAgentConfigurationVersion(configurationId, Number(version), controller.signal)
+      .then((published) => {
         if (!controller.signal.aborted) {
-          reportProvider.current(null);
+          reportRead.current({
+            configurationId,
+            version,
+            pinned: { provider: published.content.model.provider, name: published.content.name },
+          });
+        }
+      })
+      .catch(() => {
+        // Read and unknown: it says nothing about the provider, and holds nothing up.
+        if (!controller.signal.aborted) {
+          reportRead.current({ configurationId, version, pinned: null });
         }
       });
     return () => controller.abort();

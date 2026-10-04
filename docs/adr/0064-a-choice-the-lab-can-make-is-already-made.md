@@ -116,7 +116,8 @@ starting* and *Recent experiments* are where they were.
   (`GET …/scenarios/{id}/versions/{v}` — `shop_version`, `ticket_version`) and the customer
   version that ticket version pinned (`GET …/tickets/{id}/versions/{v}` —
   `customer_profile_version`): "Resolves against shop v3, ticket T-204 v1, customer Maya Laurent
-  v2." A read that fails says nothing, or stops after the ticket.
+  v2." A read that fails says nothing, or stops after the ticket. (Amended 2026-10-04, below:
+  every name in it is the one its pinned version was published under.)
 - **Both arms are always on the form.** Arm B's empty option is *No second arm*, and a run with
   arm B left empty is a one-arm run, which the contract allows; *Add a second arm* is gone.
 - **The arms default by the same rule as a single choice, read over the comparison.** One
@@ -250,4 +251,61 @@ sentence.
 ## Migration
 
 None. No contract, payload or stored value changes. The two reads *Resolves against* makes were
-already served; the web gains their callers (`getScenarioVersion`, `getTicketVersion`).
+already served; the web gains their callers (`getScenarioVersion`, `getTicketVersion`). (The
+2026-10-04 amendment below adds a third, `getCustomerProfileVersion`, also already served.)
+
+## Amendment — 2026-10-04: the names are the pinned versions' own
+
+*Resolves against* took its version numbers from the pins and its names from the scenario
+listing — `ticket_reference` and `customer_display_name`, which are today's. A ticket or a
+customer renamed after the scenario was published then read under a name its pinned version
+never had, and the proposed experiment name carried the scenario's current name beside versions
+it was not published with. Each name is now read off the version it names:
+
+- **The ticket** is read as the scenario version names it (`content.ticket_id`, beside its
+  `ticket_version` pin), named by that ticket version's `content.reference`, and **the
+  customer** by the customer version that ticket version pinned — `GET
+  /customer-profiles/{id}/versions/{v}`, its `content.display_name`, the profile read through the
+  ticket version's `content.customer_profile_id`. That is one more read per choice, three in
+  all, chained; the web gains `getCustomerProfileVersion`. No backend change: the route was
+  already served.
+- **The scenario's name is pinned the same way** (`ScenarioContentSchema.name`), so the
+  proposal's scenario part is the chosen version's `content.name`, read in the call the pins
+  already came from. The Scenario select keeps the listing's name: it picks the record, not a
+  version of it.
+- **Each arm is named the same way.** The proposal's configuration parts are each arm's pinned
+  version's `content.name`, read in the call the arm already makes for its provider, so it
+  costs no read; the Agent configuration select keeps the listing's names, for the reason the
+  Scenario select does. An arm is in the proposal once its version has answered — Start already
+  waits on the read, for the provider — and an answer counts only for the configuration and
+  version it was read for, so an arm moved to another version is unnamed until that one
+  answers. **A failed arm read proposes no name at all**: a settled proposal never leaves an
+  arm out, since it would then state a run with one arm fewer than it has, so the field is
+  empty and Start's *name the experiment* refusal asks the operator for one. While an arm's
+  read is pending the proposal lacks it for that moment, and Start is busy meanwhile — a wait
+  under ADR 0063, so no run starts under that proposal.
+- **While the reads are in flight, nothing is said, and today's names never.** A listing name
+  shown first and replaced when the version answers would, for that moment, be a name the
+  version may never have had — evidence the page cannot vouch for — and a note beside it would
+  only say so. The line appears whole once the reads answer; the proposal carries the scenario
+  once its version has. **Start waits on the scenario version's read** as it waits on an arm's
+  (ADR 0063: busy, never refused), since a run started before it answers would take a proposal
+  without its scenario; once that read has answered or failed, it holds nothing up.
+- **A read that fails says nothing it cannot vouch for.** The scenario version failing says
+  nothing, and leaves the scenario out of the proposal; the ticket version failing says no line,
+  since the ticket's frozen reference is unknown; the customer version failing stops after the
+  ticket, every name in what remains being the one its version froze.
+- **Latest read wins.** The reads share one abort signal per (scenario, version) choice, and
+  nothing they answer — success or failure — is written once the choice has moved on; a new
+  choice clears what the last one said before its own reads start.
+
+Verified in `Experiments.test.tsx`, *what the experiment setup resolves against*: a scenario
+whose name, ticket and customer were all renamed after publishing reads its pinned names, in the
+line and the proposal; a configuration renamed after publishing proposed by its pinned name;
+Start busy, with no reason, while the scenario version is held after the gate has answered, and
+free once it answers, and free once it fails and the run is named; a failed arm read proposing
+no name and refused for the name alone; an arm moved to a version still being read never named
+by the version it left; nothing while the customer read is held; each of the three reads failing;
+a version switch taking the last version's line down while the next is read; and a scenario
+switch whose abandoned read answers while the next scenario's versions are still being read,
+landing nothing.

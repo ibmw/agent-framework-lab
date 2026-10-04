@@ -7,6 +7,7 @@ import type {
   ArmStandingSchema,
   ArmStateDiffSchema,
   ComparisonVariableSchema,
+  CustomerProfileVersionResponse,
   ExperimentAnnotationsResponse,
   ExperimentEvaluationResponse,
   ExperimentListResponse,
@@ -54,6 +55,7 @@ import { shellListings } from "./test/shell";
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
 const TICKET_ID = "6b0f9c1e-49d1-4c9f-8b0c-1f6d1c2f9a01";
+const PROFILE_ID = "5a1e2d3c-4b5a-4697-8a8b-9c0d1e2f3a4b";
 const ATLAS_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const BEACON_ID = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
 const EXPERIMENT_ID = "9f8e7d6c-5b4a-4392-8817-6f5e4d3c2b1a";
@@ -124,8 +126,15 @@ const SCENARIOS: ScenarioListResponse = {
   ],
 };
 
-/** One published scenario version, pinned to shop v3 and ticket v1 as the prototype's is. */
-function scenarioVersion(version: number): ScenarioVersionResponse {
+/**
+ * One published scenario version, pinned to shop v3 and ticket v1 as the prototype's is, and
+ * published under the name the listing gives it until a test renames the scenario.
+ */
+function scenarioVersion(
+  version: number,
+  name = "Wrong shipping address",
+  ticket = 1,
+): ScenarioVersionResponse {
   return {
     scenario_id: SCENARIO_ID,
     shop_id: SHOP_ID,
@@ -134,15 +143,15 @@ function scenarioVersion(version: number): ScenarioVersionResponse {
     content_fingerprint: "d".repeat(64),
     published_at: "2026-08-28T09:05:00+00:00",
     shop_version: 3,
-    ticket_version: 1,
+    ticket_version: ticket,
     templates: [],
-    // The page reads only the pins; the content is the contract's, and nothing here reads it.
-    content: {} as ScenarioVersionResponse["content"],
+    // The page reads the pins, the ticket and the name the version was published under.
+    content: { name, ticket_id: TICKET_ID } as ScenarioVersionResponse["content"],
   };
 }
 
 /** The ticket version the scenario pinned, which pins the customer at v2. */
-function ticketVersion(version: number): TicketVersionResponse {
+function ticketVersion(version: number, reference = "T-204", customer = 2): TicketVersionResponse {
   return {
     ticket_id: TICKET_ID,
     shop_id: SHOP_ID,
@@ -151,8 +160,24 @@ function ticketVersion(version: number): TicketVersionResponse {
     content_fingerprint: "e".repeat(64),
     published_at: "2026-08-28T09:00:00+00:00",
     shop_version: 3,
-    customer_profile_version: 2,
-    content: {} as TicketVersionResponse["content"],
+    customer_profile_version: customer,
+    // The reference it was published under, and the customer it pinned.
+    content: { reference, customer_profile_id: PROFILE_ID } as TicketVersionResponse["content"],
+  };
+}
+
+/** The customer version a ticket version pinned, under the display name it was published with. */
+function customerVersion(
+  version: number,
+  displayName = "Maya Laurent",
+): CustomerProfileVersionResponse {
+  return {
+    profile_id: PROFILE_ID,
+    lifecycle_state: "published",
+    version,
+    content_fingerprint: "f".repeat(64),
+    published_at: "2026-08-27T09:00:00+00:00",
+    content: { display_name: displayName } as CustomerProfileVersionResponse["content"],
   };
 }
 
@@ -901,7 +926,11 @@ function publishedVersion(
     published_at: "2026-08-28T08:00:00+00:00",
     support_identity_version: 1,
     content: {
-      name: control ? "cfg-beacon" : "cfg-atlas",
+      // Published under the name the lab lists it by, until a test renames the configuration.
+      name:
+        [...CONFIGURATIONS.configurations, CANARY].find(
+          (entry) => entry.configuration_id === configurationId,
+        )?.name ?? "cfg-atlas",
       description: "",
       framework_id: control ? "fake" : "pydantic-ai",
       architecture: "single_agent",
@@ -969,6 +998,9 @@ const server = setupServer(
   ),
   http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${TICKET_ID}/versions/:version`, ({ params }) =>
     HttpResponse.json(ticketVersion(Number(params.version))),
+  ),
+  http.get(`*/api/v1/customer-profiles/${PROFILE_ID}/versions/:version`, ({ params }) =>
+    HttpResponse.json(customerVersion(Number(params.version))),
   ),
   http.get("*/api/v1/agent-configurations", () => HttpResponse.json(CONFIGURATIONS)),
   http.get("*/api/v1/agent-configurations/:configurationId/versions", () =>
@@ -1907,7 +1939,10 @@ describe("experiment setup's defaults", () => {
     expect(within(row("Arm B")).getByRole("combobox", { name: "Agent configuration" })).toHaveValue(
       "",
     );
-    expect(screen.getByLabelText("Name")).toHaveValue("Wrong shipping address — cfg-atlas v2");
+    // The scenario's part is in the proposal once its version has answered with its name.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Name")).toHaveValue("Wrong shipping address — cfg-atlas v2"),
+    );
   });
 
   it("follows the arms with the proposed name until the operator types one", async () => {
@@ -1935,12 +1970,13 @@ describe("experiment setup's defaults", () => {
     // Emptied and left, it is handed the proposal back, which it then follows again.
     await user.clear(name);
     await user.tab();
-    expect(name).toHaveValue("Wrong shipping address — cfg-atlas v1");
+    // Each arm's name comes from its pinned version's read, so the proposal follows it there.
+    await waitFor(() => expect(name).toHaveValue("Wrong shipping address — cfg-atlas v1"));
     await user.selectOptions(
       within(row("Arm A")).getByRole("combobox", { name: "Published version" }),
       "2",
     );
-    expect(name).toHaveValue("Wrong shipping address — cfg-atlas v2");
+    await waitFor(() => expect(name).toHaveValue("Wrong shipping address — cfg-atlas v2"));
   });
 
   it("opens an arm on the newest version of a configuration whose versions are already read", async () => {
@@ -2114,7 +2150,11 @@ describe("experiment setup's defaults", () => {
       ),
       http.get(
         `*/api/v1/shops/${SHOP_ID}/scenarios/${OTHER_SCENARIO.scenario_id}/versions/:version`,
-        () => HttpResponse.json({ ...scenarioVersion(5), scenario_id: OTHER_SCENARIO.scenario_id }),
+        () =>
+          HttpResponse.json({
+            ...scenarioVersion(5, OTHER_SCENARIO.name),
+            scenario_id: OTHER_SCENARIO.scenario_id,
+          }),
       ),
       http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, async ({ request }) => {
         previewed.push((await request.json()) as (typeof previewed)[number]);
@@ -2180,6 +2220,462 @@ describe("experiment setup's defaults", () => {
     ).toHaveDisplayValue("No published version");
     // Arm A alone was never put to the gate as though it were the whole experiment.
     expect(previewed).toEqual([]);
+  });
+});
+
+/**
+ * *Resolves against* names every pinned version as it was published, never as the listing
+ * names it today (ADR 0064's amendment): a rename after publishing moves the listing, and a
+ * pinned version never had the new name.
+ */
+describe("what the experiment setup resolves against", () => {
+  function scenarioRow() {
+    return screen.getByRole("group", { name: "Scenario" });
+  }
+
+  /** A read that answers only once released, recording that it was asked. */
+  function holdable() {
+    let release: () => void = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const asked = { count: 0 };
+    return { release, released, asked };
+  }
+
+  function nameValue(): string {
+    return (screen.getByLabelText("Name") as HTMLInputElement).value;
+  }
+
+  const NOW = 30;
+  async function settle() {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, NOW));
+    });
+  }
+
+  it("names the ticket, the customer and the scenario as their pinned versions were published, after all three were renamed", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({
+          scenarios: [
+            {
+              ...SCENARIOS.scenarios[0],
+              name: "Wrong address, reworded",
+              ticket_reference: "T-999",
+              ticket_subject: "Address concern, reworded",
+              customer_display_name: "Maya Dupont",
+            },
+          ],
+        } satisfies ScenarioListResponse),
+      ),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    expect(
+      await within(scenarioRow()).findByText(
+        "Resolves against shop v3, ticket T-204 v1, customer Maya Laurent v2.",
+      ),
+    ).toBeVisible();
+    expect(within(scenarioRow()).queryByText(/T-999|Maya Dupont/)).toBeNull();
+    // The select names the scenario as it is today, since it picks the record; the proposal
+    // names the version it runs, as that version was published.
+    expect(
+      within(scenarioRow()).getByRole("option", { name: "Wrong address, reworded" }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Name")).toHaveValue(
+        "Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2",
+      ),
+    );
+  });
+
+  it("keeps Start waiting until the scenario version's own name has answered, even once the gate has", async () => {
+    const scenarioRead = holdable();
+    let judgedCount = 0;
+    server.use(
+      http.get(
+        `*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/versions/:version`,
+        async ({ params }) => {
+          scenarioRead.asked.count += 1;
+          await scenarioRead.released;
+          return HttpResponse.json(scenarioVersion(Number(params.version)));
+        },
+      ),
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, () => {
+        judgedCount += 1;
+        return HttpResponse.json(PREVIEW);
+      }),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await waitFor(() => expect(scenarioRead.asked.count).toBe(1));
+    await waitFor(() => expect(judgedCount).toBeGreaterThanOrEqual(1));
+    await reachabilityRead();
+    await settle();
+    // The gate has answered and the arms are read: only the scenario's name is outstanding,
+    // and a run started now would be named without it. A wait, never a refusal (ADR 0063).
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    expect(nameValue()).toBe("cfg-atlas v2 vs cfg-beacon v2");
+    expect(startReasons(start)).toEqual([]);
+    expectBusy(start);
+
+    scenarioRead.release();
+    await waitFor(() => expectNotRefused(start));
+    // The field follows the proposal a commit after it moves (DerivedIdField's effect).
+    await waitFor(() =>
+      expect(nameValue()).toBe("Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2"),
+    );
+  });
+
+  it("names each arm as its pinned version was published, after the configuration was renamed", async () => {
+    server.use(
+      http.get("*/api/v1/agent-configurations", () =>
+        HttpResponse.json({
+          configurations: CONFIGURATIONS.configurations.map((entry) =>
+            entry.configuration_id === ATLAS_ID ? { ...entry, name: "cfg-atlas-renamed" } : entry,
+          ),
+        } satisfies AgentConfigurationListResponse),
+      ),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    const armA = screen.getByRole("group", { name: "Arm A" });
+    // The select picks the record, so it names it as the lab does today.
+    await waitFor(() =>
+      expect(within(armA).getByRole("combobox", { name: "Agent configuration" })).toHaveValue(
+        ATLAS_ID,
+      ),
+    );
+    expect(within(armA).getByRole("option", { name: "cfg-atlas-renamed" })).toBeInTheDocument();
+    // The proposal names the version the arm runs, under the name it was published with.
+    await waitFor(() =>
+      expect(nameValue()).toBe("Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2"),
+    );
+    await settle();
+    expect(nameValue()).not.toMatch(/renamed/);
+  });
+
+  it("says nothing while the pinned versions are being read, and today's names never", async () => {
+    const customer = holdable();
+    server.use(
+      http.get(`*/api/v1/customer-profiles/${PROFILE_ID}/versions/:version`, async ({ params }) => {
+        customer.asked.count += 1;
+        await customer.released;
+        return HttpResponse.json(customerVersion(Number(params.version)));
+      }),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await waitFor(() => expect(customer.asked.count).toBe(1));
+    await settle();
+    expect(within(scenarioRow()).queryByText(/Resolves against/)).toBeNull();
+    expect(within(scenarioRow()).queryByText(/T-204|Maya Laurent/)).toBeNull();
+
+    customer.release();
+    expect(
+      await within(scenarioRow()).findByText(
+        "Resolves against shop v3, ticket T-204 v1, customer Maya Laurent v2.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("stops before the customer when the customer version cannot be read", async () => {
+    server.use(
+      http.get(`*/api/v1/customer-profiles/${PROFILE_ID}/versions/:version`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "The lab could not complete it.", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    expect(
+      await within(scenarioRow()).findByText("Resolves against shop v3, ticket T-204 v1."),
+    ).toBeVisible();
+    expect(within(scenarioRow()).queryByText(/customer/)).toBeNull();
+  });
+
+  it("says nothing when the ticket version cannot be read, and still proposes the pinned scenario's name", async () => {
+    server.use(
+      // Renamed since publishing, so only the pinned name can be the proposal's.
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({
+          scenarios: [{ ...SCENARIOS.scenarios[0], name: "Wrong address, reworded" }],
+        } satisfies ScenarioListResponse),
+      ),
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${TICKET_ID}/versions/:version`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "The lab could not complete it.", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Name")).toHaveValue(
+        "Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2",
+      ),
+    );
+    await settle();
+    expect(within(scenarioRow()).queryByText(/Resolves against/)).toBeNull();
+  });
+
+  it("leaves the scenario out of the proposal when its version cannot be read, and holds Start up no longer", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/versions/:version`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "The lab could not complete it.", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Name")).toHaveValue("cfg-atlas v2 vs cfg-beacon v2"),
+    );
+    await settle();
+    expect(within(scenarioRow()).queryByText(/Resolves against/)).toBeNull();
+    expect(nameValue()).not.toMatch(/Wrong shipping address/);
+
+    // The failure is an answer: once the run is named, nothing is left to wait on.
+    await nameAs(user, "Named by hand");
+    await reachabilityRead();
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expectNotRefused(start));
+    expect(startReasons(start)).toEqual([]);
+  });
+
+  it("proposes no name when an arm's pinned version cannot be read, rather than a run with one arm fewer", async () => {
+    server.use(
+      http.get(`*/api/v1/agent-configurations/${ATLAS_ID}/versions/:version`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "The lab could not complete it.", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("group", { name: "Arm B" })).getByRole("combobox", {
+          name: "Published version",
+        }),
+      ).toHaveValue("2"),
+    );
+    await reachabilityRead();
+    await settle();
+    // Both arms run; "Wrong shipping address — cfg-beacon v2" would say one does.
+    expect(nameValue()).toBe("");
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start)).toEqual([NO_NAME]));
+    expectRefused(start, NO_NAME);
+  });
+
+  it("never names an arm by the version it has moved off while the new one is read", async () => {
+    const user = userEvent.setup();
+    const older = holdable();
+    server.use(
+      // cfg-atlas v1 was published as cfg-atlas-old, and is still being read when chosen.
+      http.get(
+        "*/api/v1/agent-configurations/:configurationId/versions/:version",
+        async ({ params }) => {
+          versionReads += 1;
+          const configurationId = String(params.configurationId);
+          const version = Number(params.version);
+          const published = publishedVersion(configurationId, version);
+          if (configurationId !== ATLAS_ID || version !== 1) {
+            return HttpResponse.json(published);
+          }
+          older.asked.count += 1;
+          await older.released;
+          return HttpResponse.json({
+            ...published,
+            content: { ...published.content, name: "cfg-atlas-old" },
+          });
+        },
+      ),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await waitFor(() =>
+      expect(nameValue()).toBe("Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2"),
+    );
+
+    const armA = screen.getByRole("group", { name: "Arm A" });
+    await user.selectOptions(
+      within(armA).getByRole("combobox", { name: "Published version" }),
+      "1",
+    );
+    await waitFor(() => expect(older.asked.count).toBe(1));
+    await settle();
+    // Arm A's v2 answer says nothing about v1: the arm is being read, so it is not named.
+    expect(nameValue()).not.toMatch(/cfg-atlas v1/);
+    expectBusy(screen.getByRole("button", { name: "Start experiment" }));
+
+    older.release();
+    await waitFor(() =>
+      expect(nameValue()).toBe("Wrong shipping address — cfg-atlas-old v1 vs cfg-beacon v2"),
+    );
+  });
+
+  it("takes the names of one version down as soon as another version of the scenario is chosen", async () => {
+    const user = userEvent.setup();
+    const older = holdable();
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({
+          scenarios: [
+            { ...SCENARIOS.scenarios[0], latest_published_version: 2, published_version_count: 2 },
+          ],
+        } satisfies ScenarioListResponse),
+      ),
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/versions`, () =>
+        HttpResponse.json({
+          versions: [1, 2].map((version) => ({
+            version,
+            content_fingerprint: "d".repeat(64),
+            published_at: "2026-08-28T09:05:00+00:00",
+          })),
+        } satisfies ScenarioVersionListResponse),
+      ),
+      // v2 was published against ticket v2, which pinned the customer at v3; v1 against v1,
+      // and v1 is still being read when it is chosen.
+      http.get(
+        `*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/versions/:version`,
+        async ({ params }) => {
+          if (Number(params.version) === 2) {
+            return HttpResponse.json(scenarioVersion(2, "Wrong shipping address", 2));
+          }
+          older.asked.count += 1;
+          await older.released;
+          return HttpResponse.json(scenarioVersion(Number(params.version)));
+        },
+      ),
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${TICKET_ID}/versions/:version`, ({ params }) =>
+        HttpResponse.json(
+          Number(params.version) === 2
+            ? ticketVersion(2, "T-310", 3)
+            : ticketVersion(Number(params.version)),
+        ),
+      ),
+      http.get(`*/api/v1/customer-profiles/${PROFILE_ID}/versions/:version`, ({ params }) => {
+        const version = Number(params.version);
+        return HttpResponse.json(
+          customerVersion(version, version === 3 ? "Noor Haddad" : "Maya Laurent"),
+        );
+      }),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    expect(
+      await within(scenarioRow()).findByText(
+        "Resolves against shop v3, ticket T-310 v2, customer Noor Haddad v3.",
+      ),
+    ).toBeVisible();
+
+    await user.selectOptions(
+      within(scenarioRow()).getByRole("combobox", { name: "Published version" }),
+      "1",
+    );
+    await waitFor(() => expect(older.asked.count).toBe(1));
+    expect(within(scenarioRow()).queryByText(/Resolves against/)).toBeNull();
+
+    older.release();
+    expect(
+      await within(scenarioRow()).findByText(
+        "Resolves against shop v3, ticket T-204 v1, customer Maya Laurent v2.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("never lets the names of a scenario it has moved off land, while the next one's are read", async () => {
+    const user = userEvent.setup();
+    const first = holdable();
+    const next = holdable();
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({ scenarios: [...SCENARIOS.scenarios, OTHER_SCENARIO] }),
+      ),
+      // The next scenario's versions are still being read when the first one's answer comes.
+      http.get(
+        `*/api/v1/shops/${SHOP_ID}/scenarios/${OTHER_SCENARIO.scenario_id}/versions`,
+        async () => {
+          next.asked.count += 1;
+          await next.released;
+          return HttpResponse.json(SCENARIO_VERSIONS);
+        },
+      ),
+      // The next scenario was published against ticket v2, which pinned the customer at v3.
+      http.get(
+        `*/api/v1/shops/${SHOP_ID}/scenarios/${OTHER_SCENARIO.scenario_id}/versions/:version`,
+        ({ params }) =>
+          HttpResponse.json({
+            ...scenarioVersion(Number(params.version), "Damaged on arrival", 2),
+            scenario_id: OTHER_SCENARIO.scenario_id,
+          }),
+      ),
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${TICKET_ID}/versions/:version`, ({ params }) =>
+        HttpResponse.json(
+          Number(params.version) === 2
+            ? ticketVersion(2, "T-310", 3)
+            : ticketVersion(Number(params.version)),
+        ),
+      ),
+      // The first scenario's customer read is held; the next one's answers at once.
+      http.get(`*/api/v1/customer-profiles/${PROFILE_ID}/versions/:version`, async ({ params }) => {
+        const version = Number(params.version);
+        if (version !== 3) {
+          first.asked.count += 1;
+          await first.released;
+        }
+        return HttpResponse.json(
+          customerVersion(version, version === 3 ? "Noor Haddad" : "Maya Laurent"),
+        );
+      }),
+    );
+    renderSetup();
+
+    const scenario = await screen.findByRole("combobox", { name: "Scenario" });
+    await screen.findByRole("option", { name: "Damaged on arrival" });
+    await user.selectOptions(scenario, "Wrong shipping address");
+    await waitFor(() => expect(first.asked.count).toBe(1));
+
+    await user.selectOptions(scenario, "Damaged on arrival");
+    await waitFor(() => expect(next.asked.count).toBe(1));
+    // Moving off aborted the first scenario's held customer read, so it has already failed on
+    // the page's side — the late failure an unguarded page would turn into a ticket-only line,
+    // landing while the next scenario's versions are still being read. Releasing the handler
+    // only lets the server's side finish; nothing reaches the page from it.
+    first.release();
+    await settle();
+    expect(within(scenarioRow()).queryByText(/Resolves against/)).toBeNull();
+    expect(nameValue()).not.toMatch(/Wrong shipping address/);
+
+    next.release();
+    expect(
+      await within(scenarioRow()).findByText(
+        "Resolves against shop v3, ticket T-310 v2, customer Noor Haddad v3.",
+      ),
+    ).toBeVisible();
+    await settle();
+    expect(within(scenarioRow()).queryByText(/T-204|Maya Laurent/)).toBeNull();
+    expect(nameValue()).toMatch(/^Damaged on arrival — /);
   });
 });
 

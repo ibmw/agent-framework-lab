@@ -112,6 +112,17 @@ export async function listCustomerProfileVersions(
   );
 }
 
+/** One immutable published version: what the profile was when that version was frozen. */
+export async function getCustomerProfileVersion(
+  profileId: string,
+  version: number,
+  signal?: AbortSignal,
+): Promise<CustomerProfileVersionResponse> {
+  return read<CustomerProfileVersionResponse>(
+    await fetch(profilePath(profileId, `/versions/${version}`), { signal }),
+  );
+}
+
 export async function listCustomerProfileShops(
   profileId: string,
   signal?: AbortSignal,
