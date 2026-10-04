@@ -418,70 +418,82 @@ export function ScenarioEditorPage() {
               </>
             }
           >
-            {state.status === "loading" ? (
-              <p className="text-[13px] text-admin-muted">Loading this shop's documents…</p>
-            ) : resources === null ? (
-              <p className="text-[13px] text-admin-muted">
-                This shop's documents could not be loaded.
-              </p>
-            ) : resources.documents.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">
-                This shop configures no policies, guidelines, or FAQ entries yet.
-              </p>
-            ) : (
-              <ul className="grid gap-2">
-                {resources.documents.map((document) => {
-                  const key = documentKey(document);
-                  const listed = content.context_documents.some(
-                    (entry) => documentKey(entry) === key,
-                  );
-                  const reading = readers.get(key) ?? [];
-                  return (
-                    <li
-                      key={document.reference_value}
-                      className="flex flex-wrap items-center gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-2.5 text-[13px]"
-                    >
-                      <label className="flex items-center gap-2 font-semibold">
-                        <input
-                          type="checkbox"
-                          checked={listed}
-                          // A native control keeps `disabled` at the cap (ADR 0063), with the
-                          // lab's sentence in `title` and in the line its description names.
-                          disabled={!listed && documentsFull}
-                          title={!listed && documentsFull ? CONTEXT_DOCUMENTS_CAP_RULE : undefined}
-                          aria-describedby={!listed && documentsFull ? documentsCapId : undefined}
-                          onChange={() =>
-                            edit(
-                              toggleContextDocument(content, {
-                                kind: document.kind,
-                                document_id: document.document_id,
-                              }),
-                            )
-                          }
-                        />
-                        {document.title}
-                      </label>
-                      <span className="text-admin-muted">
-                        {documentCollectionLabel(document.kind)} · read via{" "}
-                        <code className="font-mono text-[11.5px]">
-                          {documentToolName(document.kind)}
-                        </code>
-                      </span>
-                      {reading.length > 0 ? (
-                        <span className="ml-auto rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
-                          read-check → objective {reading.join(", ")}
-                        </span>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            {documentsFull ? (
-              <p id={documentsCapId} className="text-xs text-admin-muted">
-                {CONTEXT_DOCUMENTS_CAP_RULE}
-              </p>
-            ) : null}
+            {/* The prototype draws no context documents card; the row's name is the card's own
+                verb, each box saying whether its document is listed, as *Enabled* does for a
+                tool. The boxes keep the names their labels give them, which the specs check
+                them by (rule 5). */}
+            <FieldRows>
+              <FieldGroup label="Listed">
+                {state.status === "loading" ? (
+                  <p className="text-[13px] text-admin-muted">Loading this shop's documents…</p>
+                ) : resources === null ? (
+                  <p className="text-[13px] text-admin-muted">
+                    This shop's documents could not be loaded.
+                  </p>
+                ) : resources.documents.length === 0 ? (
+                  <p className="text-[13px] text-admin-muted">
+                    This shop configures no policies, guidelines, or FAQ entries yet.
+                  </p>
+                ) : (
+                  <ul className="grid gap-2">
+                    {resources.documents.map((document) => {
+                      const key = documentKey(document);
+                      const listed = content.context_documents.some(
+                        (entry) => documentKey(entry) === key,
+                      );
+                      const reading = readers.get(key) ?? [];
+                      return (
+                        <li
+                          key={document.reference_value}
+                          className="flex flex-wrap items-center gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-2.5 text-[13px]"
+                        >
+                          <label className="flex items-center gap-2 font-semibold">
+                            <input
+                              type="checkbox"
+                              checked={listed}
+                              // A native control keeps `disabled` at the cap (ADR 0063), with the
+                              // lab's sentence in `title` and in the line its description names.
+                              disabled={!listed && documentsFull}
+                              title={
+                                !listed && documentsFull ? CONTEXT_DOCUMENTS_CAP_RULE : undefined
+                              }
+                              aria-describedby={
+                                !listed && documentsFull ? documentsCapId : undefined
+                              }
+                              onChange={() =>
+                                edit(
+                                  toggleContextDocument(content, {
+                                    kind: document.kind,
+                                    document_id: document.document_id,
+                                  }),
+                                )
+                              }
+                            />
+                            {document.title}
+                          </label>
+                          <span className="text-admin-muted">
+                            {documentCollectionLabel(document.kind)} · read via{" "}
+                            <code className="font-mono text-[11.5px]">
+                              {documentToolName(document.kind)}
+                            </code>
+                          </span>
+                          {reading.length > 0 ? (
+                            <span className="ml-auto rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
+                              read-check → objective {reading.join(", ")}
+                            </span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {documentsFull ? (
+                  <p id={documentsCapId} className="text-xs text-admin-muted">
+                    {CONTEXT_DOCUMENTS_CAP_RULE}
+                  </p>
+                ) : null}
+              </FieldGroup>
+            </FieldRows>
           </Card>
 
           <Card
@@ -690,14 +702,20 @@ export function ScenarioEditorPage() {
               </>
             }
           >
-            <textarea
-              maxLength={TEXT_MAX_LENGTH}
-              aria-label="Hidden facts"
-              className={`${textAreaClasses} w-full`}
-              value={content.hidden_facts}
-              placeholder="What the customer knows, will confirm if asked, and never volunteers."
-              onChange={(event) => edit({ ...content, hidden_facts: event.target.value })}
-            />
+            {/* The prototype's *Facts* row is a list of facts with an add form
+                (`Workspace.dc.html` :3067–3085); the draft holds one free text, so the row is one
+                wide textarea, named "Hidden facts", the name the specs fill it by (rule 5). */}
+            <FieldRows>
+              <Field label="Hidden facts" wide>
+                <textarea
+                  maxLength={TEXT_MAX_LENGTH}
+                  className={`${textAreaClasses} w-full`}
+                  value={content.hidden_facts}
+                  placeholder="What the customer knows, will confirm if asked, and never volunteers."
+                  onChange={(event) => edit({ ...content, hidden_facts: event.target.value })}
+                />
+              </Field>
+            </FieldRows>
           </Card>
 
           <Card

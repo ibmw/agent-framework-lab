@@ -21,6 +21,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { CHIP_LABEL_MAX_LENGTH, hiddenFactsTooLongRule, TEXT_MAX_LENGTH } from "./lib/fieldRules";
 import { TOURS } from "./lib/tours";
+import { fieldRowWideControlClasses } from "./lib/ui";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
 import { expectPublicationPill, indexCard } from "./test/indexes";
@@ -31,7 +32,7 @@ import {
   expectRefused,
   submitWithoutPressing,
 } from "./test/refused";
-import { expectEditorOnRows, expectFieldRow } from "./test/rows";
+import { expectEditorOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1745,8 +1746,9 @@ describe("the scenario editor's side panel", () => {
 });
 
 /**
- * The scenario editor's *Built on* and *Completion* on the reference pages' rows. The bound
- * blocks' fields are list rows, and stay where they are.
+ * The scenario editor's cards on the reference pages' rows: *Built on*, *Context documents*,
+ * *Hidden facts* and *Completion*. The bound blocks' fields are list rows, and stay where they
+ * are.
  */
 describe("the scenario editor's rows", () => {
   it("draws Built on as the name and the three things it is read against, each on a row", async () => {
@@ -1783,7 +1785,48 @@ describe("the scenario editor's rows", () => {
     }
   });
 
-  it("draws every field of every card in its main column on a row that names it, save two", async () => {
+  it("draws the context documents as the Listed group row, each box keeping its document's name", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    const documents = await screen.findByRole("region", { name: "Context documents" });
+
+    const listed = within(documents).getByRole("group", { name: "Listed" });
+    expectGroupRow(listed, "Listed");
+    // Reached the way the specs reach a document: by the title its wrapping label gives it.
+    const policy = await within(listed).findByRole("checkbox", { name: "Address-change policy" });
+    const escalation = within(listed).getByRole("checkbox", { name: "Escalation" });
+    expect(within(listed).getAllByRole("checkbox")).toEqual([policy, escalation]);
+  });
+
+  it("says inside the Listed row that the shop holds no documents", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/resources`, () =>
+        HttpResponse.json({ ...RESOURCES, documents: [] }),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    const documents = await screen.findByRole("region", { name: "Context documents" });
+
+    const listed = within(documents).getByRole("group", { name: "Listed" });
+    expect(
+      await within(listed).findByText(
+        "This shop configures no policies, guidelines, or FAQ entries yet.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("asks for the hidden facts on a wide row named Hidden facts by its visible label", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    const hidden = await screen.findByRole("region", { name: "Hidden facts — operator only" });
+
+    const facts = within(hidden).getByLabelText("Hidden facts");
+    expect(facts.tagName).toBe("TEXTAREA");
+    expect(facts).not.toHaveAttribute("aria-label");
+    expect(facts).toHaveAccessibleName("Hidden facts");
+    expectFieldRow(facts, "Hidden facts");
+    expect(facts.parentElement).toHaveClass(fieldRowWideControlClasses, { exact: true });
+  });
+
+  it("draws every field of every card in its main column on a row that names it", async () => {
     renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
     const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
     await waitFor(() => expect(screen.getByLabelText("Ticket")).toHaveTextContent("T-204"));
@@ -1791,18 +1834,11 @@ describe("the scenario editor's rows", () => {
       "checkbox",
     );
 
-    // Enumerated, so a card added to the column is swept too. The two left out are off the
-    // rows and owned by no slice yet (`docs/design-direction.md`, *Every editor section is on
-    // rows*): the context documents' checkbox list and the hidden facts' bare textarea.
-    expect(
-      expectEditorOnRows(panel, {
-        "Context documents": (card) => [card.querySelector("ul") as HTMLElement],
-        "Hidden facts — operator only": (card) => [within(card).getByLabelText("Hidden facts")],
-      }),
-    ).toEqual({
+    // Enumerated, so a card added to the column is swept too, and nothing is excepted.
+    expect(expectEditorOnRows(panel)).toEqual({
       "Built on": 4,
-      "Context documents": 0,
-      "Hidden facts — operator only": 0,
+      "Context documents": 2,
+      "Hidden facts — operator only": 1,
       Objectives: 0,
       Mutations: 0,
       Completion: 2,

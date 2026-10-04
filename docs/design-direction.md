@@ -91,6 +91,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | The far editors' cards | the agent editor grouped as Runtime, Identity and Tools (:407, :442, :452), and the judge's Provider and Model in the card that holds its name (:503–518) | the codebase's cards — the agent's Identity, System prompt, Tone of voice, Tool bindings and LLM and runtime; the judge's Rubric, Model and Evidence — with their fields on rows | only the rows changed: *LLM and runtime*, *Tool bindings*, *Tone of voice* and the judge's *Model* are regions the Playwright journeys reach their fields by (rule 5) |
 | Hints on those editors' rows | one per row, as on every row of the prototype | the rules the editors already stated, moved under their labels — the provider, model and temperature, the tone override, the statement, the tone-of-voice note on the identity's Remit, the judge's zero temperature, the source's resolution — and no hint on the rest | a row carries a hint only once it is checked against the code that makes it true, and several of the prototype's are its own lab's. The prototype draws the identity's note under the Remit control (:1808), as the create page does beneath a Remit hint of its own; the editor's Remit has no other rule, so the note is its hint |
 | The *Enabled* and *Shown to the judge* rows | the enabled tools as pine chips under "Disabling a tool removes it from the agent entirely — different from a permission refusal, which the agent has to handle." (:452–466); the evidence as ✓ cards under "The record is anonymised …" (:537–550) | each a `FieldGroup` row of the native checkboxes the cards held, every box keeping the name its wrapping label gives it, and no hint | the prototype's tool hint is its own lab's — this gate refuses a binding the identity lacks the permission for at publication, as the card's line says — and that the judge's record is anonymised is the *Anonymity* card's to say; the boxes are the names the specs check them by (rule 5) |
+| The scenario's *Listed* and *Hidden facts* rows | no context documents card; hidden facts as a *Facts* row of one-line facts with an *Add fact* form (:3067–3085) | *Listed*, a `FieldGroup` row of the shop's documents as native checkboxes, each named by its title; *Hidden facts*, one `wide` `Field` row holding a textarea, under its label where the prototype draws the control beside it, and without the prototype's hint that an unreachable fact is refused at publication | the draft holds one free-text `hidden_facts`, not a list, so the textarea takes the row's width; *Hidden facts* is the name the specs fill it by (rule 5); the gate holds no such refusal — it only warns when no hidden facts are recorded (`scenario_without_hidden_facts`, `domain/scenario.py`) — so the hint would be untrue; *Listed* is the card's own verb, as *Enabled* is the agent's |
 | The scenario's *Built on* rows | a Ticket select (:3055) under "Building a scenario freezes the ticket at its current version, so the opening message can never drift."; Customer under "Resolved through the ticket, and pinned at the version the scenario published against." (:3058); Shop version under "The scenario reads this exact version. Publishing the shop again does not move it." (:3059) | Ticket, Customer and Shop version read-only, the ticket "— published at vN" or "— not published yet"; no hint on Ticket or Customer, and on Shop version "The shop's newest published version, which is what the scenario resolves against today." | the resolution reads the ticket's and the shop's latest published versions on every read (`ScenarioService.resolve`, `application/scenarios.py`), so a new publish of either moves them and none of the three pinning claims is true here — the Customer hint's "Resolved through the ticket" is, and the row reads the customer that way; the Ticket row is read-only because the scenario never changes *which* ticket it is built on — the create page chooses it, and the draft carries its ID |
 | Page title | 22px bound name, 24px fixed label | one `PageHeader` at 24px, and `CreatePage`'s own header at the same size | one size for the workspace, no variant yet; rule 3 |
 | Card title | sans on note cards, Georgia on table and section cards | one `Card`, Georgia 17px | same |
@@ -446,15 +447,19 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   error the draft still saves with is the row's second line in `Field`'s `finding` tone —
   `GateFindingLine`'s weight, polite, marking nothing invalid on the control's behalf. A set of
   checkboxes is a `FieldGroup` row — the agent's *Enabled* tool bindings, the judge's *Shown to
-  the judge* evidence — and the one control a card is built around is a `Field` row with
-  `wide`, its control under its label at the row's whole width: the system prompt's *Prompt
-  template*, the name the specs fill it by, and under it the *Resolved prompt* it shows, an
-  `<output>` in `readOnlyTextClasses`. On the agent, judge, block, support identity and
-  scenario editors a sweep of the main column's enumerated cards (`expectEditorOnRows`) holds
-  that every field and every shown value stands on a row that names it, add forms aside. Two
-  exceptions stand, found by that sweep and owned by no slice yet, both on the scenario
-  editor: *Context documents*, a bare checkbox list, and *Hidden facts*, a bare textarea named
-  by its `aria-label`, which the specs fill it by.
+  the judge* evidence, the scenario's *Listed* context documents — and the one control a card
+  is built around is a `Field` row with `wide`, its control under its label at the row's whole
+  width: the system prompt's *Prompt template*, the name the specs fill it by, and under it the
+  *Resolved prompt* it shows, an `<output>` in `readOnlyTextClasses`; and the scenario's
+  *Hidden facts*, named by that visible label, which the specs fill it by. The rule holds on
+  the editors a sweep covers — agent, judge, blocks, support identity and scenario: a sweep of
+  the main column's enumerated cards (`expectEditorOnRows`) holds that every field and every
+  shown value stands on a row that names it, add forms aside, with one exception, the support
+  identity's *Conditions*, the self-labelling list the rule keeps under its own legend. No
+  sweep covers the other editors, and five of their sections are known to stand off the rows,
+  owned by no slice yet: the ticket's *Linked orders* and *Suggested documents*, the
+  customer's lone *Opted in to marketing* checkbox, the order's *Shipping fee*, named by its
+  `aria-label`, and the cell editors of the product's variants table.
 - **A number field says what it accepts** and refuses at the save what a pattern cannot. A
   closed set of five is five named radios.
 - **A create form asks for what constrains the work that follows** and names where the rest
