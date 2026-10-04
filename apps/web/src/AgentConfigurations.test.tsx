@@ -1535,20 +1535,29 @@ describe("the agent configuration editor's rows", () => {
     expect(await within(shown).findByText("shop.name: Northstar Outfitters")).toBeVisible();
   });
 
-  it("asks for the tool bindings as the Enabled group row, each binding named as before", async () => {
+  it("asks for the tool bindings as the Enabled group row, each box named by its tool and described by the rest", async () => {
     const user = userEvent.setup();
     renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
     const bindings = await screen.findByRole("region", { name: /Tool bindings/ });
 
     const enabled = within(bindings).getByRole("group", { name: "Enabled" });
     expectGroupRow(enabled, "Enabled");
-    // Reached the way the specs reach a binding: by the tool's name at the front of the name
-    // its wrapping label gives it, with what the identity lacks for it after.
-    const read = await within(enabled).findByRole("checkbox", { name: /^orders\.read_order/ });
-    const write = await within(enabled).findByRole("checkbox", {
-      name: /^orders\.propose_address_change.*needs Change shipping address/,
-    });
-    expect(within(enabled).getAllByRole("checkbox")).toEqual([read, write]);
+    // Each binding is named by its tool alone — what the specs reach it by — and its effect,
+    // what the identity lacks for it and what it does are its description, in that order.
+    // Swept over the resources, so every tool the editor lists is held to it.
+    const boxes = await within(enabled).findAllByRole("checkbox");
+    const lacks: Record<string, string> = {
+      "orders.propose_address_change": "needs Change shipping address",
+    };
+    expect(boxes).toHaveLength(RESOURCES.tools.length);
+    for (const [index, tool] of RESOURCES.tools.entries()) {
+      const box = boxes[index];
+      expect(box).toHaveAccessibleName(tool.name);
+      expect(box).toHaveAccessibleDescription(
+        [tool.effect, lacks[tool.name], tool.summary].filter(Boolean).join(" "),
+      );
+    }
+    const [read, write] = boxes;
     expect(read).toBeChecked();
     await user.click(write);
     expect(write).toBeChecked();

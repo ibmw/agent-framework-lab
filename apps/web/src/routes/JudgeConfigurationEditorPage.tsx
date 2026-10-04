@@ -94,6 +94,7 @@ export function JudgeConfigurationEditorPage() {
   const { listings } = useLabWorkspace();
   const publishReasonsId = useId();
   const rubricRuleId = useId();
+  const evidenceId = useId();
   const editor = useDefinitionEditor(judgeId, CLIENT, {
     label: "The judge draft has unsaved changes.",
     // The library index prints the row this editor is changing (ADR 0056).
@@ -414,20 +415,29 @@ export function JudgeConfigurationEditorPage() {
               <FieldGroup label="Shown to the judge">
                 <ul className="grid gap-2">
                   {(resources?.evidence ?? []).map((scope) => (
+                    // The box is named by its scope alone, which is what the specs reach it by
+                    // (rule 5); what the scope shows the judge is its description.
                     <li key={scope}>
                       <label className="flex items-start gap-2 text-[13px] text-admin-ink-soft">
                         <input
                           type="checkbox"
                           className="mt-1"
                           checked={content.evidence.includes(scope)}
+                          aria-labelledby={`${evidenceId}-${scope}-name`}
+                          aria-describedby={`${evidenceId}-${scope}-explanation`}
                           onChange={() => toggleScope(scope)}
                         />
                         <span>
-                          <span className="font-semibold text-lab-ink">
+                          <span
+                            id={`${evidenceId}-${scope}-name`}
+                            className="font-semibold text-lab-ink"
+                          >
                             {JUDGE_EVIDENCE_SCOPE[scope].label}
                           </span>
                           <br />
-                          {JUDGE_EVIDENCE_SCOPE[scope].explanation}
+                          <span id={`${evidenceId}-${scope}-explanation`}>
+                            {JUDGE_EVIDENCE_SCOPE[scope].explanation}
+                          </span>
                         </span>
                       </label>
                     </li>

@@ -1279,14 +1279,14 @@ describe("the judge editor's rows", () => {
     expect(expectEditorOnRows(panel)).toEqual({ Rubric: 3, Model: 3, Evidence: 4 });
   });
 
-  it("asks for the evidence as the Shown to the judge group row, each scope named as before", async () => {
+  it("asks for the evidence as the Shown to the judge group row, each box named by its scope and described by what it shows", async () => {
     renderAt(`/lab/judges/${JUDGE_ID}`);
     const evidence = await screen.findByRole("region", { name: "Evidence" });
 
     const shown = within(evidence).getByRole("group", { name: "Shown to the judge" });
     expectGroupRow(shown, "Shown to the judge");
-    // Each box is reached as the tests above reach one: by its scope's label at the front of the
-    // name its wrapping label gives it, what that scope puts in front of the judge after.
+    // Each box is named by its scope's label alone — what the specs reach it by — and what
+    // that scope puts in front of the judge is its description.
     const boxes = await within(shown).findAllByRole("checkbox");
     const scopes: JudgeEvidenceScope[] = [
       "customer_turns",
@@ -1294,15 +1294,13 @@ describe("the judge editor's rows", () => {
       "tool_calls",
       "state_changes",
     ];
-    expect(boxes).toEqual(
-      scopes.map((scope) => {
-        const { label, explanation = "" } = JUDGE_EVIDENCE_SCOPE[scope];
-        expect(explanation, `${scope} says what it shows the judge`).not.toBe("");
-        return within(shown).getByRole("checkbox", {
-          name: (name) => name.startsWith(label) && name.includes(explanation),
-        });
-      }),
-    );
+    expect(boxes).toHaveLength(scopes.length);
+    for (const [index, scope] of scopes.entries()) {
+      const { label, explanation = "" } = JUDGE_EVIDENCE_SCOPE[scope];
+      expect(explanation, `${scope} says what it shows the judge`).not.toBe("");
+      expect(boxes[index]).toHaveAccessibleName(label);
+      expect(boxes[index]).toHaveAccessibleDescription(explanation);
+    }
   });
 
   it("keeps each model rule in its control's description, the zero default under the temperature", async () => {

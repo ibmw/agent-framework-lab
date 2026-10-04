@@ -119,6 +119,7 @@ export function AgentConfigurationEditorPage() {
   const { configurationId = "" } = useParams();
   const { currentShop, loading: shopsLoading, listings } = useLabWorkspace();
   const publishReasonsId = useId();
+  const toolsId = useId();
   const editor = useDefinitionEditor(configurationId, CLIENT, {
     label: "The agent configuration draft has unsaved changes.",
     // The library index prints the row this editor is changing, and it renders the shell's
@@ -698,28 +699,54 @@ export function AgentConfigurationEditorPage() {
                    * draft's own answer, and a resolution that failed to load must not hide a
                    * binding the payload will still save. Only "permitted" needs the resolution.
                    */}
-                  {(resources?.tools ?? []).map((tool) => (
-                    <li key={tool.name} className="grid gap-0.5">
-                      <label className="flex items-center gap-2 text-[13px]">
-                        <input
-                          type="checkbox"
-                          checked={enabled.has(tool.name)}
-                          onChange={() => toggleTool(tool.name)}
-                        />
-                        <span className="font-mono text-[12.5px]">{tool.name}</span>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-admin-border/60 px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
-                          <span aria-hidden>{tool.effect === "write" ? "✎" : "◎"}</span>
-                          {tool.effect}
-                        </span>
-                        {tool.required_permission && permitted.get(tool.name) === false ? (
-                          <span className="text-[11.5px] font-semibold text-lab-error">
-                            needs {labelOf(SUPPORT_PERMISSION, tool.required_permission)}
+                  {(resources?.tools ?? []).map((tool) => {
+                    // The box is named by the tool alone, which is what the specs reach it by
+                    // (rule 5); its effect, what the identity lacks for it and what it does are
+                    // its description, so the label still wraps them all as one click target.
+                    const id = `${toolsId}-${tool.name}`;
+                    const lacking =
+                      tool.required_permission && permitted.get(tool.name) === false
+                        ? tool.required_permission
+                        : null;
+                    return (
+                      <li key={tool.name} className="grid gap-0.5">
+                        <label className="flex items-center gap-2 text-[13px]">
+                          <input
+                            type="checkbox"
+                            checked={enabled.has(tool.name)}
+                            aria-labelledby={`${id}-name`}
+                            aria-describedby={[
+                              `${id}-effect`,
+                              ...(lacking ? [`${id}-needs`] : []),
+                              `${id}-summary`,
+                            ].join(" ")}
+                            onChange={() => toggleTool(tool.name)}
+                          />
+                          <span id={`${id}-name`} className="font-mono text-[12.5px]">
+                            {tool.name}
                           </span>
-                        ) : null}
-                      </label>
-                      <span className="pl-6 text-xs text-admin-muted">{tool.summary}</span>
-                    </li>
-                  ))}
+                          <span
+                            id={`${id}-effect`}
+                            className="inline-flex items-center gap-1 rounded-full bg-admin-border/60 px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft"
+                          >
+                            <span aria-hidden>{tool.effect === "write" ? "✎" : "◎"}</span>
+                            {tool.effect}
+                          </span>
+                          {lacking ? (
+                            <span
+                              id={`${id}-needs`}
+                              className="text-[11.5px] font-semibold text-lab-error"
+                            >
+                              needs {labelOf(SUPPORT_PERMISSION, lacking)}
+                            </span>
+                          ) : null}
+                        </label>
+                        <span id={`${id}-summary`} className="pl-6 text-xs text-admin-muted">
+                          {tool.summary}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </FieldGroup>
             </FieldRows>

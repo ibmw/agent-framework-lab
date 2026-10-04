@@ -330,8 +330,7 @@ async function publishConfiguration(page: Page, name: string, identity: string, 
   await expect(runtime.getByLabel("Provider", { exact: true })).toHaveValue("fake");
   await expect(runtime.getByLabel("Model", { exact: true })).toHaveValue("deterministic");
 
-  // Not an exact label match: a binding's label is the tool name followed by its effect
-  // chip, which is what an author reads.
+  // A binding is named by its tool alone; its effect and summary are its description.
   const tools = page.getByRole("region", { name: /Tool bindings/ });
   await tools.getByLabel("orders.propose_address_change").check();
   await tools.getByLabel("orders.apply_address_change").check();
