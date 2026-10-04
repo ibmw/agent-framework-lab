@@ -522,7 +522,8 @@ def _context_issues(
                 issue_warning(
                     "suggested_document_missing_from_shop",
                     f"{document.kind.value} {document.document_id} is no longer configured "
-                    "by this shop, so it will not pre-fill a scenario's context documents",
+                    "by this shop, yet it still pre-fills the context documents of a scenario "
+                    "built on this ticket, which names a document nobody could read",
                     "suggested_documents",
                 )
             )

@@ -208,6 +208,22 @@ def test_a_suggested_document_the_shop_dropped_only_warns() -> None:
     assert validation.publishable
 
 
+def test_a_suggested_document_the_shop_dropped_is_said_to_still_pre_fill() -> None:
+    """A new scenario copies every suggestion, resolved or not (ADR 0018); the warning says so."""
+    validation = validate_ticket(
+        publishable_ticket(),
+        context(document_ids={SuggestedDocumentKind.POLICY: frozenset({"address-change"})}),
+    )
+
+    [warning] = [
+        issue
+        for issue in validation.warnings
+        if issue.code == "suggested_document_missing_from_shop"
+    ]
+    assert "still pre-fills" in warning.message
+    assert "will not pre-fill" not in warning.message
+
+
 def test_a_ticket_pointing_at_nothing_warns_without_blocking() -> None:
     ticket = publishable_ticket(
         origin=TicketOrigin(kind=TicketOriginKind.SUPPORT_ENTRY), linked_order_ids=()

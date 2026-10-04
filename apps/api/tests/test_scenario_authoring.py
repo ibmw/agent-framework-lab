@@ -1,6 +1,7 @@
 """Scenario authoring: shop scoping, derived references, and what a publication pins."""
 
 from collections.abc import Generator
+from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
@@ -25,6 +26,7 @@ from capability_lab.domain.scenario import (
     ScenarioEntityKind,
 )
 from capability_lab.domain.shop import ShopDocumentKind, SupportChannel
+from capability_lab.domain.ticket import SuggestedDocument
 from capability_lab.infrastructure.database import (
     Base,
     create_database_engine,
@@ -73,6 +75,34 @@ def test_a_new_scenario_starts_from_the_tickets_suggested_documents(
     assert created.payload.context_document_keys == frozenset(
         {POLICY_REFERENCE, GUIDELINE_REFERENCE}
     )
+
+
+def test_a_new_scenario_starts_from_a_suggestion_the_shop_no_longer_holds(
+    workspace: Workspace,
+) -> None:
+    """The ticket's warning says an unresolved suggestion still pre-fills; this is that copy."""
+    ticket = workspace.tickets.get_ticket(workspace.shop_id, workspace.ticket_id)
+    workspace.tickets.replace_ticket(
+        workspace.shop_id,
+        workspace.ticket_id,
+        replace(
+            ticket.payload,
+            suggested_documents=(
+                *ticket.payload.suggested_documents,
+                SuggestedDocument(kind=ShopDocumentKind.POLICY, document_id="address-change"),
+            ),
+        ),
+    )
+
+    created = workspace.scenarios.create_scenario(
+        workspace.shop_id, "Wrong shipping address", workspace.ticket_id
+    )
+    preview = workspace.scenarios.preview_scenario(workspace.shop_id, created.definition.id)
+
+    assert "policy:address-change" in created.payload.context_document_keys
+    assert "context_document_missing_from_shop" in {
+        issue.code for issue in preview.draft.validation.errors
+    }
 
 
 def test_a_new_scenario_is_saveable_while_it_still_asserts_nothing(
