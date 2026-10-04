@@ -28,6 +28,7 @@ import { BusyButton, PrimaryAction, RefusalLine } from "../components/PrimaryAct
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
   type ActionStatusRow,
+  armDetail,
   DERIVATION_NOTE,
   type Derivation,
   derivationReport,
@@ -44,7 +45,7 @@ import {
   outlineButtonClasses,
   subtleButtonClasses,
 } from "../lib/ui";
-import { pinKey, usePinnedProviders } from "../lib/usePinnedProviders";
+import { pinKey, publishedNameOf, usePinnedVersions } from "../lib/usePinnedVersions";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 import { definitionPath, versionPath } from "../lib/versionLinks";
 
@@ -521,24 +522,42 @@ function ForkPanel({
   const moved = chosen.some(moves);
   const forkNoteId = useId();
 
-  // The provider each chosen arm would run, as the choice stands. An arm left where it was
-  // runs the version this run pinned, whose provider the run already names; an arm moved is
-  // read off the version it moves to, and only once the lab is known to miss a provider.
-  const providers = usePinnedProviders(
-    chosen.filter(moves),
-    unreachable !== null && unreachable.size > 0,
-  );
+  // What each chosen arm would run, as the choice stands. An arm left where it was runs the
+  // version this run pinned, whose provider and published name the run already records; an
+  // arm moved is read off the version it moves to — its provider for the reach line, and the
+  // name it was published under for the queue (ADR 0065, amended 2026-10-04). An answer
+  // counts only for the version it was read for, so a quick switch never names the arm by the
+  // version it left.
+  const pinned = usePinnedVersions(chosen.filter(moves));
   const forkBlocked = unreachableArmsNote(
     chosen.map((arm, position) =>
       moves(arm, position)
-        ? (providers.get(pinKey(arm)) ?? null)
+        ? (pinned.get(pinKey(arm))?.provider ?? null)
         : experiment.runs[position].provider,
     ),
     unreachable,
   );
+  const names = chosen.map((arm, position) =>
+    publishedNameOf(
+      pinned,
+      {
+        pin: {
+          configurationId: experiment.runs[position].agent_configuration_id,
+          version: experiment.runs[position].agent_configuration_version,
+        },
+        name: experiment.runs[position].agent_configuration_name,
+      },
+      arm,
+    ),
+  );
+  // An arm moved onto a version still being read is not named yet: a wait, so the press is
+  // busy rather than refused (ADR 0063), and it is never sent under a name it may not have.
+  const namesPending = names.some((name) => name === undefined);
   // An arm the lab cannot reach refuses the whole derivation; failing that, a fork that moved
   // nothing is a replay (ADR 0063: refused with a reason, never silently).
   const forkRefusal = forkBlocked !== "" ? forkBlocked : moved ? null : FORK_UNMOVED_REASON;
+  // Waiting on a name is said only where nothing refuses the fork, as setup's Start waits.
+  const waiting = namesPending && forkRefusal === null;
 
   return (
     <section
@@ -575,12 +594,12 @@ function ForkPanel({
           variant="ink"
           type="button"
           refusal={forkRefusal === null ? null : { id: forkNoteId, reason: forkRefusal }}
-          busy={held}
+          busy={held || waiting}
           // The note is true before the press as well, so a reader hears it on reaching it.
           aria-describedby={noteId}
           onClick={() => {
-            // The button swallows a refused press itself; this is the handler's own check.
-            if (forkRefusal !== null) {
+            // The button swallows a refused or busy press itself; this is the handler's own check.
+            if (forkRefusal !== null || namesPending) {
               return;
             }
             onFork(
@@ -591,10 +610,7 @@ function ForkPanel({
               chosen.map((arm, position) => ({
                 key: experiment.runs[position].run_id,
                 label: experiment.runs[position].label,
-                detail: `${
-                  configurations.find((entry) => entry.configuration_id === arm.configurationId)
-                    ?.name ?? experiment.runs[position].agent_configuration_name
-                } v${arm.version}`,
+                detail: armDetail(names[position] ?? null, arm.version),
                 progress: "running",
               })),
               experiment.label,

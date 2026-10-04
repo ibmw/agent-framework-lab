@@ -99,7 +99,8 @@ kept here.
   missing.
 - **Replay, fork** — every derived arm `running` ("Replaying this run: 2 of 2 running."); the
   answer is a different run, which opens, so there is no settled queue on this page. A refused
-  derivation clears the queue and says why in the page's alert.
+  derivation clears the queue and says why in the page's alert. (Amended 2026-10-04, below: each
+  row names its arm as the version it will run was published.)
 - **Freeze** — no arm, so no queue: "Freezing v2 at seed 20260825.", then "Froze v2 at seed
   20260825 as 0123456789ab….".
 
@@ -305,3 +306,60 @@ handlers keep their checks for a submission that arrives without the press.
 
 None. No contract, payload, route or stored value changes; accessible names are unchanged, except
 the busy labels *Deriving…*, which become *Replaying…* and *Forking…*, and which no spec reached.
+
+## Amendment — 2026-10-04: a derived arm is named as the version it runs was published
+
+Each row of a derivation's queue says what its arm runs — a name beside a version number — and
+the three presses that start one took the name from three places. Replay, on the results and on
+a history row, named each arm as its run recorded it (`agent_configuration_name`, which the
+backend reads out of the version the arm pinned). *Fork this run* named each arm by the
+configuration listing first — today's name — even an arm left on the version its run pinned, so
+after a rename the same arm read under two names in the two queues. A history row's *Fork with
+newer versions* paired the recorded name with the newest version's number: a label for a
+version that may never have had that name. The truthful label is the name the version each arm
+will run was published under, beside that version's number. Which version that is:
+
+- **A replay runs the versions its source recorded** (`ExperimentDerivations.replay` copies
+  each run's configuration and version), so every arm is named by its record and nothing is
+  read. This is unchanged.
+- **A fork runs the versions it sends**: on the results, the version chosen in the panel per
+  arm; on a history row, each arm's newest publication where it is newer, the version it ran
+  where nothing is (`forkTarget`). An arm a fork leaves on the version its run pinned runs that
+  version, and is named by its record, as a replay's is. An arm it moves is named by the
+  version it moves onto: `GET /agent-configurations/{id}/versions/{v}`, its `content.name`.
+  That is the read ADR 0053 already makes for the provider, so the two are one hook,
+  `usePinnedVersions` (was `usePinnedProviders`), answering both — but it is now made whatever
+  the lab reaches, since the name is wanted on every lab: on the results for each moved arm
+  as the choice stands, and on History for every version a listed row's fork moves onto, once
+  each across the page. A version the row ran is still read only on a lab known to miss a
+  provider.
+- **An answer counts only for the version it was read for.** Answers are kept by
+  `configuration@version`, and a name is looked up by the version the arm is on now, so an arm
+  moved from v4 to v2 while v2 is read is unnamed until v2 answers — never named by v4. A read
+  the choice has left is aborted, and an answer is only ever its own version's however late
+  it lands: nothing looks it up for another version.
+- **A pending read is a wait.** While an arm the fork moves is unnamed, the press is busy
+  (ADR 0063: `aria-disabled`, no reason, the activation swallowed), as setup's Start is while
+  an arm's version is read (ADR 0064, amended 2026-10-04) — and only where nothing else refuses
+  it, as there. *Fork this run* keeps its label and *Fork with newer versions* keeps its own;
+  neither accessible name moves (design rule 5). A row's fork already natively disabled —
+  another row's derivation in flight, nothing newer, an unreachable arm — stays so. On a lab
+  known to miss a provider, this changes what a moved arm's pending read does: before, the
+  provider was unknown meanwhile and the fork stayed pressable; now the same read holds it busy
+  until the version answers. On any other lab, where nothing was read before, the read is new,
+  and so is the wait.
+- **A failed read names nothing.** It holds nothing up, since the fork can run without the name,
+  and the row says the version alone and that its name is unknown: "v2, whose name could not be
+  read" (`armDetail`). Neither the listing's name nor the recorded name of another version is
+  lent to it.
+
+No contract, payload, route or stored value changes; the route read was already served and
+called. Verified in `Experiments.test.tsx`, *a derivation's queue names each arm as its version
+was published* (a replay and a fork of a renamed configuration labelled alike; Fork busy while
+the moved arm's version is read; a failed read named honestly; an arm moved from v4 to a v2
+still being read never named by v4), *reports a fork's arms at the versions chosen* (an arm left
+in place keeps its recorded name over the listing's); in `History.test.tsx`, *names the versions
+a fork moves onto while it runs* (renamed at v7), and the replay, pending and failed cases beside
+it; and in `lib/usePinnedVersions.test.tsx`, the hook's settled-as-unknown answer and
+`publishedNameOf`. The two History cases that held "a lab that reaches its provider reads no
+version" now hold that it reads exactly one, the version the fork moves onto, for its name.

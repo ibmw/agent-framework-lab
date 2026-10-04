@@ -9,7 +9,12 @@ import { type FilterChip, FilterChips } from "../components/FilterChips";
 import { BusyButton } from "../components/PrimaryAction";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { PageHeader, StatusPill } from "../components/WorkspaceChrome";
-import { type ActionStatusRow, DERIVATION_NOTE, derivationReport } from "../lib/actionStatus";
+import {
+  type ActionStatusRow,
+  armDetail,
+  DERIVATION_NOTE,
+  derivationReport,
+} from "../lib/actionStatus";
 import { EXPERIMENT_STATUS, labelOf } from "../lib/enumLabels";
 import { OUTCOMES } from "../lib/evidence";
 import { unreachableArmsNote } from "../lib/modelConnections";
@@ -25,7 +30,13 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
-import { type Pin, pinKey, usePinnedProviders } from "../lib/usePinnedProviders";
+import {
+  type Pin,
+  type PinnedVersion,
+  pinKey,
+  publishedNameOf,
+  usePinnedVersions,
+} from "../lib/usePinnedVersions";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 import { NoCurrentShop } from "../shell/LabWorkspace";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
@@ -124,15 +135,36 @@ function forkTarget(arm: ExperimentHistoryEntrySchema["arms"][number]): Pin {
   };
 }
 
+/**
+ * The name each arm of a row's derivation runs under, as the version `pinOf` gives it was
+ * published (ADR 0065, amended 2026-10-04). A version the row ran is named by the record,
+ * which names it as it was published; a version the fork moves onto is named by its own read
+ * — `undefined` while that is in flight, `null` once it failed.
+ */
+function armNames(
+  experiment: ExperimentHistoryEntrySchema,
+  pinOf: (arm: ExperimentHistoryEntrySchema["arms"][number]) => Pin,
+  pinned: ReadonlyMap<string, PinnedVersion | null>,
+): (string | null | undefined)[] {
+  return experiment.arms.map((arm) =>
+    publishedNameOf(
+      pinned,
+      { pin: recordedPin(arm), name: arm.agent_configuration_name },
+      pinOf(arm),
+    ),
+  );
+}
+
 /** A row's arms as a derivation's queue names them, at the version each will run. */
 function armRows(
   experiment: ExperimentHistoryEntrySchema,
   pinOf: (arm: ExperimentHistoryEntrySchema["arms"][number]) => Pin,
+  names: readonly (string | null | undefined)[],
 ): ActionStatusRow[] {
-  return experiment.arms.map((arm) => ({
+  return experiment.arms.map((arm, position) => ({
     key: arm.run_id,
     label: arm.label,
-    detail: `${arm.agent_configuration_name} v${pinOf(arm).version}`,
+    detail: armDetail(names[position] ?? null, pinOf(arm).version),
     progress: "running",
   }));
 }
@@ -216,7 +248,12 @@ export function ExperimentHistoryPage() {
         experimentId: experiment.experiment_id,
         kind: "replay",
         subject: experiment.label,
-        arms: armRows(experiment, recordedPin),
+        // A replay runs the versions the row ran, which the record names as published.
+        arms: armRows(
+          experiment,
+          recordedPin,
+          experiment.arms.map((arm) => arm.agent_configuration_name),
+        ),
       });
       setDeriveError(null);
       try {
@@ -246,12 +283,20 @@ export function ExperimentHistoryPage() {
    * by the backend — a button that can only fail is worse than one that is not there.
    */
   const fork = useCallback(
-    async (experiment: ExperimentHistoryEntrySchema) => {
+    async (
+      experiment: ExperimentHistoryEntrySchema,
+      names: readonly (string | null | undefined)[],
+    ) => {
+      // The button swallows a busy press itself; this is the handler's own check, so a name
+      // still being read is never reported as one that could not be.
+      if (names.some((name) => name === undefined)) {
+        return;
+      }
       setDeriving({
         experimentId: experiment.experiment_id,
         kind: "fork",
         subject: experiment.label,
-        arms: armRows(experiment, forkTarget),
+        arms: armRows(experiment, forkTarget, names),
       });
       setDeriveError(null);
       try {
@@ -403,13 +448,20 @@ export function ExperimentHistoryPage() {
   // A row's Replay and Fork run their arms before they answer, so an arm naming a provider
   // this lab cannot reach is refused there with 422 — said on the row first, as setup's Start
   // says it (ADR 0053). A history arm does not carry its provider, so the versions the two
-  // would run are read, once each across the page, and only on a lab known to miss one.
+  // would run are read, once each across the page, on a lab known to miss one. And a fork's
+  // queue names each arm as the version it moves onto was published, which the row does not
+  // carry either, so every version a row's fork moves an arm onto is read whatever the lab
+  // reaches (ADR 0065, amended 2026-10-04) — a version the row ran is named by its record.
   const unreachable = useUnreachableProviders();
-  const providers = usePinnedProviders(
+  const reachWanted = unreachable !== null && unreachable.size > 0;
+  const pinned = usePinnedVersions(
     (listing?.experiments ?? []).flatMap((experiment) =>
-      experiment.arms.flatMap((arm) => [recordedPin(arm), forkTarget(arm)]),
+      experiment.arms.flatMap((arm) => {
+        const target = forkTarget(arm);
+        const moves = pinKey(target) !== pinKey(recordedPin(arm));
+        return reachWanted ? [recordedPin(arm), target] : moves ? [target] : [];
+      }),
     ),
-    unreachable !== null && unreachable.size > 0,
   );
 
   // Whether the page the backend answered was narrowed at all, read off the values it was
@@ -663,15 +715,16 @@ export function ExperimentHistoryPage() {
                         }
                         busy={deriving !== null}
                         noteId={derivingNoteId}
+                        forkNames={armNames(experiment, forkTarget, pinned)}
                         replayBlocked={unreachableArmsNote(
                           experiment.arms.map(
-                            (arm) => providers.get(pinKey(recordedPin(arm))) ?? null,
+                            (arm) => pinned.get(pinKey(recordedPin(arm)))?.provider ?? null,
                           ),
                           unreachable,
                         )}
                         forkBlocked={unreachableArmsNote(
                           experiment.arms.map(
-                            (arm) => providers.get(pinKey(forkTarget(arm))) ?? null,
+                            (arm) => pinned.get(pinKey(forkTarget(arm)))?.provider ?? null,
                           ),
                           unreachable,
                         )}
@@ -723,18 +776,24 @@ function HistoryRow({
   deriving,
   busy,
   noteId,
+  forkNames,
   replayBlocked,
   forkBlocked,
 }: {
   experiment: ExperimentHistoryEntrySchema;
   onReplay: (experiment: ExperimentHistoryEntrySchema) => void;
-  onFork: (experiment: ExperimentHistoryEntrySchema) => void;
+  onFork: (
+    experiment: ExperimentHistoryEntrySchema,
+    names: readonly (string | null | undefined)[],
+  ) => void;
   /** The derivation this row started, while it runs. */
   deriving: "replay" | "fork" | null;
   /** A derivation is running, from this row or another: no second one starts meanwhile. */
   busy: boolean;
   /** The derivation's note, which says it cannot be cancelled. */
   noteId: string;
+  /** The name each arm's fork runs under, as its version was published; `undefined` while read. */
+  forkNames: readonly (string | null | undefined)[];
   /** Why this row's replay would be refused here, or `""` (ADR 0053). */
   replayBlocked: string;
   /** Why this row's fork would be refused here, or `""` (ADR 0053). */
@@ -760,6 +819,10 @@ function HistoryRow({
   ]
     .filter((id): id is string => id !== null)
     .join(" ");
+  // A version the fork moves onto, still being read, is not named yet: a wait, so the fork is
+  // busy rather than refused (ADR 0063) — unless something else already holds it.
+  const forkWaiting =
+    newer && !busy && forkReach === "" && forkNames.some((name) => name === undefined);
   return (
     <tr>
       <td className={tableCellClasses}>
@@ -882,7 +945,7 @@ function HistoryRow({
           <BusyButton
             className={`${derivationLinkClasses} disabled:text-admin-muted disabled:no-underline`}
             type="button"
-            busy={deriving === "fork"}
+            busy={deriving === "fork" || forkWaiting}
             disabled={busy || !newer || forkReach !== ""}
             // Described rather than titled: a browser does not reliably show a `title` on a
             // disabled control, so the reason a row cannot be forked is real text that a
@@ -892,7 +955,7 @@ function HistoryRow({
               [forkDescribedBy === "" ? null : forkDescribedBy, noteId].filter(Boolean).join(" ") ||
               undefined
             }
-            onClick={() => onFork(experiment)}
+            onClick={() => onFork(experiment, forkNames)}
           >
             <ButtonIcon verb="fork" />
             {deriving === "fork" ? "Forking…" : "Fork with newer versions"}

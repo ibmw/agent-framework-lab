@@ -608,6 +608,8 @@ function experiment(
         label: "Arm A",
         agent_configuration_id: ATLAS_ID,
         agent_configuration_version: 1,
+        // Not the "cfg-atlas" the version endpoint serves for atlas@1: the two differ so a test
+        // can tell a label taken from the record apart from one taken from a read.
         agent_configuration_name: "Atlas",
         framework_id: "fake",
         provider: runProviders[0],
@@ -892,6 +894,11 @@ let connectionSource: ModelConnectionSource = "environment";
 let runProviders: [string, string] = ["fake", "fake"];
 const connectionServed = { statuses: 0, listings: 0 };
 let versionReads = 0;
+/**
+ * The name a configuration version was published under, by `configuration@version`, where a
+ * test has the configuration renamed since: absent, a version carries the listing's name.
+ */
+let publishedNames: Record<string, string> = {};
 
 /**
  * Every read setup needs to decide whether an arm is reachable has answered, and the page has
@@ -928,9 +935,11 @@ function publishedVersion(
     content: {
       // Published under the name the lab lists it by, until a test renames the configuration.
       name:
+        publishedNames[`${configurationId}@${version}`] ??
         [...CONFIGURATIONS.configurations, CANARY].find(
           (entry) => entry.configuration_id === configurationId,
-        )?.name ?? "cfg-atlas",
+        )?.name ??
+        "cfg-atlas",
       description: "",
       framework_id: control ? "fake" : "pydantic-ai",
       architecture: "single_agent",
@@ -1210,6 +1219,7 @@ afterEach(() => {
   connectionServed.statuses = 0;
   connectionServed.listings = 0;
   versionReads = 0;
+  publishedNames = {};
 });
 afterAll(() => server.close());
 
@@ -3786,13 +3796,16 @@ describe("a long-running action on the results reports itself", () => {
     const [, armB] = within(panel).getAllByLabelText("Published version");
     await user.selectOptions(armB, "2");
     const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    // Busy until arm B's v2 has answered with the name it was published under.
+    await waitFor(() => expectNotRefused(fork));
     await user.click(fork);
 
     await waitFor(() => expect(forks.arrived).toHaveLength(1));
     const queue = screen.getByRole("status", { name: "Where each derived arm stands" });
-    // Named as the lab lists each configuration, at the version the fork moves it to.
+    // Each arm named as the version it runs was published: arm A stays on the v1 its run
+    // recorded as Atlas, though the lab lists it as cfg-atlas now; arm B by its v2's own name.
     expect(queueRows(queue)).toEqual([
-      "Arm A | cfg-atlas v1 | running…",
+      "Arm A | Atlas v1 | running…",
       "Arm B | cfg-beacon v2 | running…",
     ]);
     expect(queue).toHaveTextContent("Forking this run: 2 of 2 running.");
@@ -3952,6 +3965,171 @@ describe("a long-running action on the results reports itself", () => {
     expect(screen.getByRole("status", { name: "Where each derived arm stands" })).toHaveTextContent(
       "",
     );
+  });
+});
+
+/**
+ * A replay and a fork name each arm, in their queue, by the version that arm will run, as it
+ * was published (ADR 0065, amended 2026-10-04). The run under test recorded Atlas v1 and
+ * Beacon v1; the lab lists both configurations under the names they were renamed to since.
+ */
+describe("a derivation's queue names each arm as its version was published", () => {
+  const VERSION_ROUTE = "*/api/v1/agent-configurations/:configurationId/versions/:version";
+
+  /** Holds the read of one configuration version until released; every other read answers. */
+  function holdVersion(configurationId: string, version: number) {
+    const waiting: (() => void)[] = [];
+    let arrived = 0;
+    server.use(
+      http.get(VERSION_ROUTE, async ({ params }) => {
+        if (params.configurationId === configurationId && Number(params.version) === version) {
+          arrived += 1;
+          await new Promise<void>((resolve) => waiting.push(resolve));
+        }
+        // Returning nothing hands the read on to the suite's own handler.
+      }),
+    );
+    return { arrived: () => arrived, release: () => waiting.shift()?.() };
+  }
+
+  async function openFork(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: "Fork…" }));
+    return screen.findByRole("region", { name: "Fork this experiment" });
+  }
+
+  function derivedQueue() {
+    return screen.getByRole("status", { name: "Where each derived arm stands" });
+  }
+
+  it("labels a replay and a fork of a renamed configuration alike, by the version each runs", async () => {
+    const user = userEvent.setup();
+    publishedNames = { [`${BEACON_ID}@2`]: "Beacon (second cut)" };
+    const replays = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/replays`);
+    const forks = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/forks`);
+    const { router } = renderResults();
+
+    // Replay runs the versions recorded, under the names the record gives them.
+    await user.click(await screen.findByRole("button", { name: "Replay" }));
+    await waitFor(() => expect(replays.arrived).toHaveLength(1));
+    expect(queueRows(derivedQueue())).toEqual([
+      "Arm A | Atlas v1 | running…",
+      "Arm B | Beacon v1 | running…",
+    ]);
+    replays.release();
+    await screen.findByRole("heading", { name: /\(replay\)$/ });
+
+    // Back on the source, a fork that moves arm B alone: arm A keeps its recorded name, and
+    // arm B is named by the version it moves to — not by the listing's cfg-beacon.
+    await act(async () => {
+      await router.navigate(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results`);
+    });
+    const panel = await openFork(user);
+    await user.selectOptions(within(panel).getAllByLabelText("Published version")[1], "2");
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    await waitFor(() => expectNotRefused(fork));
+    await user.click(fork);
+    await waitFor(() => expect(forks.arrived).toHaveLength(1));
+    expect(queueRows(derivedQueue())).toEqual([
+      "Arm A | Atlas v1 | running…",
+      "Arm B | Beacon (second cut) v2 | running…",
+    ]);
+    forks.release();
+    await screen.findByRole("heading", { name: /\(fork\)$/ });
+  });
+
+  it("holds Fork busy, never refused, while the version an arm moves to is read", async () => {
+    const user = userEvent.setup();
+    publishedNames = { [`${BEACON_ID}@2`]: "Beacon (second cut)" };
+    const read = holdVersion(BEACON_ID, 2);
+    renderResults();
+
+    const panel = await openFork(user);
+    await user.selectOptions(within(panel).getAllByLabelText("Published version")[1], "2");
+    await waitFor(() => expect(read.arrived()).toBe(1));
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    // A wait (ADR 0063): busy, no reason given, and a press sends nothing.
+    expectBusy(fork);
+    expect(fork).toHaveTextContent("Fork this run");
+    expect(within(panel).queryByText(/Change at least one arm/)).toBeNull();
+    await user.click(fork);
+    await user.keyboard("{Enter}");
+    expect(forked).toEqual([]);
+
+    read.release();
+    await waitFor(() => expectNotRefused(fork));
+    await user.click(fork);
+    await waitFor(() => expect(forked).toHaveLength(1));
+  });
+
+  it("names no arm by a guess when the version it moves to cannot be read", async () => {
+    const user = userEvent.setup();
+    const forks = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/forks`);
+    server.use(
+      http.get(VERSION_ROUTE, ({ params }) =>
+        params.configurationId === BEACON_ID
+          ? HttpResponse.json(
+              { code: "internal_error", message: "unavailable", request_id: "r" },
+              { status: 500 },
+            )
+          : undefined,
+      ),
+    );
+    renderResults();
+
+    const panel = await openFork(user);
+    await user.selectOptions(within(panel).getAllByLabelText("Published version")[1], "2");
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    // The failed read holds nothing up: the fork can still run, only its name is unknown.
+    await waitFor(() => expectNotRefused(fork));
+    await user.click(fork);
+
+    await waitFor(() => expect(forks.arrived).toHaveLength(1));
+    expect(queueRows(derivedQueue())).toEqual([
+      "Arm A | Atlas v1 | running…",
+      "Arm B | v2, whose name could not be read | running…",
+    ]);
+    // Neither the listing's name nor the one the run recorded for another version.
+    expect(derivedQueue()).not.toHaveTextContent(/cfg-beacon|Beacon v2/);
+    forks.release();
+    await screen.findByRole("heading", { name: /\(fork\)$/ });
+  });
+
+  it("never names an arm by a version it has since left", async () => {
+    const user = userEvent.setup();
+    publishedNames = {
+      [`${ATLAS_ID}@4`]: "Atlas (fourth cut)",
+      [`${ATLAS_ID}@2`]: "Atlas (second cut)",
+    };
+    const forks = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/forks`);
+    const read = holdVersion(ATLAS_ID, 2);
+    renderResults();
+
+    const panel = await openFork(user);
+    // Arm B onto cfg-atlas, which opens on its newest version, v4, read at once…
+    const configuration = within(panel).getAllByLabelText("Agent configuration")[1];
+    await waitFor(() =>
+      expect(within(configuration).getByRole("option", { name: "cfg-atlas" })).toBeEnabled(),
+    );
+    await user.selectOptions(configuration, "cfg-atlas");
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    await waitFor(() => expectNotRefused(fork));
+    // …then straight onto v2, still being read: v4's answer says nothing about it.
+    await user.selectOptions(within(panel).getAllByLabelText("Published version")[1], "2");
+    await waitFor(() => expect(read.arrived()).toBe(1));
+    expectBusy(fork);
+    await user.click(fork);
+    expect(forks.arrived).toHaveLength(0);
+
+    read.release();
+    await waitFor(() => expectNotRefused(fork));
+    await user.click(fork);
+    await waitFor(() => expect(forks.arrived).toHaveLength(1));
+    expect(queueRows(derivedQueue())).toEqual([
+      "Arm A | Atlas v1 | running…",
+      "Arm B | Atlas (second cut) v2 | running…",
+    ]);
+    forks.release();
+    await screen.findByRole("heading", { name: /\(fork\)$/ });
   });
 });
 
@@ -4836,7 +5014,10 @@ describe("replay", () => {
     const panel = await screen.findByRole("region", { name: "Fork this experiment" });
     const [, armB] = within(panel).getAllByLabelText("Published version");
     await user.selectOptions(armB, "2");
-    await user.click(within(panel).getByRole("button", { name: "Fork this run" }));
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    // Busy until arm B's v2 has answered with the name it was published under.
+    await waitFor(() => expectNotRefused(fork));
+    await user.click(fork);
 
     // One arm per arm of the source, in the source's order, with only the chosen one moved.
     expect(forked).toEqual([
@@ -4897,7 +5078,9 @@ describe("replay", () => {
     await user.click(await screen.findByRole("button", { name: "Fork…" }));
     const panel = await screen.findByRole("region", { name: "Fork this experiment" });
     await user.selectOptions(within(panel).getAllByLabelText("Published version")[1], "2");
-    await user.click(within(panel).getByRole("button", { name: "Fork this run" }));
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    await waitFor(() => expectNotRefused(fork));
+    await user.click(fork);
     await screen.findByRole("heading", { name: "Wrong address — framework comparison (fork)" });
 
     // The panel belonged to the run it was opened on. Left open it would sit over a
@@ -5084,7 +5267,10 @@ describe("replay, fork and the provider the lab can reach", () => {
 
       expect(replay).toBeEnabled();
       expect(replay).not.toHaveAttribute("title");
-      expectNotRefused(within(panel).getByRole("button", { name: "Fork this run" }));
+      // Busy only while the moved arm's version is read for its name.
+      await waitFor(() =>
+        expectNotRefused(within(panel).getByRole("button", { name: "Fork this run" })),
+      );
       expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
     });
   }
@@ -5098,7 +5284,8 @@ describe("replay, fork and the provider the lab can reach", () => {
     await connectionRead();
 
     const fork = within(panel).getByRole("button", { name: "Fork this run" });
-    expectNotRefused(fork);
+    // Busy only while the moved arm's version is read for its name.
+    await waitFor(() => expectNotRefused(fork));
     expect(fork).not.toHaveAttribute("title");
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
@@ -5196,7 +5383,9 @@ describe("replay, fork and the provider the lab can reach", () => {
     await forkArmOnto(user, panel, 1, "cfg-atlas");
     await versionRead(1);
 
-    expectNotRefused(within(panel).getByRole("button", { name: "Fork this run" }));
+    await waitFor(() =>
+      expectNotRefused(within(panel).getByRole("button", { name: "Fork this run" })),
+    );
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
 });

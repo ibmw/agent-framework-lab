@@ -97,11 +97,21 @@ export function standingProgress(standing: ArmStandingSchema): ArmProgress {
   return standing.attempts === 0 ? "awaiting_agent" : "awaiting_retry";
 }
 
+/**
+ * What an arm runs, as its row says it: the name its version was published under, beside that
+ * version's number — "cfg-atlas v4". Where the version could not be read its name is not
+ * known, and the row says so beside the number rather than lending it a name the version may
+ * never have had, such as the one the configuration answers to now.
+ */
+export function armDetail(name: string | null, version: number): string {
+  return name === null ? `v${version}, whose name could not be read` : `${name} v${version}`;
+}
+
 function rowOf(run: ExperimentRunSchema, progress: ArmProgress): ActionStatusRow {
   return {
     key: run.run_id,
     label: run.label,
-    detail: `${run.agent_configuration_name} v${run.agent_configuration_version}`,
+    detail: armDetail(run.agent_configuration_name, run.agent_configuration_version),
     progress,
   };
 }
@@ -198,7 +208,10 @@ export function scoreReport(
 /** A replay or a fork, from the press until the page it was pressed on has been told. */
 export interface Derivation {
   kind: "replay" | "fork";
-  /** The derived run's arms, at the version each will run. */
+  /**
+   * The derived run's arms, each at the version it will run and under the name that version
+   * was published with (`armDetail`) — never the name its configuration answers to now.
+   */
   arms: readonly ActionStatusRow[];
   /** The run being derived from, where the page is not that run's own. */
   subject?: string;
@@ -238,7 +251,11 @@ export function derivationReport(deriving: Derivation | null): ActionStatusRepor
   };
 }
 
-/** The rows a derivation runs, read off the arms of the run it derives from. */
+/**
+ * The rows a replay runs, read off the arms of the run it derives from. A replay runs exactly
+ * the versions that run pinned, and the record names each as it was published, so nothing has
+ * to be read to name them.
+ */
 export function derivedRows(runs: readonly ExperimentRunSchema[]): ActionStatusRow[] {
   return runs.map((run) => rowOf(run, "running"));
 }
