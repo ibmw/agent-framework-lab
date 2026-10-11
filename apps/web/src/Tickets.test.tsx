@@ -1873,6 +1873,45 @@ describe("the ticket editor's rows", () => {
     expect(within(row).getByText(/ship-to: Bordeaux — previous flat/)).toBeVisible();
   });
 
+  it("names each linked order's box by its reference and describes it by the details beside it", async () => {
+    // A second order with other statuses and no ship-to, so the sweep covers a box whose
+    // description has no ship-to line.
+    const orders = [
+      ...CONTEXT.resources.orders,
+      {
+        order_id: "00000000-0000-4000-8000-0000000000aa",
+        reference: "NS-10517",
+        placed_at: "2026-09-02T09:10:00.000000Z",
+        payment_status: "refunded",
+        fulfilment_status: "fulfilled",
+        total_amount: "89.50",
+        currency: "EUR",
+        shipping_label: null,
+      },
+    ] satisfies TicketContextSchema["resources"]["orders"];
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${TICKET_ID}/context`, () =>
+        HttpResponse.json({ ...CONTEXT, resources: { ...CONTEXT.resources, orders } }),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const linked = await screen.findByRole("region", { name: "Linked orders" });
+    const row = within(linked).getByRole("group", { name: "Linked" });
+
+    const expected = [
+      ["NS-10482", "249.00 EUR Paid Unfulfilled ship-to: Bordeaux — previous flat"],
+      ["NS-10517", "89.50 EUR Refunded Fulfilled"],
+    ];
+    await within(row).findByRole("checkbox", { name: "NS-10517" });
+    const boxes = within(row).getAllByRole("checkbox");
+    expect(boxes).toHaveLength(orders.length);
+    for (const [index, [name, description]] of expected.entries()) {
+      // Named by the reference alone, which is what the specs reach it by (rule 5).
+      expect(boxes[index]).toHaveAccessibleName(name);
+      expect(boxes[index]).toHaveAccessibleDescription(description);
+    }
+  });
+
   it("keeps an unresolved link on the Linked row, its Unlink and its confirm named as before", async () => {
     const user = userEvent.setup();
     currentContent = { ...DRAFT_CONTENT, linked_order_ids: [ORDER_ID, MISSING_ORDER_ID] };

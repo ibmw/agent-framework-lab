@@ -765,6 +765,7 @@ function LinkedOrders({
   const resolvable = new Set(context.resources.orders.map((order) => order.order_id));
   const unresolvable = content.linked_order_ids.filter((orderId) => !resolvable.has(orderId));
   const removal = useRemoval(scope);
+  const ordersId = useId();
   // The last link, on an origin that names nothing, leaves the incident pointing at nothing.
   const pointsAtNothingWithout = (orderId: string) =>
     content.origin.product_handle === null &&
@@ -788,8 +789,9 @@ function LinkedOrders({
       {/* The prototype draws the linked order as a read-out (`Workspace.dc.html` :2266–2289);
           the row's name is the card's own verb, each box saying whether its order is linked,
           as *Listed* does for a scenario's documents. The boxes keep the names their labels
-          give them, which the specs check them by (rule 5), and a link the shop no longer
-          resolves stays on the row beneath them with its Unlink. */}
+          give them, which the specs check them by (rule 5); the amount, the statuses and the
+          ship-to drawn beside a box are its description. A link the shop no longer resolves
+          stays on the row beneath them with its Unlink. */}
       <FieldRows>
         <FieldGroup label="Linked">
           {context.resources.orders.length === 0 ? (
@@ -804,20 +806,34 @@ function LinkedOrders({
                     <input
                       type="checkbox"
                       checked={content.linked_order_ids.includes(order.order_id)}
+                      aria-describedby={
+                        order.shipping_label
+                          ? `${ordersId}-${order.order_id}-summary ${ordersId}-${order.order_id}-ship-to`
+                          : `${ordersId}-${order.order_id}-summary`
+                      }
                       onChange={() => toggleOrder(order.order_id)}
                     />
                     {order.reference}
                   </label>
-                  <span className="flex flex-wrap items-center gap-1.5 text-admin-muted">
-                    {order.total_amount} {order.currency}
-                    <StatusPill tone="payment" label={paymentLabel(order.payment_status)} />
+                  <span
+                    id={`${ordersId}-${order.order_id}-summary`}
+                    className="flex flex-wrap items-center gap-1.5 text-admin-muted"
+                  >
+                    {/* The spaces keep the description's words apart without moving the row:
+                        the one between the pills is a whitespace-only run, which a flex
+                        container does not draw, and the one after the currency collapses at the
+                        end of its line. */}
+                    {order.total_amount} {order.currency}{" "}
+                    <StatusPill tone="payment" label={paymentLabel(order.payment_status)} />{" "}
                     <StatusPill
                       tone="fulfilment"
                       label={fulfilmentLabel(order.fulfilment_status)}
                     />
                   </span>
                   {order.shipping_label ? (
-                    <span className="text-admin-muted">ship-to: {order.shipping_label}</span>
+                    <span id={`${ordersId}-${order.order_id}-ship-to`} className="text-admin-muted">
+                      ship-to: {order.shipping_label}
+                    </span>
                   ) : null}
                 </li>
               ))}

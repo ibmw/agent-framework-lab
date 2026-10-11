@@ -1304,6 +1304,10 @@ describe("scenario editor", () => {
 
     const documents = screen.getByRole("region", { name: "Context documents" });
     expect(within(documents).getByText("read-check → objective 1")).toBeVisible();
+    // The read-check is part of what describes the document's box.
+    expect(
+      within(documents).getByRole("checkbox", { name: "Address-change policy" }),
+    ).toHaveAccessibleDescription("shop policy · read via get_policies read-check → objective 1");
     // A document is reachable only through its tool, which the row names.
     expect(within(documents).getByText("get_policies")).toBeVisible();
   });
@@ -1621,7 +1625,9 @@ describe("the scenario's caps, each read on its own card", () => {
     expect(escalation).toHaveAttribute("title", DOCUMENTS_CAP);
     // Read off the line its description names, not the computed description, which would fall
     // back to `title` and pass on the tooltip alone.
-    expect(describedText(escalation)).toBe(DOCUMENTS_CAP);
+    expect(describedText(escalation)).toBe(
+      `support guideline · read via get_support_guidelines ${DOCUMENTS_CAP}`,
+    );
     expect(screen.getByText(DOCUMENTS_CAP)).toBeVisible();
     // A listed one can always be taken off.
     const listed = screen.getByRole("checkbox", { name: "Address-change policy" });
@@ -1633,6 +1639,7 @@ describe("the scenario's caps, each read on its own card", () => {
     expect(escalation).toBeEnabled();
     expect(escalation).not.toHaveAttribute("title");
     expect(screen.queryByText(DOCUMENTS_CAP)).toBeNull();
+    expect(describedText(escalation)).toBe("support guideline · read via get_support_guidelines");
   });
 
   it("counts the new scenario's compositions, and turns the chips off at the cap with its reason", async () => {
@@ -1795,6 +1802,25 @@ describe("the scenario editor's rows", () => {
     const policy = await within(listed).findByRole("checkbox", { name: "Address-change policy" });
     const escalation = within(listed).getByRole("checkbox", { name: "Escalation" });
     expect(within(listed).getAllByRole("checkbox")).toEqual([policy, escalation]);
+  });
+
+  it("names each listed document's box by its title and describes it by its collection and tool", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    const documents = await screen.findByRole("region", { name: "Context documents" });
+    const listed = within(documents).getByRole("group", { name: "Listed" });
+
+    // Every document the shop holds, in its order.
+    const expected = [
+      ["Address-change policy", "shop policy · read via get_policies"],
+      ["Escalation", "support guideline · read via get_support_guidelines"],
+    ];
+    await within(listed).findByRole("checkbox", { name: "Address-change policy" });
+    const boxes = within(listed).getAllByRole("checkbox");
+    expect(boxes).toHaveLength(RESOURCES.documents.length);
+    for (const [index, [name, description]] of expected.entries()) {
+      expect(boxes[index]).toHaveAccessibleName(name);
+      expect(boxes[index]).toHaveAccessibleDescription(description);
+    }
   });
 
   it("says inside the Listed row that the shop holds no documents", async () => {

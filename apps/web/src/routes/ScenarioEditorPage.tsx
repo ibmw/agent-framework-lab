@@ -156,6 +156,7 @@ export function ScenarioEditorPage() {
   );
   const publishReasonsId = useId();
   const documentsCapId = useId();
+  const documentsId = useId();
   const editor = useDefinitionEditor(scenarioId, client, {
     label: "The scenario draft has unsaved changes.",
     // The Scenarios index prints the row this editor is changing, and it renders the shell's
@@ -421,7 +422,8 @@ export function ScenarioEditorPage() {
             {/* The prototype draws no context documents card; the row's name is the card's own
                 verb, each box saying whether its document is listed, as *Enabled* does for a
                 tool. The boxes keep the names their labels give them, which the specs check
-                them by (rule 5). */}
+                them by (rule 5); the collection and tool, and the read-check, drawn beside a
+                box are its description, before the cap's rule when it holds the box off. */}
             <FieldRows>
               <FieldGroup label="Listed">
                 {state.status === "loading" ? (
@@ -442,6 +444,9 @@ export function ScenarioEditorPage() {
                         (entry) => documentKey(entry) === key,
                       );
                       const reading = readers.get(key) ?? [];
+                      const capped = !listed && documentsFull;
+                      const detailId = `${documentsId}-${key}-detail`;
+                      const readingId = `${documentsId}-${key}-reading`;
                       return (
                         <li
                           key={document.reference_value}
@@ -453,13 +458,15 @@ export function ScenarioEditorPage() {
                               checked={listed}
                               // A native control keeps `disabled` at the cap (ADR 0063), with the
                               // lab's sentence in `title` and in the line its description names.
-                              disabled={!listed && documentsFull}
-                              title={
-                                !listed && documentsFull ? CONTEXT_DOCUMENTS_CAP_RULE : undefined
-                              }
-                              aria-describedby={
-                                !listed && documentsFull ? documentsCapId : undefined
-                              }
+                              disabled={capped}
+                              title={capped ? CONTEXT_DOCUMENTS_CAP_RULE : undefined}
+                              aria-describedby={[
+                                detailId,
+                                reading.length > 0 ? readingId : null,
+                                capped ? documentsCapId : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
                               onChange={() =>
                                 edit(
                                   toggleContextDocument(content, {
@@ -471,14 +478,17 @@ export function ScenarioEditorPage() {
                             />
                             {document.title}
                           </label>
-                          <span className="text-admin-muted">
+                          <span id={detailId} className="text-admin-muted">
                             {documentCollectionLabel(document.kind)} · read via{" "}
                             <code className="font-mono text-[11.5px]">
                               {documentToolName(document.kind)}
                             </code>
                           </span>
                           {reading.length > 0 ? (
-                            <span className="ml-auto rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
+                            <span
+                              id={readingId}
+                              className="ml-auto rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft"
+                            >
                               read-check → objective {reading.join(", ")}
                             </span>
                           ) : null}
