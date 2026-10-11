@@ -110,10 +110,12 @@ function run(
 
 /** Every subset of a list, in order, the empty one included. */
 function subsets<T>(items: readonly T[]): T[][] {
-  return items.reduce<T[][]>(
-    (all, item) => [...all, ...all.map((subset) => [...subset, item])],
-    [[]],
-  );
+  const all: T[][] = [[]];
+  for (const item of items) {
+    // Each subset so far, extended by this item, after every subset that leaves it out.
+    for (const subset of all.slice()) all.push([...subset, item]);
+  }
+  return all;
 }
 
 /**
