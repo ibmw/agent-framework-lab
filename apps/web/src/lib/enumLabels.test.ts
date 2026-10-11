@@ -12,7 +12,6 @@ import {
   type LabelledEnum,
   labelOf,
   optionsOf,
-  optionText,
   SUPPORT_PERMISSION,
 } from "./enumLabels";
 
@@ -148,13 +147,17 @@ describe("reading one table", () => {
   });
 
   it("writes an explained option the way the scenario editor writes one", () => {
-    expect(optionText(SUPPORT_PERMISSION.issue_refund)).toBe(
-      "Issue refund — refund an order in full or part",
-    );
+    expect(optionsOf(SUPPORT_PERMISSION)).toContainEqual({
+      value: "issue_refund",
+      label: "Issue refund",
+      option: "Issue refund — refund an order in full or part",
+    });
   });
 
   it("leaves a member with nothing to add as its bare label", () => {
-    expect(optionText({ label: "Card" })).toBe("Card");
+    expect(optionsOf({ card: { label: "Card" } })).toEqual([
+      { value: "card", label: "Card", option: "Card" },
+    ]);
   });
 
   it("names a member read out of a field the contract types as a free string", () => {

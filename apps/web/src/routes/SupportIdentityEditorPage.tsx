@@ -30,7 +30,7 @@ import {
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { slugify, uniqueId } from "../lib/entryIds";
-import { optionText, SUPPORT_PERMISSION } from "../lib/enumLabels";
+import { SUPPORT_PERMISSION } from "../lib/enumLabels";
 import {
   CHIP_LABEL_MAX_LENGTH,
   ESCALATION_CONDITIONS_RULE,
@@ -349,7 +349,10 @@ export function SupportIdentityEditorPage() {
   );
 }
 
-/** One group's permissions, a checkbox each, named by the permission and what it allows. */
+/**
+ * One group's permissions, a checkbox each, named by the permission and described by what it
+ * allows, on the one line "Label — explanation" the prototype draws.
+ */
 function PermissionBoxes({
   permissions,
   granted,
@@ -359,18 +362,36 @@ function PermissionBoxes({
   granted: SupportPermission[];
   onToggle: (permission: SupportPermission) => void;
 }) {
+  const boxesId = useId();
   return (
     <div className="grid gap-2">
-      {permissions.map((permission) => (
-        <label key={permission} className="flex items-center gap-2 text-[13px]">
-          <input
-            type="checkbox"
-            checked={granted.includes(permission)}
-            onChange={() => onToggle(permission)}
-          />
-          {optionText(SUPPORT_PERMISSION[permission])}
-        </label>
-      ))}
+      {permissions.map((permission) => {
+        // The box is named by the permission alone, which is what the specs reach it by
+        // (rule 5); what it allows is its description, and the dash between them is drawn
+        // for the eye only, so the label still wraps both as one click target.
+        const id = `${boxesId}-${permission}`;
+        const { label, explanation } = SUPPORT_PERMISSION[permission];
+        return (
+          <label key={permission} className="flex items-center gap-2 text-[13px]">
+            <input
+              type="checkbox"
+              checked={granted.includes(permission)}
+              aria-labelledby={`${id}-name`}
+              aria-describedby={explanation === undefined ? undefined : `${id}-explanation`}
+              onChange={() => onToggle(permission)}
+            />
+            <span>
+              <span id={`${id}-name`}>{label}</span>
+              {explanation === undefined ? null : (
+                <>
+                  <span aria-hidden="true"> — </span>
+                  <span id={`${id}-explanation`}>{explanation}</span>
+                </>
+              )}
+            </span>
+          </label>
+        );
+      })}
     </div>
   );
 }

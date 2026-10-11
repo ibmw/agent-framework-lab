@@ -92,8 +92,8 @@ async function publishReadOnlyIdentity(page: Page, name: string) {
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
 
   const permissions = card(page, "Permissions");
-  await permissions.getByLabel(/^Read orders —/).check();
-  await permissions.getByLabel(/^Read policies —/).check();
+  await permissions.getByLabel("Read orders").check();
+  await permissions.getByLabel("Read policies").check();
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(page.getByText(/Published version 1/)).toBeVisible();

@@ -203,9 +203,9 @@ async function publishSupportIdentity(page: Page, name: string) {
   const permissions = card(page, "Permissions");
   // `change shipping address` acts on an order, so publishing refuses it without
   // `read orders`: a mutation the identity cannot first read would be unauditable.
-  await permissions.getByLabel(/^Read orders —/).check();
-  await permissions.getByLabel(/^Read policies —/).check();
-  await permissions.getByLabel(/^Change shipping address —/).check();
+  await permissions.getByLabel("Read orders").check();
+  await permissions.getByLabel("Read policies").check();
+  await permissions.getByLabel("Change shipping address").check();
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(page.getByText(/Published version 1/)).toBeVisible();

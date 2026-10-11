@@ -120,6 +120,7 @@ export function AgentConfigurationEditorPage() {
   const { currentShop, loading: shopsLoading, listings } = useLabWorkspace();
   const publishReasonsId = useId();
   const toolsId = useId();
+  const memoryId = useId();
   const editor = useDefinitionEditor(configurationId, CLIENT, {
     label: "The agent configuration draft has unsaved changes.",
     // The library index prints the row this editor is changing, and it renders the shell's
@@ -819,7 +820,9 @@ export function AgentConfigurationEditorPage() {
                 }
               />
               {/* Three named radios, each with the line that says what it keeps: a closed set
-                  whose options need an explanation is not a chip group. */}
+                  whose options need an explanation is not a chip group. Each radio is named by
+                  its mode alone, as the other explained boxes are, and that line is its
+                  description. */}
               <FieldGroup label="Memory">
                 <div className="grid gap-2">
                   {MEMORY_MODES.map((mode) => (
@@ -829,11 +832,18 @@ export function AgentConfigurationEditorPage() {
                         name="memory"
                         value={mode.value}
                         checked={content.memory === mode.value}
+                        aria-labelledby={`${memoryId}-${mode.value}-name`}
+                        aria-describedby={`${memoryId}-${mode.value}-detail`}
                         onChange={() => edit({ ...content, memory: mode.value })}
                       />
                       <span>
-                        {mode.label}
-                        <span className="block text-xs text-admin-muted">{mode.detail}</span>
+                        <span id={`${memoryId}-${mode.value}-name`}>{mode.label}</span>
+                        <span
+                          id={`${memoryId}-${mode.value}-detail`}
+                          className="block text-xs text-admin-muted"
+                        >
+                          {mode.detail}
+                        </span>
                       </span>
                     </label>
                   ))}

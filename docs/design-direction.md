@@ -378,10 +378,13 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **No contract union reaches a reader in its wire spelling.** One table per union in
   `lib/enumLabels.ts`, keyed to the generated type and swept; free strings through
   `describeValue`. An explanation only where an operator could choose wrong, and only saying what
-  the lab enforces. A status column is a `StatusPill`: glyph for the axis, word for the meaning —
-  an index's Published column too (`PublicationPill`: "v3 · 2 versions" or *Never published*,
-  the dot on both, each state on the fill `VersionChips` gives it), headed *Published* on every
-  index; a *Version* column holds a version, as the starting states' does.
+  the lab enforces. A checkbox or radio over an explained member is named by its label alone and
+  carries the explanation as its accessible description; only a `<select>` option, which can
+  carry no description, reads "Label — explanation" (ADR 0050, amended 2026-10-11). A status
+  column is a `StatusPill`: glyph for the axis, word for the meaning — an index's Published
+  column too (`PublicationPill`: "v3 · 2 versions" or *Never published*, the dot on both, each
+  state on the fill `VersionChips` gives it), headed *Published* on every index; a *Version*
+  column holds a version, as the starting states' does.
 - **Where a set comes from decides the control.** A contract union is a select. A register (a
   locale, a country) is a datalist that suggests and echoes the name. What the lab has proven
   follows the gate's severity: provider a select, model a datalist, tone override a datalist of

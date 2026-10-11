@@ -790,6 +790,25 @@ describe("the new-order page", () => {
     expect(savedRequests[0].shipping_address_id).toBe("bordeaux-previous-flat");
   });
 
+  it("names each address-book radio by its entry's label and describes it by the address", async () => {
+    const user = userEvent.setup();
+    await newOrder();
+    await fillOrder(user);
+
+    const book = await screen.findByRole("group", { name: "Address book" });
+    const radios = await within(book).findAllByRole("radio");
+    // Every entry of the customer's book, in its order.
+    const entries = [
+      ["Home", "18 rue des Écoles, 69005 Lyon, FR"],
+      ["Bordeaux — previous flat", "42 cours de la Marne, 33800 Bordeaux, FR"],
+    ];
+    expect(radios).toHaveLength(entries.length);
+    for (const [index, [name, description]] of entries.entries()) {
+      expect(radios[index]).toHaveAccessibleName(name);
+      expect(radios[index]).toHaveAccessibleDescription(description);
+    }
+  });
+
   it("moves the rail's figure when an order is created from the page", async () => {
     const user = userEvent.setup();
     let listed = ORDERS.orders;

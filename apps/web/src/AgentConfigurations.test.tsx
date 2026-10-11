@@ -1564,17 +1564,28 @@ describe("the agent configuration editor's rows", () => {
     expect(bindings).toHaveAccessibleName("Tool bindings · 2 enabled");
   });
 
-  it("asks for the memory as a group named by its row", async () => {
+  it("asks for the memory as a group named by its row, each mode named by its label and described by what it keeps", async () => {
     renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
     const runtime = await screen.findByRole("region", { name: "LLM and runtime" });
 
     const memory = within(runtime).getByRole("group", { name: "Memory" });
     expectGroupRow(memory, "Memory");
-    expect(
-      within(memory)
-        .getAllByRole("radio")
-        .map((radio) => radio.getAttribute("value")),
-    ).toEqual(["none", "conversation", "durable"]);
+    const radios = within(memory).getAllByRole("radio");
+    expect(radios.map((radio) => radio.getAttribute("value"))).toEqual([
+      "none",
+      "conversation",
+      "durable",
+    ]);
+    // Each radio is named by its mode alone and the line under it is its description.
+    const modes = [
+      ["None", "Every turn starts from the prompt and the tools."],
+      ["Conversation", "The run's own turns are replayed to the model."],
+      ["Durable", "Memory the lab persists and can restore across runs."],
+    ];
+    for (const [index, [name, description]] of modes.entries()) {
+      expect(radios[index]).toHaveAccessibleName(name);
+      expect(radios[index]).toHaveAccessibleDescription(description);
+    }
   });
 
   it("says how the tone of voice resolves under its own field, and what this context resolves it to", async () => {

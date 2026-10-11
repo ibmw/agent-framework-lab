@@ -60,7 +60,9 @@ import type { Currency } from "./currencies";
  *
  * An explanation that states a rule must be the lab's own rule, carried from the code that
  * applies it — a sentence invented here would teach a constraint the run will not honour.
- * It is a lowercase clause, so that `optionText` can compose it onto its label as one line.
+ * It is a lowercase clause, so that it composes onto its label as one line: a select's option
+ * reads "Label — explanation", and a checkbox or radio draws the same line while it is named by
+ * the label alone and carries the explanation as its description.
  */
 export type EnumLabel = {
   readonly label: string;
@@ -88,13 +90,11 @@ export function optionsOf<Value extends string>(
   return (Object.keys(map) as Value[]).map((value) => ({
     value,
     label: map[value].label,
-    option: optionText(map[value]),
+    option:
+      map[value].explanation === undefined
+        ? map[value].label
+        : `${map[value].label} — ${map[value].explanation}`,
   }));
-}
-
-/** The "label — explanation" spelling, for a control that renders one entry rather than a list. */
-export function optionText(entry: EnumLabel): string {
-  return entry.explanation === undefined ? entry.label : `${entry.label} — ${entry.explanation}`;
 }
 
 /**
@@ -249,7 +249,7 @@ export const BACKGROUND_KIND: LabelMap<BackgroundKind> = {
 /**
  * What each evidence scope shows the judge, from the docstrings on `JudgeEvidenceScope` in
  * `apps/api/src/capability_lab/domain/judge.py`, in this table's own lowercase-clause style
- * so that `optionText` can compose them like every other explained set.
+ * so that they compose onto their labels like every other explained set.
  */
 export const JUDGE_EVIDENCE_SCOPE: LabelMap<JudgeEvidenceScope> = {
   customer_turns: {

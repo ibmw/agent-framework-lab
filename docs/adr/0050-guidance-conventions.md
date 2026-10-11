@@ -149,3 +149,22 @@ amendment is that record, on the terms this ADR was opened with: the words live 
 design-direction section and this names it rather than restating it. The one decision a reader
 might expect an ADR for — one open row per list — is a convention about a form, not about what
 the product *is*, and it is recorded where the other form conventions are.
+
+## Amendment — 2026-10-11
+
+A checkbox or radio over an explained member is named by its label alone and carries the
+explanation as its accessible description; only a `<select>` option, which can carry no
+description, reads "Label — explanation". The line the eye reads does not change: the label
+still wraps the name and the explanation as one click target, and, on the permission boxes,
+the dash between them is hidden from assistive technology.
+It extends what the tool-binding and judge-evidence boxes already did to the support identity's
+permission boxes, the agent configuration's memory radios and the new order's shipping-address
+radios, and `optionText` goes, since a select's option is now the only place that spells the
+two together (`optionsOf`). The sentence is in the explanations bullet of
+`docs/design-direction.md`.
+
+The names the Playwright journeys reach the permission boxes by move with it (rule 5):
+`tests/e2e/agent-configuration.spec.ts`, `tests/e2e/scenario-authoring.spec.ts` and
+`tests/e2e/experiment-start.spec.ts` now reach *Read orders*, *Read policies* and *Change
+shipping address* by the label alone. No permission label contains another, so none needs
+`exact`.

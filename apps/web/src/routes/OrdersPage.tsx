@@ -249,6 +249,7 @@ export function OrdersPage() {
 export function NewOrderPage() {
   const { shopId, content, listings } = useShopWorkspace();
   const formId = useId();
+  const addressesId = useId();
   const orders = listings.orders.rows;
   const customers = listings.customers.rows;
   const loading = listings.orders.loading || listings.customers.loading;
@@ -539,17 +540,26 @@ export function NewOrderPage() {
                       : "border-admin-field-border bg-admin-surface"
                   } ${focusRingClasses}`}
                 >
+                  {/* Named by the entry's label alone (rule 5); the address it ships to is
+                      the radio's description. */}
                   <input
                     className="mt-0.5"
                     type="radio"
                     name="shipping-address"
                     value={entry.id}
                     checked={entry.id === chosenAddressId}
+                    aria-labelledby={`${addressesId}-${entry.id}-name`}
+                    aria-describedby={`${addressesId}-${entry.id}-line`}
                     onChange={() => setAddressId(entry.id)}
                   />
                   <span>
-                    <span className="block font-bold">{entry.label}</span>
-                    <span className="block text-admin-ink-soft">
+                    <span id={`${addressesId}-${entry.id}-name`} className="block font-bold">
+                      {entry.label}
+                    </span>
+                    <span
+                      id={`${addressesId}-${entry.id}-line`}
+                      className="block text-admin-ink-soft"
+                    >
                       {entry.line1}, {entry.postal_code} {entry.city}, {entry.country}
                     </span>
                   </span>

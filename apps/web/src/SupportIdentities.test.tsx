@@ -287,24 +287,49 @@ describe("support identity workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "Northstar tier 1" })).toBeVisible();
     expect(screen.getByText(/acts on an order the identity is not allowed to read/)).toBeVisible();
-    // Selected by what the checkbox says it grants, which is the whole of its label now.
-    expect(
-      screen.getByLabelText("Change shipping address — redirect an order that has not shipped"),
-    ).toBeChecked();
-    expect(screen.getByLabelText("Read orders — look up this customer's orders")).not.toBeChecked();
+    // Reached by the permission's name, which is its label alone.
+    expect(screen.getByRole("checkbox", { name: "Change shipping address" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Read orders" })).not.toBeChecked();
   });
 
-  it("says what a permission grants on the checkbox that grants it", async () => {
+  it("names each permission's checkbox by its label and describes it by what it grants", async () => {
     renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 
     await screen.findByRole("heading", { name: "Northstar tier 1" });
-    const permissions = within(screen.getByRole("region", { name: "Permissions" }));
-    // The claim of the slice, in the words PLAN-UX wrote it in.
+    const card = screen.getByRole("region", { name: "Permissions" });
+    const permissions = within(card);
+    // Every permission the editor lists, in its order: named by its label alone — what the
+    // specs reach it by — with what it grants as its description, never "Label — explanation".
+    const expected = {
+      Read: [
+        ["Read catalog", "look up products, variants and prices"],
+        ["Read customer", "look up the customer's profile and addresses"],
+        ["Read orders", "look up this customer's orders"],
+        ["Read policies", "read the shop's policies, guidelines and FAQ"],
+      ],
+      Act: [
+        ["Cancel order", "cancel an order the customer has paid for"],
+        ["Change shipping address", "redirect an order that has not shipped"],
+        ["Issue refund", "refund an order in full or part"],
+        ["Apply discount", "offer a discount on the catalog, not on an order already placed"],
+        ["Escalate to human", "hand the incident to the escalation target this identity names"],
+      ],
+    };
+    expect(permissions.getAllByRole("checkbox")).toHaveLength(9);
+    for (const [group, entries] of Object.entries(expected)) {
+      const boxes = within(permissions.getByRole("group", { name: group })).getAllByRole(
+        "checkbox",
+      );
+      expect(boxes).toHaveLength(entries.length);
+      for (const [index, [name, description]] of entries.entries()) {
+        expect(boxes[index]).toHaveAccessibleName(name);
+        expect(boxes[index]).toHaveAccessibleDescription(description);
+      }
+    }
+    // The line the eye reads is unchanged: the label, a dash, and what it grants.
     expect(
-      permissions.getByRole("checkbox", {
-        name: "Issue refund — refund an order in full or part",
-      }),
-    ).toBeInTheDocument();
+      permissions.getByText("refund an order in full or part").closest("label"),
+    ).toHaveTextContent(/^Issue refund — refund an order in full or part$/);
     // And nowhere on the card is the wire's own spelling still readable.
     expect(permissions.queryByText(/issue_refund/)).toBeNull();
   });
@@ -314,7 +339,7 @@ describe("support identity workspace", () => {
     renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 
     await screen.findByRole("heading", { name: "Northstar tier 1" });
-    await user.click(screen.getByLabelText("Read orders — look up this customer's orders"));
+    await user.click(screen.getByRole("checkbox", { name: "Read orders" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
@@ -829,14 +854,8 @@ describe("the support identity editor's rows", () => {
     const act = permissions.getByRole("group", { name: "Act" });
     expectGroupRow(read, "Read");
     expectGroupRow(act, "Act");
-    expect(
-      within(read).getByLabelText("Read orders — look up this customer's orders"),
-    ).not.toBeChecked();
-    expect(
-      within(act).getByLabelText(
-        "Change shipping address — redirect an order that has not shipped",
-      ),
-    ).toBeChecked();
+    expect(within(read).getByRole("checkbox", { name: "Read orders" })).not.toBeChecked();
+    expect(within(act).getByRole("checkbox", { name: "Change shipping address" })).toBeChecked();
   });
 
   it("puts the escalation target on a row above the conditions", async () => {
