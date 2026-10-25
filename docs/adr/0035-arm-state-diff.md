@@ -1,6 +1,6 @@
 # ADR 0035 — What an arm's world became, and the counter that could not say it
 
-Status: accepted — 2026-09-05
+Status: accepted — 2026-09-05; amended 2026-10-25
 
 Delivers the state-diff half of `docs/PLAN.md` Milestone 5's sixth outcome, which ADR 0033
 deferred by name. Records the diff as a projection of the bytes a fingerprint already
@@ -99,8 +99,9 @@ interaction reference the incident opened from. No write seam in this build can 
 
 They are reported rather than dropped because that is the half of "no other state changed"
 nothing else guarantees. An empty list is the check passing; a non-empty one is a finding
-about the lab, and the interface raises it as an alert rather than folding it in with the
-agent's writes. A diff that silently ignored the region no writer touches would make the
+about the lab, and the interface raises it apart from the agent's writes rather than folding
+it in with them (as an alert until the 2026-10-25 amendment; now a static line with the warning
+glyph). A diff that silently ignored the region no writer touches would make the
 card's claim unfalsifiable, which is the same thing as making it meaningless.
 
 ### It is projected, and it travels with the standing and the metrics
@@ -123,6 +124,8 @@ documents are.
 - **A diff between the two arms.** Each arm is read against the world *both* were cloned
   into, which is what makes the two columns comparable. An arm-to-arm difference would be a
   fifth reader with no common origin, and the comparison stays the operator's (ADR 0033).
+  Narrowed by the 2026-10-25 amendment: the backend still serves no such diff, but the client
+  now compares the two served diffs row by row.
 - **Attributing a field to the write that moved it.** The writes are listed above the fields
   with the revisions they moved, which is what the record actually holds; claiming that a
   particular call changed a particular field would be an inference, and the one case where it
@@ -152,7 +155,7 @@ documents are.
 - Frontend tests (`Experiments.test.tsx`) cover the card: the fields each write moved the
   world to, the fault's field in the same list, "no other state changed" shown when the
   check passes, "not set" for a field that was not there, and a change outside every order
-  raised as an alert.
+  raised as an alert (a static line since the 2026-10-25 amendment, whose tests replace these).
 - The Playwright journey (`experiment-start.spec.ts`) is extended rather than duplicated, as
   every slice since ADR 0026 has been: after driving both arms to the turn cap, the operator
   reads each arm's order by its reference, the city it moved from and to, the fulfilment the
@@ -163,3 +166,50 @@ documents are.
 None. The diff is computed from documents the experiment already reads, so no table changes,
 no fingerprint moves, and every experiment started before this slice reads its own history
 back with the same detail as one started after it.
+
+## Amendment — 2026-10-25
+
+The results read the diff as a difference rather than as a list. Each arm opens on one summary
+line per order — its paths grouped by their first segment, a list counted by the entries it
+gained — and every path stays on the page behind a disclosure, so the diff is as exhaustive as
+it was.
+
+This narrows *A diff between the two arms* above. The backend still serves only each arm's diff
+against the world both were cloned into, and no arm-to-arm reading; but the client now compares
+the served values row by row. Where the arms changed the same paths it sets them side by side
+and judges each row *Same*, *Difference* or *Not compared*, and the rows that differ are shown
+above the disclosure. Where the paths differ it compares nothing, keeps a column per arm, and
+names the paths only one arm changed. The comparison is the client's reading of two served
+documents, made by two rules, and it is no longer the operator's alone.
+
+Two kinds of value are shown for each arm and not compared, because each arm mints its own:
+
+- **A moment the run's own clock wrote**: a canonical instant (the shape `canonical_timestamp`
+  writes) on a field one of the run's two writers stamps from its clock — an event's
+  `occurred_at`, `fulfilment.shipped_at` (`advance_fulfilment`) and
+  `shipping_address.selected_at` (`apply_address_change`).
+- **An address change's event name**: `address-change-` and twelve hex digits of a
+  confirmation that hashes the arm's own state fingerprint (`confirmation_of`), when every arm's
+  value has that shape. A fault's event is named after the fault and is the same in every arm,
+  so two different names at one index, or two arms whose events sit in a different order, read
+  as a difference.
+
+The limits are stated rather than hidden. The clock-written fields are a list the client keeps by
+hand, and it fails loud: a third writer that stamps a clock elsewhere reads as a difference until
+it is named, and a date somebody chose is never set aside for looking like one. Within the list,
+a moment *is* set aside even if it meant something — two arms that shipped at materially
+different times read alike — which is why the sentence above the table counts what it set aside
+("apart from 4 timestamps and 1 event identifier") rather than claiming the arms are the same,
+and why both values stay in the table. Absent against present is always a difference.
+
+A change outside every order is a static line with the warning glyph rather than an alert. It
+is on the record when the page loads and nothing announces it changing; it stays outside the
+orders' summary, in the error ink and the glyph, so it is still not folded in with the agent's
+writes.
+
+Frontend tests (`Experiments.test.tsx`) cover the summary, the groups, the arms side by side with
+a differing value marked and visible on load, the moments and event name left unmarked with both
+values shown and counted in the sentence, a different fault's event and a reordered history
+marked, a timestamp the clock did not write marked, a moment against an absent field marked, one
+field counted as one, a single arm with no comparison, the disclosure holding every path, the
+column per arm with the paths only one arm changed named, and no alert on load.

@@ -16,19 +16,16 @@ import { ComparisonTable } from "../components/ArmComparison";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { BusinessStateComparison } from "../components/StateDiff";
 import { Card, Fingerprint } from "../components/WorkspaceChrome";
 import { scoreReport, TAKES_A_MINUTE } from "../lib/actionStatus";
 import {
-  changeValue,
   describeFailure,
   describeJudgeFailure,
   formatCost,
   formatDuration,
   formatTokens,
   turnNumber,
-  writeKey,
-  writeLabel,
-  writesOf,
 } from "../lib/evidence";
 import { NOTE_MAX_LENGTH } from "../lib/fieldRules";
 import { pythonStrip } from "../lib/pythonText";
@@ -160,11 +157,7 @@ export function ExperimentResultsPage() {
               </p>
             }
           >
-            <ul className="grid gap-3 text-[13px]">
-              {experiment.runs.map((run) => (
-                <BusinessState key={run.run_id} experiment={experiment} run={run} />
-              ))}
-            </ul>
+            <BusinessStateComparison experiment={experiment} />
           </Card>
 
           <Card
@@ -543,67 +536,6 @@ function describeVerdict(judgement: JudgementSchema): string {
     return `no verdict — ${describeJudgeFailure(judgement.failure)}`;
   }
   return judgement.outcome ?? "no verdict";
-}
-
-/**
- * Everything that moved one arm, what it moved it to, and where that arm's world stands now.
- *
- * The writes say who moved it and the diff says what about it moved — a revision counter is
- * true of a redirected order and of a corrected typo alike, and the frame this card
- * implements shows the value on both sides (ADR 0035).
- */
-function BusinessState({
-  experiment,
-  run,
-}: {
-  experiment: ExperimentResponse;
-  run: ExperimentRunSchema;
-}) {
-  const writes = writesOf(experiment, run);
-  const { orders, other } = run.state_diff;
-  return (
-    <li className="grid gap-0.5">
-      <span className="font-semibold text-lab-ink">{run.label}</span>
-      {writes.length === 0 ? (
-        <span className="text-xs text-admin-muted">
-          Nothing wrote — this arm's world is the one it started in.
-        </span>
-      ) : (
-        writes.map((event) => (
-          <span key={writeKey(event)} className="text-xs text-admin-muted">
-            {writeLabel(event)} · r{event.revision_before} → r{event.revision_after}
-          </span>
-        ))
-      )}
-      {orders.map((order) => (
-        <dl key={order.order_id} className="mt-1 grid gap-0.5">
-          <dt className="text-xs font-semibold text-lab-ink">{order.reference}</dt>
-          {order.changes.map((change) => (
-            <dd key={change.path} className="text-xs text-admin-muted">
-              {change.path}: {changeValue(change.before)} →{" "}
-              <span className="text-lab-ink">{changeValue(change.after)}</span>
-            </dd>
-          ))}
-        </dl>
-      ))}
-      {other.length > 0 ? (
-        <span role="alert" className="text-xs text-lab-error">
-          Changed outside every order:{" "}
-          {other
-            .map(
-              (change) =>
-                `${change.path}: ${changeValue(change.before)} → ${changeValue(change.after)}`,
-            )
-            .join(", ")}
-        </span>
-      ) : null}
-      <span className="text-xs text-admin-muted">
-        Now at r{run.revision} · <Fingerprint value={run.state_fingerprint} /> · started from{" "}
-        <Fingerprint value={run.snapshot_fingerprint} />
-        {other.length === 0 && orders.length > 0 ? " · no other state changed" : null}
-      </span>
-    </li>
-  );
 }
 
 /**

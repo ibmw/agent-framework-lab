@@ -523,6 +523,114 @@ const REDIRECTED: ArmStateDiffSchema = {
   other: [],
 };
 
+/** What one arm's clock and state made of the seeded run's redirect. */
+interface ArmWorld {
+  eventId: string;
+  firedAt: string;
+  changedAt: string;
+  city?: string;
+  sourceAddressId?: string;
+}
+
+const ARM_A_WORLD: ArmWorld = {
+  eventId: "address-change-e72248418ca9",
+  firedAt: "2026-08-24T09:00:55.000000Z",
+  changedAt: "2026-08-24T09:01:05.000000Z",
+};
+
+const ARM_B_WORLD: ArmWorld = {
+  eventId: "address-change-d1a644321b81",
+  firedAt: "2026-08-24T09:01:15.000000Z",
+  changedAt: "2026-08-24T09:01:25.000000Z",
+};
+
+/**
+ * The seeded run's diff as the API serves it for one arm: the fault's entry, the redirect's
+ * entry, the fulfilment it advanced and the address it replaced — seventeen paths, which two
+ * arms that did the same thing share but for their clocks and the names they gave the events.
+ */
+function seededDiff(world: ArmWorld): ArmStateDiffSchema {
+  return {
+    orders: [
+      {
+        order_id: ORDER_ID,
+        reference: "NS-10482",
+        changes: [
+          { path: "events[3].id", before: null, after: "mutation-warehouse-picks-the-order" },
+          { path: "events[3].kind", before: null, after: "shipped" },
+          { path: "events[3].occurred_at", before: null, after: world.firedAt },
+          {
+            path: "events[3].summary",
+            before: null,
+            after: "Order NS-10482 moved to partially fulfilled while support was handling it.",
+          },
+          { path: "events[4].id", before: null, after: world.eventId },
+          { path: "events[4].kind", before: null, after: "address_updated" },
+          { path: "events[4].occurred_at", before: null, after: world.changedAt },
+          {
+            path: "events[4].summary",
+            before: null,
+            after: "Shipping address changed to 'Home' by Northstar tier 1.",
+          },
+          { path: "fulfilment.shipped_at", before: null, after: world.firedAt },
+          { path: "fulfilment.status", before: "unfulfilled", after: "partially_fulfilled" },
+          { path: "shipping_address.city", before: "Bordeaux", after: world.city ?? "Lyon" },
+          {
+            path: "shipping_address.line1",
+            before: "7 cours de l'Intendance",
+            after: "18 rue des Écoles",
+          },
+          { path: "shipping_address.line2", before: null, after: "Appartement 4" },
+          { path: "shipping_address.postal_code", before: "33000", after: "69005" },
+          {
+            path: "shipping_address.selected_at",
+            before: "2026-08-24T09:00:16.000000Z",
+            after: world.changedAt,
+          },
+          {
+            path: "shipping_address.source_address_id",
+            before: "bordeaux-previous-flat",
+            after: world.sourceAddressId ?? "home",
+          },
+          {
+            path: "shipping_address.source_label",
+            before: "Bordeaux — previous flat",
+            after: "Home",
+          },
+        ],
+      },
+    ],
+    other: [],
+  };
+}
+
+/** One arm's diff with each change passed through `edit`, and any `added` after them. */
+function editedDiff(
+  diff: ArmStateDiffSchema,
+  edit: (
+    change: ArmStateDiffSchema["orders"][number]["changes"][number],
+  ) => ArmStateDiffSchema["orders"][number]["changes"][number],
+  added: ArmStateDiffSchema["orders"][number]["changes"] = [],
+): ArmStateDiffSchema {
+  return {
+    ...diff,
+    orders: diff.orders.map((order) => ({
+      ...order,
+      changes: [...order.changes.map(edit), ...added],
+    })),
+  };
+}
+
+/** The row a table holds for one path, found by its row header. */
+function rowOf(table: HTMLElement, path: string): HTMLElement {
+  const header = within(table).getByRole("rowheader", { name: path });
+  const row = header.closest("tr");
+  if (!row) {
+    throw new Error(`no row holds ${path}`);
+  }
+  return row;
+}
+
 /**
  * The judge's own row, before and after a scoring pass.
  *
@@ -4886,7 +4994,7 @@ describe("experiment results", () => {
     expect(rows[1]).toHaveTextContent("order-moves-under-the-arm · scenario fault · r0 → r1");
   });
 
-  it("says what each write moved the world to, field by field", async () => {
+  it("says what each write moved the world to, group by group", async () => {
     toolEvents = [toolEvent(ARM_A, 0, "orders.apply_address_change", true)];
     stateDiffs = { [ARM_A]: REDIRECTED };
     renderResults();
@@ -4896,15 +5004,420 @@ describe("experiment results", () => {
     });
     const [moved, untouched] = within(state).getAllByRole("listitem");
 
-    // The order the customer quotes, then the values a revision counter cannot say.
-    expect(moved).toHaveTextContent("NS-10482");
-    expect(moved).toHaveTextContent("shipping_address.city: Bordeaux → Lyon");
-    // The scenario's own fault moved the same world, so its field is in the same diff.
-    expect(moved).toHaveTextContent("fulfilment.status: unfulfilled → partially_fulfilled");
+    // The order the customer quotes, and what about it moved, in one line: the scenario's
+    // own fault moved the same world, so its group is in the same summary.
+    expect(moved).toHaveTextContent("NS-10482 · 2 groups changed: shipping address, fulfilment");
     // The claim the card makes, checked rather than assumed.
     expect(moved).toHaveTextContent("no other state changed");
     expect(untouched).toHaveTextContent(
       "Nothing wrote — this arm's world is the one it started in",
+    );
+
+    // The values a revision counter cannot say, one press away.
+    await userEvent.click(
+      within(state).getByRole("button", { name: "Every changed field of NS-10482 (3)" }),
+    );
+    expect(state).toHaveTextContent("shipping_address.city: Bordeaux → Lyon");
+    expect(state).toHaveTextContent("fulfilment.status: unfulfilled → partially_fulfilled");
+  });
+
+  it("opens each arm's diff on one line counting its groups and the entries it added", async () => {
+    stateDiffs = { [ARM_A]: seededDiff(ARM_A_WORLD), [ARM_B]: seededDiff(ARM_B_WORLD) };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    const [armA, armB] = within(state).getAllByRole("listitem");
+
+    // Seventeen paths read as three groups: the biggest first, the history counted by the
+    // entries it gained rather than by their eight fields.
+    for (const arm of [armA, armB]) {
+      expect(arm).toHaveTextContent(
+        "NS-10482 · 3 groups changed: shipping address, fulfilment, 2 events added",
+      );
+      expect(arm).not.toHaveTextContent("shipping_address.city");
+    }
+    // Every path is still one press away, and nowhere else until then.
+    expect(within(state).queryByRole("table")).toBeNull();
+    expect(
+      within(state).getByRole("button", { name: "Every changed field of NS-10482 (17)" }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("sets the arms side by side, grouped, with every path behind the disclosure", async () => {
+    const diffs = { [ARM_A]: seededDiff(ARM_A_WORLD), [ARM_B]: seededDiff(ARM_B_WORLD) };
+    stateDiffs = diffs;
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    await userEvent.click(
+      within(state).getByRole("button", { name: "Every changed field of NS-10482 (17)" }),
+    );
+    const table = within(state).getByRole("table", {
+      name: "Every field of NS-10482 each arm changed",
+    });
+
+    // One table, the arms in columns under their names.
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Field", "Was", "Arm A", "Arm B", "Assessment"]);
+    // Grouped by the path's first segment, in the summary's order.
+    expect(
+      within(table)
+        .getAllByRole("rowheader")
+        .filter((cell) => cell.getAttribute("scope") === "rowgroup")
+        .map((cell) => cell.textContent),
+    ).toEqual(["shipping address", "fulfilment", "events"]);
+    // Exhaustive (ADR 0035): every path the backend served is a row, and nothing else is.
+    const paths = within(table)
+      .getAllByRole("rowheader")
+      .filter((cell) => cell.getAttribute("scope") === "row")
+      .map((cell) => cell.textContent);
+    expect([...paths].sort()).toEqual(
+      (diffs[ARM_A].orders[0]?.changes ?? []).map((change) => change.path).sort(),
+    );
+    // What it was, and what each arm left it at.
+    expect(
+      within(rowOf(table, "shipping_address.city"))
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Bordeaux", "Lyon", "Lyon", "Same"]);
+    expect(
+      within(rowOf(table, "shipping_address.line2")).getAllByRole("cell")[0],
+    ).toHaveTextContent("not set");
+  });
+
+  it("marks a value the arms left differently, in words and with its glyph, on load", async () => {
+    stateDiffs = {
+      [ARM_A]: seededDiff(ARM_A_WORLD),
+      [ARM_B]: seededDiff({ ...ARM_B_WORLD, city: "Paris", sourceAddressId: "work" }),
+    };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    // What was set aside is counted, so "the same" never stands for more than was checked.
+    expect(state).toHaveTextContent(
+      "Both arms changed the same 17 fields, and differ on 2: shipping_address.city, shipping_address.source_address_id. Not compared: 4 timestamps and 1 event identifier.",
+    );
+    // The differing rows are on the page before anything is pressed, and only they are.
+    const differing = within(state).getByRole("table", {
+      name: "Where the arms differ on NS-10482",
+    });
+    expect(
+      within(differing)
+        .getAllByRole("rowheader")
+        .filter((cell) => cell.getAttribute("scope") === "row")
+        .map((cell) => cell.textContent),
+    ).toEqual(["shipping_address.city", "shipping_address.source_address_id"]);
+    expect(
+      within(rowOf(differing, "shipping_address.city"))
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Bordeaux", "Lyon", "Paris", "≠ Difference"]);
+    // An identifier the operator chose is a value like any other: only the lab's own name
+    // for an event it wrote is set aside.
+    expect(
+      within(rowOf(differing, "shipping_address.source_address_id")).getAllByRole("cell"),
+    ).toHaveLength(4);
+    expect(
+      within(rowOf(differing, "shipping_address.source_address_id")).getAllByRole("cell")[3],
+    ).toHaveTextContent("Difference");
+
+    // And the full list still holds them, marked the same way.
+    await userEvent.click(
+      within(state).getByRole("button", { name: "Every changed field of NS-10482 (17)" }),
+    );
+    const table = within(state).getByRole("table", {
+      name: "Every field of NS-10482 each arm changed",
+    });
+    expect(within(rowOf(table, "shipping_address.city")).getAllByRole("cell")[3]).toHaveTextContent(
+      "≠ Difference",
+    );
+  });
+
+  it("shows each arm's clock and event names without counting them as a difference", async () => {
+    stateDiffs = { [ARM_A]: seededDiff(ARM_A_WORLD), [ARM_B]: seededDiff(ARM_B_WORLD) };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    // The seeded run's two arms wrote the same world at different moments, and says how much
+    // it set aside to call it that.
+    expect(state).toHaveTextContent(
+      "Both arms changed the same 17 fields to the same values, apart from 4 timestamps and 1 event identifier, which are not compared.",
+    );
+    expect(within(state).queryByRole("table")).toBeNull();
+    await userEvent.click(
+      within(state).getByRole("button", { name: "Every changed field of NS-10482 (17)" }),
+    );
+    const table = within(state).getByRole("table");
+    // Both values on the page, neither marked.
+    expect(
+      within(rowOf(table, "events[4].id"))
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual([
+      "not set",
+      "address-change-e72248418ca9",
+      "address-change-d1a644321b81",
+      "Not compared",
+    ]);
+    expect(
+      within(rowOf(table, "fulfilment.shipped_at"))
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual([
+      "not set",
+      "2026-08-24T09:00:55.000000Z",
+      "2026-08-24T09:01:15.000000Z",
+      "Not compared",
+    ]);
+    expect(within(table).queryByText(/Difference/)).toBeNull();
+  });
+
+  it("counts two different faults' events at one index as a difference", async () => {
+    stateDiffs = {
+      [ARM_A]: seededDiff(ARM_A_WORLD),
+      // Same kind, same summary: only the name says these are two faults, and a fault's name is
+      // the same in every arm, so a different one is a different event.
+      [ARM_B]: editedDiff(seededDiff(ARM_B_WORLD), (change) =>
+        change.path === "events[3].id" ? { ...change, after: "mutation-carrier-collects" } : change,
+      ),
+    };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    expect(state).toHaveTextContent(
+      "and differ on 1: events[3].id. Not compared: 4 timestamps and 1 event identifier.",
+    );
+  });
+
+  it("counts events written in a different order as a difference", async () => {
+    // Arm B's redirect came before its fault: the history is sorted by moment, so the same two
+    // events sit at each other's index, and each arm's entry there is a different event.
+    const swapped = (path: string) =>
+      path.startsWith("events[3]")
+        ? path.replace("events[3]", "events[4]")
+        : path.replace("events[4]", "events[3]");
+    const armB = seededDiff(ARM_B_WORLD);
+    const reordered = editedDiff(armB, (change) => {
+      if (!change.path.startsWith("events[")) {
+        return change;
+      }
+      const partner = armB.orders[0]?.changes.find((other) => other.path === swapped(change.path));
+      return { ...change, after: partner?.after ?? null };
+    });
+    stateDiffs = { [ARM_A]: seededDiff(ARM_A_WORLD), [ARM_B]: reordered };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    // Six of the history's fields differ, named five at a time; the two moments are still
+    // each arm's own clock.
+    expect(state).toHaveTextContent(
+      "and differ on 6: events[3].id, events[3].kind, events[3].summary, events[4].id, events[4].kind and 1 more. Not compared: 4 timestamps.",
+    );
+  });
+
+  it("compares a timestamp the run's clock did not write", async () => {
+    const promised = (world: ArmWorld, at: string) =>
+      editedDiff(seededDiff(world), (change) => change, [
+        { path: "fulfilment.promised_at", before: null, after: at },
+      ]);
+    stateDiffs = {
+      [ARM_A]: promised(ARM_A_WORLD, "2026-08-27T00:00:00.000000Z"),
+      [ARM_B]: promised(ARM_B_WORLD, "2026-08-29T00:00:00.000000Z"),
+    };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    // A date somebody chose is a value, whatever it looks like: only the fields the run's own
+    // clock writes are set aside.
+    expect(state).toHaveTextContent("and differ on 1: fulfilment.promised_at.");
+  });
+
+  it("counts a moment against a field that is not set as a difference", async () => {
+    stateDiffs = {
+      [ARM_A]: seededDiff(ARM_A_WORLD),
+      [ARM_B]: editedDiff(seededDiff(ARM_B_WORLD), (change) =>
+        change.path === "fulfilment.shipped_at" ? { ...change, after: null } : change,
+      ),
+    };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    // Absent and present are different facts (ADR 0035), whatever shape the present one has.
+    expect(state).toHaveTextContent("differ on 1: fulfilment.shipped_at.");
+  });
+
+  it("counts one field as one field", async () => {
+    const moved: ArmStateDiffSchema = {
+      orders: [
+        {
+          order_id: ORDER_ID,
+          reference: "NS-10482",
+          changes: [{ path: "shipping_address.city", before: "Bordeaux", after: "Lyon" }],
+        },
+      ],
+      other: [],
+    };
+    stateDiffs = { [ARM_A]: moved, [ARM_B]: moved };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    expect(state).toHaveTextContent("Both arms changed the same 1 field to the same values.");
+    expect(within(state).getAllByRole("listitem")[0]).toHaveTextContent(
+      "NS-10482 · 1 group changed: shipping address",
+    );
+  });
+
+  it("reads one arm's diff without a comparison", async () => {
+    stateDiffs = { [ARM_A]: seededDiff(ARM_A_WORLD) };
+    const base = experiment(turns, agentTurns, toolEvents, mutationEvents);
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () =>
+        HttpResponse.json({ ...base, runs: [base.runs[0]], arm_inputs: [[]] }),
+      ),
+    );
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    // Nothing to compare against: no sentence about the arms, and no Assessment column.
+    await userEvent.click(
+      await within(state).findByRole("button", { name: "Every changed field of NS-10482 (17)" }),
+    );
+    expect(state).not.toHaveTextContent(/arms changed/);
+    expect(
+      within(within(state).getByRole("table"))
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Field", "Was", "Arm A"]);
+  });
+
+  it("keeps each arm's column where the arms changed different fields", async () => {
+    toolEvents = [toolEvent(ARM_A, 0, "orders.apply_address_change", true)];
+    stateDiffs = { [ARM_A]: REDIRECTED, [ARM_B]: seededDiff(ARM_B_WORLD) };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    // What only one arm changed is named, a whole history entry folded, the rest counted.
+    expect(state).toHaveTextContent(
+      "The arms changed different fields, so each keeps its own column. Only Arm B changed events[3].*, events[4].*, fulfilment.shipped_at, shipping_address.line1, shipping_address.line2 and 3 more.",
+    );
+    expect(state).not.toHaveTextContent("Only Arm A");
+    // Every path either arm moved, counted once.
+    await userEvent.click(
+      within(state).getByRole("button", { name: "Every changed field of NS-10482 (17)" }),
+    );
+    expect(within(state).queryByRole("table")).toBeNull();
+    const columns = within(state)
+      .getAllByRole("listitem")
+      .filter((item) => item.querySelector("dl"));
+    expect(columns).toHaveLength(2);
+    const [armA, armB] = columns;
+    expect(armA).toHaveTextContent("Arm A");
+    expect(within(armA as HTMLElement).getAllByRole("definition")).toHaveLength(3);
+    expect(armB).toHaveTextContent("Arm B");
+    expect(within(armB as HTMLElement).getAllByRole("definition")).toHaveLength(17);
+    expect(armB).toHaveTextContent("events[4].id: not set → address-change-d1a644321b81");
+  });
+
+  it("does not fold an entry another arm also changed", async () => {
+    const only = (changes: ArmStateDiffSchema["orders"][number]["changes"]) => ({
+      orders: [{ order_id: ORDER_ID, reference: "NS-10482", changes }],
+      other: [],
+    });
+    stateDiffs = {
+      [ARM_A]: only([
+        { path: "events[3].kind", before: "placed", after: "shipped" },
+        { path: "events[3].summary", before: "Placed.", after: "Shipped." },
+      ]),
+      [ARM_B]: only([{ path: "events[3].id", before: "placed", after: "placed-again" }]),
+    };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    // Arm B touched the same entry, so "only Arm A changed events[3].*" would be false.
+    expect(state).toHaveTextContent(
+      "Only Arm A changed events[3].kind, events[3].summary. Only Arm B changed events[3].id.",
+    );
+    expect(state).not.toHaveTextContent("events[3].*");
+  });
+
+  it("says one value set aside in the singular", async () => {
+    const moved = (selectedAt: string): ArmStateDiffSchema => ({
+      orders: [
+        {
+          order_id: ORDER_ID,
+          reference: "NS-10482",
+          changes: [
+            { path: "shipping_address.city", before: "Bordeaux", after: "Lyon" },
+            {
+              path: "shipping_address.selected_at",
+              before: "2026-08-24T09:00:16.000000Z",
+              after: selectedAt,
+            },
+          ],
+        },
+      ],
+      other: [],
+    });
+    stateDiffs = {
+      [ARM_A]: moved("2026-08-24T09:01:05.000000Z"),
+      [ARM_B]: moved("2026-08-24T09:01:25.000000Z"),
+    };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    expect(state).toHaveTextContent(
+      "Both arms changed the same 2 fields to the same values, apart from 1 timestamp, which is not compared.",
+    );
+  });
+
+  it("names a whole group only one arm changed by the group", async () => {
+    const only = (changes: ArmStateDiffSchema["orders"][number]["changes"]) => ({
+      orders: [{ order_id: ORDER_ID, reference: "NS-10482", changes }],
+      other: [],
+    });
+    stateDiffs = {
+      [ARM_A]: only([
+        { path: "fulfilment.shipped_at", before: null, after: "2026-08-24T09:00:55.000000Z" },
+        { path: "fulfilment.status", before: "unfulfilled", after: "partially_fulfilled" },
+      ]),
+      [ARM_B]: only([{ path: "shipping_address.city", before: "Bordeaux", after: "Lyon" }]),
+    };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    expect(state).toHaveTextContent(
+      "Only Arm A changed fulfilment.*. Only Arm B changed shipping_address.city.",
     );
   });
 
@@ -4926,15 +5439,16 @@ describe("experiment results", () => {
     const state = await screen.findByRole("region", {
       name: "Business state — verified, not claimed",
     });
+    await userEvent.click(
+      within(state).getByRole("button", { name: "Every changed field of NS-10482 (1)" }),
+    );
 
     // An order that had no address and now has one is a different fact from one whose city
     // was blanked, and an empty cell would read as the same thing for both.
-    expect(within(state).getAllByRole("listitem")[0]).toHaveTextContent(
-      "shipping_address.city: not set → Lyon",
-    );
+    expect(state).toHaveTextContent("shipping_address.city: not set → Lyon");
   });
 
-  it("reports a change outside every order rather than hiding it", async () => {
+  it("reports a change outside every order rather than hiding it, without an alert", async () => {
     stateDiffs = {
       [ARM_A]: {
         orders: [],
@@ -4943,11 +5457,16 @@ describe("experiment results", () => {
     };
     renderResults();
 
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
     // Nothing in this build can produce one, which is exactly why it must be visible if one
-    // appears: the card's "no other state changed" is otherwise unfalsifiable.
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    // appears: the card's "no other state changed" is otherwise unfalsifiable. It was on the
+    // record when the page loaded, so nothing announces it as if it had just happened.
+    expect(within(state).getAllByRole("listitem")[0]).toHaveTextContent(
       "Changed outside every order: interaction.ticket_reference: T-204 → T-999",
     );
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("offers to show a reader around the comparison", async () => {

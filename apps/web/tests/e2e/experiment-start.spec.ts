@@ -679,14 +679,32 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   // What actually moved each arm, read off its revisions rather than off what it answered.
   const businessState = card(page, "Business state — verified, not claimed");
   await expect(businessState.getByText(/orders\.apply_address_change · r1 → r2/)).toHaveCount(2);
-  // And what those revisions moved the world *to*: a revision counter is true of a redirected
-  // order and of a corrected typo alike, so the value on both sides is the evidence.
-  await expect(businessState.getByText("shipping_address.city: Bordeaux → Lyon")).toHaveCount(2);
-  await expect(businessState.getByText("NS-10482", { exact: true })).toHaveCount(2);
-  // The scenario's own fault moved the same world, so its field is in the same difference.
-  await expect(businessState.getByText(/fulfilment\.status: unfulfilled → /)).toHaveCount(2);
+  // And what those revisions moved the world *to*, one line per arm: the order by its
+  // reference, then the groups that moved — the scenario's own fault moved the same world, so
+  // its fulfilment is in the same difference.
+  await expect(
+    businessState.getByText(
+      "NS-10482 · 3 groups changed: shipping address, fulfilment, 2 events added",
+      { exact: true },
+    ),
+  ).toHaveCount(2);
   // The claim the card makes, checked against the whole document rather than assumed.
   await expect(businessState.getByText(/no other state changed/)).toHaveCount(2);
+  // The two arms did the same thing, and the card says so in one sentence — counting what it
+  // set aside, since each arm ran at its own moments.
+  await expect(
+    businessState.getByText(/^Both arms changed the same \d+ fields to the same values/),
+  ).toBeVisible();
+  // A revision counter is true of a redirected order and of a corrected typo alike, so the
+  // value on both sides is the evidence: the arms side by side, the city each left.
+  await businessState.getByRole("button", { name: /^Every changed field of NS-10482 / }).click();
+  const fields = businessState.getByRole("table", {
+    name: "Every field of NS-10482 each arm changed",
+  });
+  await expect(
+    fields.getByRole("row", { name: /^shipping_address\.city Bordeaux Lyon Lyon / }),
+  ).toBeVisible();
+  await expect(fields.getByRole("row", { name: /^fulfilment\.status unfulfilled / })).toBeVisible();
 
   // And what the operator concluded, written beside the evidence rather than into it: the
   // shelf this run is filed on and the sentence explaining why.

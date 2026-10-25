@@ -113,31 +113,6 @@ each judgement's `provider`, and no contract moves. The covered journeys are
 `experiment-start.spec.ts` (the results at :640 and History's *Open results* at :818),
 `tour-anchors.spec.ts`, `sticky-header.spec.ts` (:684) and `workspace-shell.spec.ts`.
 
-### Slice 47 — The state diff reads as a difference
-
-- [ ] Each arm's diff opens with one summary line — "3 groups changed: shipping address,
-  fulfilment, 2 events added" — and groups its paths by their first segment, an indexed list
-  entry counted as an added item (`ExperimentResultsPage.tsx:536–590`).
-- [ ] Where the arms' changed paths are the same set, the arms sit side by side, one row per
-  path, and a value that differs between them is marked; otherwise each arm keeps its column.
-  Timestamps and generated identifiers do not count as a difference between arms.
-- [ ] The full list is behind a disclosure (ADR 0035 keeps it exhaustive).
-- [ ] *Changed outside every order* (:571) is a static line with the warning glyph, not
-  `role="alert"`, because nothing announced it changing.
-
-Frames: `DEPRECADED/ExperimentResults.dc.html`; the prototype draws no diff.
-
-Authority: ADR 0035.
-
-Departures to record: the grouping and the side-by-side reading are the lab's, as the prototype
-is silent and the frame lists paths.
-
-Branch: `feat/results-state-diff-readable`. Checks: Vitest — `Experiments.test.tsx` for the
-summary, the groups, arms side by side with a differing value marked, the disclosure holding
-every path, and no `alert` role on load. `make check`, `pnpm build`.
-
-Slice evidence: the seeded run's diff at 1440, both arms in one table.
-
 ### Slice 48 — The conversation is on the results
 
 - [ ] A read-only *Conversation* tab at `…/results/conversation`, between General and Execution
