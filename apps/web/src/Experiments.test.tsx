@@ -558,11 +558,11 @@ function judgeRow(): Pick<ObjectiveResultSchema, "outcome" | "detail" | "judgeme
   }
   return {
     outcome: "met",
-    detail: "the arm named the order and said what it changed",
+    detail: judgeRationale,
     judgement: {
       judge_id: JUDGE_ID,
       judge_version: 2,
-      provider: "openai",
+      provider: judgeProvider,
       model_id: "gpt-5-mini",
       brief_fingerprint: "e".repeat(64),
       attempt: 1,
@@ -872,6 +872,9 @@ let startFails = false;
 let runtimeUnavailable = false;
 let scored = false;
 let judgeFailed = false;
+/** What the judge wrote on a verdict, and the provider the judgement records it ran on. */
+let judgeRationale = "the arm named the order and said what it changed";
+let judgeProvider = "openai";
 let scoredBy: { judge_id: string }[] = [];
 let filed: string[][] = [];
 let publishedJudges: JudgeConfigurationListResponse = JUDGES;
@@ -1205,6 +1208,8 @@ afterEach(() => {
   runtimeUnavailable = false;
   scored = false;
   judgeFailed = false;
+  judgeRationale = "the arm named the order and said what it changed";
+  judgeProvider = "openai";
   scoredBy = [];
   publishedJudges = JUDGES;
   annotations = { notes: [], tags: [] };
@@ -3464,6 +3469,26 @@ describe("live bench", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps its matrix to the marks, with no evidence line under them", async () => {
+    scored = true;
+    renderBench();
+
+    const objectives = await screen.findByRole("region", { name: "Objectives" });
+    await within(objectives).findAllByText(/explain-the-outcome met — /);
+
+    // The bench's column is a running thread's neighbour: each cell is its mark, and the
+    // sentence behind it is heard and hovered rather than drawn as a line of its own.
+    expect(
+      within(objectives).queryByText("support.read_document never answered policy:address-change"),
+    ).toBeNull();
+    expect(
+      within(objectives).queryByRole("button", {
+        name: "the arm named the order and said what it changed",
+      }),
+    ).toBeNull();
+    expect(within(objectives).queryByText(/^read-address-change-policy · /)).toBeNull();
+  });
+
   it("says a judge scores its own rows rather than counting them as missed", async () => {
     renderBench();
 
@@ -4353,15 +4378,121 @@ describe("experiment results", () => {
 
     const evidence = await screen.findByRole("region", { name: "Deterministic evidence" });
     const row = within(evidence).getByRole("row", { name: /Read the address-change policy/ });
+    const [armA, armB] = within(row).getAllByRole("cell");
 
     // The arm that read the document and the arm that has not, side by side, each with the
-    // evidence sentence that makes the cell a finding rather than a mark.
-    expect(row).toHaveTextContent(
-      /read-address-change-policy met — support\.read_document answered policy:address-change/,
-    );
-    expect(row).toHaveTextContent(
-      /read-address-change-policy pending — support\.read_document never answered/,
-    );
+    // evidence sentence that makes the cell a finding rather than a mark — drawn under the
+    // mark for everyone, not left to a hover or a screen reader.
+    expect(within(armA).getByText("met")).toBeVisible();
+    expect(
+      within(armA).getByText("support.read_document answered policy:address-change"),
+    ).toBeVisible();
+    expect(within(armB).getByText("pending")).toBeVisible();
+    expect(
+      within(armB).getByText("support.read_document never answered policy:address-change"),
+    ).toBeVisible();
+    // Nothing the line says is said again where only some readers would find it.
+    for (const cell of [armA, armB]) {
+      expect(cell).not.toHaveAttribute("title");
+      expect(cell.querySelector(".sr-only")).toBeNull();
+    }
+    // The objective by its statement, its slug beneath it as the secondary text.
+    const objective = within(row).getByRole("rowheader");
+    expect(within(objective).getByText("Read the address-change policy")).toBeVisible();
+    expect(within(objective).getByText(/^read-address-change-policy · /)).toBeVisible();
+  });
+
+  it("names each matrix by the half of the evidence it holds", async () => {
+    renderResults();
+
+    const evidence = await screen.findByRole("region", { name: "Deterministic evidence" });
+    const judged = screen.getByRole("region", { name: "LLM judge evidence" });
+
+    expect(
+      within(evidence).getByRole("table", { name: "Objectives decided from the record" }),
+    ).toBeVisible();
+    expect(within(judged).getByRole("table", { name: "Objectives a judge scored" })).toBeVisible();
+  });
+
+  it("shows a judge's first sentence, and opens the whole of it with the judge by its name", async () => {
+    scored = true;
+    judgeRationale =
+      "The arm named the order back to the customer. It then said the city had moved to Lyon.";
+    const user = userEvent.setup();
+    renderResults();
+
+    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
+    const row = within(judged).getByRole("row", { name: /Explain the outcome/ });
+    const [armA] = within(row).getAllByRole("cell");
+    const disclosure = within(armA).getByRole("button", {
+      name: "The arm named the order back to the customer.",
+    });
+
+    // One line on screen; the rest of the reason, and who gave it, wait behind the press.
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    expect(within(armA).queryByText(/It then said the city had moved to Lyon/)).toBeNull();
+    expect(within(armA).queryByText(/^Judged by/)).toBeNull();
+
+    await user.click(disclosure);
+
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    expect(within(armA).getByText(judgeRationale)).toBeVisible();
+    // The judge by the name it was published under, not by the model that read its rubric.
+    expect(
+      await within(armA).findByText(
+        "Judged by Resolution quality, version 2, on gpt-5-mini — attempt 1.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("discloses a judge execution that produced no verdict as an attempt, never a judgement", async () => {
+    scored = true;
+    judgeFailed = true;
+    const user = userEvent.setup();
+    renderResults();
+
+    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
+    const row = within(judged).getByRole("row", { name: /Explain the outcome/ });
+    const [armA] = within(row).getAllByRole("cell");
+    await user.click(within(armA).getByRole("button", { name: "the judge could not be reached" }));
+
+    // The outage is the lab's: the arm was not judged, and the disclosure does not say it was.
+    expect(
+      await within(armA).findByText(
+        "Attempted by Resolution quality, version 2, on gpt-5-mini — attempt 1; no verdict: the provider was briefly unavailable.",
+      ),
+    ).toBeVisible();
+    expect(within(armA).queryByText(/Judged by/)).toBeNull();
+  });
+
+  it("says in words what the offline control judge does not read, beside its mark", async () => {
+    scored = true;
+    judgeProvider = "fake";
+    judgeRationale = "the arm answered every turn it received (1 of them)";
+    renderResults();
+
+    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
+    const row = within(judged).getByRole("row", { name: /Explain the outcome/ });
+
+    for (const cell of within(row).getAllByRole("cell")) {
+      expect(
+        within(cell).getByText(
+          "Offline control judge: it checks that every turn was answered, not what the reply said.",
+        ),
+      ).toBeVisible();
+    }
+  });
+
+  it("says nothing of the control's limit on a verdict another provider's judge gave", async () => {
+    scored = true;
+    renderResults();
+
+    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
+    await within(judged).findAllByRole("button", {
+      name: "the arm named the order and said what it changed",
+    });
+
+    expect(within(judged).queryByText(/Offline control judge/)).toBeNull();
   });
 
   it("counts each arm against what was decided for it, and never into one score", async () => {

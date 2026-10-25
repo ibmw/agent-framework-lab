@@ -47,6 +47,23 @@ export const MODEL_PROVIDER_LABELS: Record<string, string> = {
   fake: "Deterministic control",
 };
 
+/**
+ * The provider the lab's offline control judge records on every judgement it produces —
+ * `CONTROL_JUDGE_PROVIDER` in `application/judge_capabilities.py`, the `fake` key above.
+ */
+export const CONTROL_JUDGE_PROVIDER = "fake";
+
+/**
+ * What a verdict by the control judge does and does not establish, said beside its mark.
+ *
+ * The control reads the record by a declared rule — every customer turn answered or not —
+ * and never the meaning of a reply (`infrastructure/judges/control.py`). Its *met* beside a
+ * published judge's *met* would otherwise read as the same finding. The sentence is the lab's:
+ * the prototype scores with a published model judge only.
+ */
+export const CONTROL_JUDGE_NOTE =
+  "Offline control judge: it checks that every turn was answered, not what the reply said.";
+
 export function describeProvider(value: string): string {
   return MODEL_PROVIDER_LABELS[value] ?? value;
 }

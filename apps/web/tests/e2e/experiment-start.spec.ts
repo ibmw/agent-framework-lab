@@ -649,11 +649,12 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
     card(page, "Arm A summary").getByRole("list", { name: "What Arm A spent" }),
   ).toContainText(/\d+ turns?.*\d+ tool calls?/);
 
+  // Each cell's mark with the sentence that decided it, drawn under the mark rather than heard
+  // or hovered: the arm that completed missed the read, the one still open can make it.
   const deterministic = card(page, "Deterministic evidence");
-  await expect(
-    deterministic.getByText(/ missed — support\.read_document never answered/),
-  ).toHaveCount(1);
-  await expect(deterministic.getByText(/ pending — /)).toHaveCount(1);
+  await expect(deterministic.getByRole("cell").filter({ hasText: /missed/ })).toHaveCount(1);
+  await expect(deterministic.getByRole("cell").filter({ hasText: /pending/ })).toHaveCount(1);
+  await expect(deterministic.getByText(/^support\.read_document never answered/)).toHaveCount(2);
   // The judge's row is on its own card with the version and model that produced it, never
   // mixed in with the evidence a rule decided.
   await expect(deterministic.getByText("Read document")).toBeVisible();
@@ -661,6 +662,15 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   const judgeCard = card(page, "LLM judge evidence");
   await expect(judgeCard.getByText("Resolve the incident")).toBeVisible();
   await expect(judgeCard.getByText(/judge v1 · deterministic · attempt 1/)).toHaveCount(2);
+  // The control judge read whether each turn was answered, and says so beside its mark; the
+  // whole of its reason, and the judge by its published name, open under the first sentence.
+  await expect(judgeCard.getByText(/^Offline control judge: it checks/)).toHaveCount(2);
+  await judgeCard.getByRole("button", { name: /^the arm answered every turn it received/ }).click();
+  await expect(
+    judgeCard.getByText(
+      `Judged by experiment-resolution-quality-${unique}, version 1, on the deterministic control — attempt 1.`,
+    ),
+  ).toHaveCount(1);
 
   // What actually moved each arm, read off its revisions rather than off what it answered.
   const businessState = card(page, "Business state — verified, not claimed");
@@ -836,7 +846,9 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
     card(page, "Arm B summary").getByText(/waiting for the customer at turn 1/),
   ).toBeVisible();
   await expect(
-    card(page, "Deterministic evidence").getByText(/ missed — support\.read_document never/),
+    card(page, "Deterministic evidence")
+      .getByRole("cell")
+      .filter({ hasText: /missed.*support\.read_document never/ }),
   ).toHaveCount(1);
   // What is *not* carried over: a verdict is a record about the arm it was scored on
   // (ADR 0031), so the derived arms are unjudged until somebody scores them.

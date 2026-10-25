@@ -4,18 +4,25 @@ import type {
   JudgeConfigurationSummarySchema,
   ObjectiveResultSchema,
 } from "@agent-lab/contracts";
-import { useId } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { useId, useState } from "react";
+import { CONTROL_JUDGE_NOTE, CONTROL_JUDGE_PROVIDER } from "../lib/agents";
 import { labelOf, OBJECTIVE_SEVERITY } from "../lib/enumLabels";
-import { describeJudgement, OUTCOMES } from "../lib/evidence";
+import { describeJudgement, firstSentence, judgementProvenance, OUTCOMES } from "../lib/evidence";
 import { onlyChoiceNote } from "../lib/singleChoice";
 import {
   fieldControlClasses,
   fieldLabelClasses,
+  focusRingClasses,
   outlineButtonClasses,
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
 import { BusyButton } from "./PrimaryAction";
+
+/** What a matrix is called when its caller does not say which half of the evidence it holds. */
+const EVERY_OBJECTIVE =
+  "Every objective this scenario composed, and where each arm stands against it";
 
 /**
  * One row per objective, one column per arm — the bench's matrix and the results screen's,
@@ -28,47 +35,39 @@ import { BusyButton } from "./PrimaryAction";
  * differently on two screens would show one arm two different records.
  *
  * `compact` is the one thing the two callers genuinely disagree about: the bench renders this
- * in a 320px column beside a running thread, and the results screen renders it on a page
- * where an objective's severity has room to be read.
+ * in a 320px column beside a running thread, where a cell is its mark and the sentence behind
+ * it is heard and hovered; the results screen renders it on a page with room to read, where
+ * every cell's sentence is a visible line under its mark (`Workspace.dc.html`:2619, `aWhy`)
+ * and an objective's slug and severity sit under its statement.
  */
 export function ObjectiveMatrix({
   runs,
   arms,
   rows,
   compact = false,
+  caption = EVERY_OBJECTIVE,
+  judges = [],
 }: {
   runs: ExperimentRunSchema[];
   arms: ArmEvaluationSchema[];
   rows: ObjectiveResultSchema[];
   compact?: boolean;
+  /** The table's name: which half of the evidence it holds, where a page holds both. */
+  caption?: string;
+  /** The published judges, by which a judged cell names the judge that scored it. */
+  judges?: JudgeConfigurationSummarySchema[];
 }) {
-  const style = compact
-    ? {
-        headRow: "text-xs font-semibold text-admin-muted",
-        head: "",
-        armHead: "w-10 text-right",
-        cell: "py-0.5 pr-2",
-        armCell: "py-0.5 text-right",
-      }
-    : {
-        headRow: "",
-        head: tableHeadClasses,
-        armHead: `${tableHeadClasses} w-16 text-right`,
-        cell: `${tableCellClasses} pr-2`,
-        armCell: `${tableCellClasses} text-right`,
-      };
+  if (!compact) {
+    return <EvidenceMatrix runs={runs} arms={arms} rows={rows} caption={caption} judges={judges} />;
+  }
   return (
     <table className="w-full text-left text-[13px]">
-      <caption className="sr-only">
-        Every objective this scenario composed, and where each arm stands against it
-      </caption>
+      <caption className="sr-only">{caption}</caption>
       <thead>
-        <tr className={style.headRow}>
-          <th scope="col" className={style.head}>
-            Objective
-          </th>
+        <tr className="text-xs font-semibold text-admin-muted">
+          <th scope="col">Objective</th>
           {runs.map((run) => (
-            <th key={run.run_id} scope="col" className={style.armHead}>
+            <th key={run.run_id} scope="col" className="w-10 text-right">
               {run.label}
             </th>
           ))}
@@ -77,24 +76,16 @@ export function ObjectiveMatrix({
       <tbody>
         {rows.map((row) => (
           <tr key={row.objective_id}>
-            <th scope="row" className={`${style.cell} font-normal text-admin-ink-soft`}>
+            <th scope="row" className="py-0.5 pr-2 font-normal text-admin-ink-soft">
               {row.statement}
-              {compact ? null : (
-                <span className="ml-2 text-xs text-admin-muted">
-                  {labelOf(OBJECTIVE_SEVERITY, row.severity)}
-                  {row.evidence === "forbidden" ? " · must never happen" : ""}
-                </span>
-              )}
             </th>
             {arms.map((arm) => {
-              const result = arm.objectives.find(
-                (entry) => entry.objective_id === row.objective_id,
-              );
+              const result = resultFor(arm, row);
               const outcome = result ? OUTCOMES[result.outcome] : null;
               return (
                 <td
                   key={arm.run_id}
-                  className={style.armCell}
+                  className="py-0.5 text-right"
                   // The provenance is on the hover too, not only in the accessible name:
                   // "which judge, at which version, on which model" is what makes a verdict
                   // readable, and a sighted operator needs it as much (ADR 0031).
@@ -115,6 +106,152 @@ export function ObjectiveMatrix({
         ))}
       </tbody>
     </table>
+  );
+}
+
+/** One arm's result for one objective, paired by the objective rather than by position. */
+function resultFor(
+  arm: ArmEvaluationSchema,
+  row: ObjectiveResultSchema,
+): ObjectiveResultSchema | undefined {
+  return arm.objectives.find((entry) => entry.objective_id === row.objective_id);
+}
+
+/**
+ * The results screen's matrix: every cell's mark with the sentence that decided it.
+ *
+ * Nothing is left to a hover or to a screen reader alone — the line under a mark is the
+ * evidence, read the same way by everyone, so the cell carries no `title` and no hidden copy.
+ */
+function EvidenceMatrix({
+  runs,
+  arms,
+  rows,
+  caption,
+  judges,
+}: {
+  runs: ExperimentRunSchema[];
+  arms: ArmEvaluationSchema[];
+  rows: ObjectiveResultSchema[];
+  caption: string;
+  judges: JudgeConfigurationSummarySchema[];
+}) {
+  return (
+    // A phone's width is narrower than two arms' sentences; the table scrolls inside its card
+    // rather than pushing the page sideways.
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-[13px]">
+        <caption className="sr-only">{caption}</caption>
+        <thead>
+          <tr>
+            <th scope="col" className={tableHeadClasses}>
+              Objective
+            </th>
+            {runs.map((run) => (
+              <th key={run.run_id} scope="col" className={`${tableHeadClasses} w-[220px]`}>
+                {run.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.objective_id}>
+              <th scope="row" className={`${tableCellClasses} pr-2 font-normal`}>
+                <span className="block font-semibold text-admin-ink">{row.statement}</span>
+                <span className="mt-0.5 block text-xs text-admin-muted">
+                  {row.objective_id} · {labelOf(OBJECTIVE_SEVERITY, row.severity)}
+                  {row.evidence === "forbidden" ? " · must never happen" : ""}
+                </span>
+              </th>
+              {arms.map((arm) => (
+                <td key={arm.run_id} className={`${tableCellClasses} min-w-[12rem]`}>
+                  <EvidenceCell result={resultFor(arm, row)} judges={judges} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * One arm's mark on one objective, and why.
+ *
+ * A rule's sentence is short and is the whole of the evidence, so it is drawn whole. A judge's
+ * rationale is prose: its first sentence is the line, held to one line, and the whole of it
+ * opens beneath with the judge that wrote it, by its published name. A verdict by the offline
+ * control says, in words, what that judge does not read.
+ */
+function EvidenceCell({
+  result,
+  judges,
+}: {
+  result: ObjectiveResultSchema | undefined;
+  judges: JudgeConfigurationSummarySchema[];
+}) {
+  const [open, setOpen] = useState(false);
+  const bodyId = useId();
+  if (!result) {
+    return (
+      <span className="font-semibold text-admin-ink-soft">
+        <span aria-hidden="true">— </span>not judged
+      </span>
+    );
+  }
+  const outcome = OUTCOMES[result.outcome];
+  const judgement = result.judgement;
+  // A mark that is a word ("judge") says what its label says at more length, so the label
+  // stands alone; a glyph is drawn beside its word, never instead of it.
+  const glyph = /\p{L}/u.test(outcome.mark) ? null : outcome.mark;
+  const mark = (
+    <span className="block font-semibold text-admin-ink-soft">
+      {glyph ? <span aria-hidden="true">{glyph} </span> : null}
+      {outcome.label}
+    </span>
+  );
+  if (!judgement) {
+    return (
+      <>
+        {mark}
+        <span className="mt-0.5 block text-xs leading-normal text-admin-ink-soft">
+          {result.detail}
+        </span>
+      </>
+    );
+  }
+  const judgeName = judges.find((judge) => judge.judge_id === judgement.judge_id)?.name;
+  return (
+    <>
+      {mark}
+      {judgement.provider === CONTROL_JUDGE_PROVIDER ? (
+        <span className="mt-0.5 block text-xs leading-normal text-admin-muted">
+          {CONTROL_JUDGE_NOTE}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? bodyId : undefined}
+        onClick={() => setOpen(!open)}
+        className={`mt-0.5 flex w-full min-w-0 max-w-[220px] items-center gap-1 rounded text-left text-xs leading-normal text-admin-ink-soft hover:text-admin-ink ${focusRingClasses}`}
+      >
+        {open ? (
+          <ChevronDown size={12} aria-hidden="true" focusable="false" className="flex-none" />
+        ) : (
+          <ChevronRight size={12} aria-hidden="true" focusable="false" className="flex-none" />
+        )}
+        <span className="min-w-0 truncate">{firstSentence(result.detail)}</span>
+      </button>
+      {open ? (
+        <span id={bodyId} className="mt-1 grid gap-1 text-xs leading-normal">
+          <span className="text-admin-ink-soft">{result.detail}</span>
+          <span className="text-admin-muted">{judgementProvenance(judgement, judgeName)}</span>
+        </span>
+      ) : null}
+    </>
   );
 }
 

@@ -113,40 +113,6 @@ each judgement's `provider`, and no contract moves. The covered journeys are
 `experiment-start.spec.ts` (the results at :640 and History's *Open results* at :818),
 `tour-anchors.spec.ts`, `sticky-header.spec.ts` (:684) and `workspace-shell.spec.ts`.
 
-### Slice 44 — The evidence says why
-
-Each mark on the results matrices carries the sentence that decided it, and a judged mark the
-judge's reason and who the judge was.
-
-- [ ] Under each mark in `ObjectiveEvidence` (`components/ObjectiveEvidence.tsx:101–112`) on the
-  results screen, the cell's `detail` is drawn as one visible line (`row.aWhy`), the `.sr-only`
-  copy goes, and the `title` repeats nothing the line says. The bench's matrix stays compact: a
-  prop the results pass, not a second component.
-- [ ] A judged cell's line is the rationale's first sentence, truncated at one line, with a
-  disclosure that opens the whole of it and the judgement's provenance (`describeJudgement`,
-  `lib/evidence.ts:82–88`); the provenance names the judge by its published name, not its
-  `model_id`. A judgement whose `provider` is the offline control says so in words — "offline
-  control judge: it checks that every turn was answered, not what the reply said" — beside the
-  mark, never as colour alone.
-- [ ] An objective is named by its statement, with its slug as secondary text.
-- [ ] The two matrices carry their own captions: "Objectives decided from the record" and
-  "Objectives a judge scored".
-
-Frames: `Workspace.dc.html:2577–2625` and `RESULT_ROWS` (:5003); `DEPRECADED/ExperimentResults.dc.html`.
-
-Authority: ADR 0030, ADR 0031, ADR 0033, ADR 0040.
-
-Departures to record: the control judge's sentence is the lab's, as the prototype scores with a
-published judge only.
-
-Branch: `feat/results-evidence-legible`. Checks: Vitest — `Experiments.test.tsx` shows each
-seeded cell's evidence as visible text, the judge's rationale behind a disclosure, the control
-judge's sentence for `provider` offline and not for another, and two distinct captions; the
-bench's matrix shows no evidence line. `make check`, `pnpm build`; `pnpm test:e2e` for
-`experiment-start.spec.ts` (:640).
-
-Slice evidence: the seeded run's General tab at 1440, every cell's line readable without hovering.
-
 ### Slice 45 — Each arm's standing is counted the way the operator counts
 
 - [ ] "Completed at turn N" counts turns from one: the seeded two-turn arms read "Completed —
@@ -268,8 +234,8 @@ Slice evidence: each tab at 1440 and 1280 with its selection visible, and no cli
 
 - [ ] The timeline draws each arm in its own lane on one clock, the turns as bands, a scenario
   fault where it fired.
-- [ ] Every event has an anchor, and each evidence line from Slice 44 links to the event that
-  decided it.
+- [ ] Every event has an anchor, and each evidence line on the results matrices links to the
+  event that decided it.
 
 Frames: `Workspace.dc.html:5014`; `DEPRECADED/ResultsTimeline.dc.html`.
 
@@ -378,15 +344,14 @@ Slice evidence: the results and the bench at 390, no text past the viewport.
   three lists and not a new canonical shape; `lib/documents.ts` writes every row back into the
   collection it came from, and a document is named by its kind and its slug (ADR 0057).
 - **The next-step sentence from `SETUP_CHAIN`**, `GuideProse` card footers and a copy control on
-  `Fingerprint` — the parts of the old Slices 13 and 16 the prototype does not draw. The matrix's
-  per-cell evidence sentence is drawn (`row.aWhy`, `Workspace.dc.html:2619`) and is Slice 44's.
+  `Fingerprint` — the parts of the old Slices 13 and 16 the prototype does not draw.
 - **The prototype's *Code paths* tab.** The executed-code rail stays beside the timeline, and the
   fourth tab is the conversation (Slice 48).
 - **Listing the runs derived from this one.** `derived_from` names a run's source, and nothing
   names its children; a listing narrowed by source is a backend slice in `docs/PLAN.md`.
 - **What the offline control judge decides.** Its rubric marks *Tell the customer what changed*
   met when an arm answered every turn, which the seeded run's turn 2 shows is not a reading of the
-  reply; Slice 44 says so on screen, and changing the judge is `docs/PLAN.md`'s.
+  reply; the results say so beside the mark, and changing the judge is `docs/PLAN.md`'s.
 - **A component library or a new UI dependency.** The `CreatePage` layout, `ConfirmRemove` and
   `ActionStatus` are small components on the existing chrome, as the switcher's panel was.
 - **The product's variants, a scenario's composed blocks, the create pages' rows and a ticket's

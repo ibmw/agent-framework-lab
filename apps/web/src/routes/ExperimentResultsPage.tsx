@@ -138,7 +138,12 @@ export function ExperimentResultsPage() {
                 This scenario composes no objective a rule decides.
               </p>
             ) : (
-              <ObjectiveMatrix runs={experiment.runs} arms={arms} rows={deterministic} />
+              <ObjectiveMatrix
+                runs={experiment.runs}
+                arms={arms}
+                rows={deterministic}
+                caption="Objectives decided from the record"
+              />
             )}
           </Card>
 
@@ -179,7 +184,13 @@ export function ExperimentResultsPage() {
                 {/* Busy while a judge scores them, and only these: the card also holds the
                     scoring queue, which a busy card would keep from being announced. */}
                 <div aria-busy={scoring || undefined} className="grid gap-3">
-                  <ObjectiveMatrix runs={experiment.runs} arms={arms} rows={judged} />
+                  <ObjectiveMatrix
+                    runs={experiment.runs}
+                    arms={arms}
+                    rows={judged}
+                    caption="Objectives a judge scored"
+                    judges={judges}
+                  />
                   <Verdicts runs={experiment.runs} arms={arms} rows={judged} />
                 </div>
                 {judges.length === 0 ? (

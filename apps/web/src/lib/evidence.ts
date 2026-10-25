@@ -9,6 +9,7 @@ import type {
   ObjectiveResultSchema,
   ToolEventSchema,
 } from "@agent-lab/contracts";
+import { CONTROL_JUDGE_PROVIDER } from "./agents";
 
 /**
  * The words the lab reads its own evidence in.
@@ -85,6 +86,50 @@ export function describeJudgement(result: ObjectiveResultSchema | undefined): st
     return "";
   }
   return ` — judged by ${judgement.model_id} under judge version ${judgement.judge_version}, attempt ${judgement.attempt}`;
+}
+
+/**
+ * The provenance a judged cell discloses on the results screen, the judge named as published.
+ *
+ * The judge is named by the name it was published under rather than by its model: two judges
+ * on one model are two rubrics, and the model is what read the rubric, not who wrote it. The
+ * model, the version and the attempt stay, because they are what makes a verdict traceable
+ * (ADR 0031); the control has no model, so it is called what it is. The name is the one the
+ * judges listing gives today, not one frozen with the version; while that listing has not
+ * answered — or could not — the judge is named by the start of its identifier, which is true
+ * either way.
+ *
+ * An execution that produced no verdict is said to be an attempt, never a judgement: the
+ * outage is the lab's, and the arm was not judged (ADR 0031).
+ */
+export function judgementProvenance(
+  judgement: NonNullable<ObjectiveResultSchema["judgement"]>,
+  judgeName: string | undefined,
+): string {
+  const judge = judgeName ?? `judge ${judgement.judge_id.slice(0, 8)}`;
+  const model =
+    judgement.provider === CONTROL_JUDGE_PROVIDER
+      ? "the deterministic control"
+      : judgement.model_id;
+  const by = `${judge}, version ${judgement.judge_version}, on ${model} — attempt ${judgement.attempt}`;
+  if (judgement.outcome === null || judgement.failure !== null) {
+    const why = judgement.failure === null ? "" : `: ${describeJudgeFailure(judgement.failure)}`;
+    return `Attempted by ${by}; no verdict${why}.`;
+  }
+  return `Judged by ${by}.`;
+}
+
+/**
+ * The first sentence of a judge's rationale: what a judged cell shows before it is opened.
+ *
+ * A sentence ends at the first full stop, question or exclamation mark followed by a space or
+ * the end of the text — so "v1.2" does not cut it short, but a reference that ends a clause
+ * with a full stop ("…order NS-10482. Then…") does, as a sentence would. A rationale with no
+ * such ending is one sentence, and is returned whole.
+ */
+export function firstSentence(text: string): string {
+  const match = /^.*?[.!?](?=\s|$)/s.exec(text);
+  return match ? match[0] : text;
 }
 
 /** A magnitude rather than an audited figure: `3.4k`, then `1.2M` once a thread is long. */
