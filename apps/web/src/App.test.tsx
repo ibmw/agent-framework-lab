@@ -5879,6 +5879,7 @@ describe("the route tree under the data router", () => {
       ["/lab/bench/:shopId/:experimentId", "ExperimentBenchRoute"],
       ["/lab/bench/:shopId/:experimentId/results", "ExperimentResultsLayout"],
       ["/lab/bench/:shopId/:experimentId/results [index]", "ExperimentResultsPage"],
+      ["/lab/bench/:shopId/:experimentId/results/conversation", "ExperimentConversationPage"],
       ["/lab/bench/:shopId/:experimentId/results/timeline", "ExperimentTimelinePage"],
       ["/lab/bench/:shopId/:experimentId/results/traces", "ExperimentTracesPage"],
       ["/lab/history", "ExperimentHistoryPage"],

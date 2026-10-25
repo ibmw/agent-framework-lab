@@ -7,6 +7,7 @@ import type {
   TimelineEntrySchema,
 } from "@agent-lab/contracts";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getExperimentTimeline } from "../api/experiments";
 import { Card } from "../components/WorkspaceChrome";
@@ -51,8 +52,9 @@ const EFFECTS: Record<string, string> = {
  * and nothing else.
  *
  * It carries no message body on purpose, which is why every row is a description built from
- * structural facts rather than an echo of what anyone said. The thread on the bench is where
- * the words live; this is where the order and the code paths do.
+ * structural facts rather than an echo of what anyone said. The thread — on the bench, and on
+ * the results' Conversation tab — is where the words live; this is where the order and the code
+ * paths do.
  *
  * The experiment itself comes from the results layout rather than from a read of its own:
  * depth is a tab on one screen, and a header that reloaded under the operator as they moved
@@ -101,7 +103,11 @@ export function ExperimentTimelinePage() {
           footer={
             <p className="text-xs text-admin-muted">
               Normalized events: a framework's own payloads never enter this stream, and no message
-              body does either. What was said is on the live bench; this is what happened.
+              body does either. What was said is on the{" "}
+              <Link className="font-semibold text-lab-ink" to="../conversation">
+                Conversation
+              </Link>{" "}
+              tab; this is what happened.
             </p>
           }
         >

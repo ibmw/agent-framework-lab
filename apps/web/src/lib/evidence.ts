@@ -315,3 +315,21 @@ export const MISSED_REQUIREMENT = { mark: OUTCOMES.missed.mark, label: "missed a
 export function configurationChip(armLabel: string, name: string, version: number): string {
   return name === armLabel ? `configuration v${version}` : `${name} v${version}`;
 }
+
+/**
+ * The compositions only one arm received.
+ *
+ * Divergence is a property of the delivery, not of the words: a composition held by fewer
+ * arms than the experiment has is one the operator deliberately split.
+ */
+export function divergentTurnIds(experiment: ExperimentResponse): Set<string> {
+  const reach = new Map<string, number>();
+  for (const turn of experiment.turns) {
+    reach.set(turn.turn_id, (reach.get(turn.turn_id) ?? 0) + 1);
+  }
+  return new Set(
+    [...reach.entries()]
+      .filter(([, arms]) => arms < experiment.runs.length)
+      .map(([turnId]) => turnId),
+  );
+}

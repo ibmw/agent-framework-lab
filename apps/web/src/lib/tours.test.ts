@@ -255,7 +255,7 @@ describe("the tour a location is on", () => {
 
   it("gives the comparison's tabs the comparison's tour", () => {
     const results = tourHref("results", IDS);
-    expect(TOURS.results.alsoAt).toEqual(["timeline", "traces"]);
+    expect(TOURS.results.alsoAt).toEqual(["conversation", "timeline", "traces"]);
     for (const tab of TOURS.results.alsoAt ?? []) {
       expect(tourAt(`${results}/${tab}`)).toBe("results");
     }

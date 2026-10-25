@@ -682,6 +682,11 @@ function surfaces(lab: Lab): [string, string, Held | null][] {
     ["bench setup", "/lab/bench", null],
     ["live bench", `/lab/bench/${lab.shopId}/${lab.experimentId}`, null],
     ["results", `/lab/bench/${lab.shopId}/${lab.experimentId}/results`, null],
+    [
+      "results conversation",
+      `/lab/bench/${lab.shopId}/${lab.experimentId}/results/conversation`,
+      null,
+    ],
     ["history", "/lab/history", null],
     ["agent configs", "/lab/agent-configurations", null],
     ["judges", "/lab/judges", null],

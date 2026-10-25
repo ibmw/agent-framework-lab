@@ -427,6 +427,7 @@ export function ExperimentResultsLayout() {
 
       <nav aria-label="Results views" className="mb-4 flex flex-wrap items-center gap-1.5">
         <Tab to="." end label="General" />
+        <Tab to="conversation" label="Conversation" />
         <Tab to="timeline" label="Execution timeline" />
         <Tab to="traces" label="Traces" />
       </nav>

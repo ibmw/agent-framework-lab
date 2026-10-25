@@ -16,6 +16,7 @@ import { CustomersPage, NewCustomerPage } from "./routes/CustomersPage";
 import { DocumentEditorPage } from "./routes/DocumentEditorPage";
 import { DocumentsPage, NewDocumentPage } from "./routes/DocumentsPage";
 import { ExperimentBenchRoute } from "./routes/ExperimentBenchPage";
+import { ExperimentConversationPage } from "./routes/ExperimentConversationPage";
 import { ExperimentHistoryPage } from "./routes/ExperimentHistoryPage";
 import { ExperimentResultsLayout } from "./routes/ExperimentResultsLayout";
 import { ExperimentResultsPage } from "./routes/ExperimentResultsPage";
@@ -129,6 +130,7 @@ export const routeTree = createRoutesFromElements(
       <Route path="bench/:shopId/:experimentId" element={<ExperimentBenchRoute />} />
       <Route path="bench/:shopId/:experimentId/results" element={<ExperimentResultsLayout />}>
         <Route index element={<ExperimentResultsPage />} />
+        <Route path="conversation" element={<ExperimentConversationPage />} />
         <Route path="timeline" element={<ExperimentTimelinePage />} />
         <Route path="traces" element={<ExperimentTracesPage />} />
       </Route>

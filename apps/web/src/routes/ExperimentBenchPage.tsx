@@ -1,14 +1,10 @@
 import type {
-  AgentTurnSchema,
   ArmMetricsSchema,
   ArmStandingSchema,
   ExperimentEvaluationResponse,
   ExperimentResponse,
   ExperimentRunSchema,
   JudgeConfigurationSummarySchema,
-  MutationEventSchema,
-  ParticipantTurnSchema,
-  ToolEventSchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -23,6 +19,7 @@ import {
 import { ActionStatus } from "../components/ActionStatus";
 import { DifferenceList } from "../components/ArmComparison";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { ArmThread } from "../components/ConversationThread";
 import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
 import { BusyButton, PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { ToggleChipGroup } from "../components/ToggleChipGroup";
@@ -34,10 +31,10 @@ import {
   scoreReport,
   TAKES_A_MINUTE,
 } from "../lib/actionStatus";
-import { DEFINITION_TYPE, describeValue, labelOf, TOOL_OUTCOME } from "../lib/enumLabels";
+import { DEFINITION_TYPE, describeValue } from "../lib/enumLabels";
 import {
   describeArmStanding,
-  describeFailure,
+  divergentTurnIds,
   formatCost,
   formatDuration,
   formatTokens,
@@ -48,7 +45,6 @@ import {
 import { TEXT_MAX_LENGTH } from "../lib/fieldRules";
 import { pythonStrip } from "../lib/pythonText";
 import {
-  chipClasses,
   fieldLabelClasses,
   formatTimestamp,
   outlineButtonClasses,
@@ -373,7 +369,7 @@ export function ExperimentBenchPage() {
                   <Fingerprint value={run.state_fingerprint} />
                 </p>
                 <Standing standing={run.standing} metrics={run.metrics} />
-                <Thread experiment={experiment} run={run} divergent={divergent} />
+                <ArmThread experiment={experiment} run={run} divergent={divergent} />
                 <RunCost metrics={run.metrics} />
                 <AdvanceControl
                   run={run}
@@ -528,24 +524,6 @@ export function ExperimentBenchPage() {
 }
 
 /**
- * The compositions only one arm received.
- *
- * Divergence is a property of the delivery, not of the words: a composition held by fewer
- * arms than the experiment has is one the operator deliberately split.
- */
-function divergentTurnIds(experiment: ExperimentResponse): Set<string> {
-  const reach = new Map<string, number>();
-  for (const turn of experiment.turns) {
-    reach.set(turn.turn_id, (reach.get(turn.turn_id) ?? 0) + 1);
-  }
-  return new Set(
-    [...reach.entries()]
-      .filter(([, arms]) => arms < experiment.runs.length)
-      .map(([turnId]) => turnId),
-  );
-}
-
-/**
  * What this arm is waiting for, in the words the operator's next move is in.
  *
  * The first thing on the card because it is the first thing someone reopening a bench needs:
@@ -574,119 +552,6 @@ function Standing({
         </span>
       ) : null}
     </p>
-  );
-}
-
-/** One arm's thread: each customer turn followed by the attempts that answered it. */
-function Thread({
-  experiment,
-  run,
-  divergent,
-}: {
-  experiment: ExperimentResponse;
-  run: ExperimentRunSchema;
-  divergent: Set<string>;
-}) {
-  const turns = experiment.turns
-    .filter((turn) => turn.run_id === run.run_id)
-    .sort((left, right) => left.ordinal - right.ordinal);
-  return (
-    <ol className="grid gap-3">
-      {turns.map((turn) => (
-        <li key={`${turn.run_id}:${turn.ordinal}`} className="grid gap-3">
-          <CustomerTurn turn={turn} divergent={divergent.has(turn.turn_id)} />
-          {attemptsFor(experiment, run, turn.ordinal).map((attempt) => (
-            <Attempt
-              key={attempt.attempt}
-              turn={attempt}
-              events={eventsFor(experiment, run, attempt)}
-              faults={faultsFor(experiment, run, attempt)}
-            />
-          ))}
-          {passedOver(run, turn) ? (
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
-              No reply — the customer wrote again before this arm was run
-            </p>
-          ) : null}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function CustomerTurn({ turn, divergent }: { turn: ParticipantTurnSchema; divergent: boolean }) {
-  return (
-    <div className="grid gap-1">
-      <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
-        {turn.source === "trigger" ? "Trigger" : "Customer"}
-        {divergent ? <span className={chipClasses.mark}>this arm only</span> : null}
-      </p>
-      <p className="rounded-lg bg-admin-canvas px-3 py-2 text-[13px] leading-relaxed text-admin-ink">
-        {turn.body}
-      </p>
-    </div>
-  );
-}
-
-/**
- * One attempt: the calls it made, then what it answered — or why it did not.
- *
- * The tool strip comes first because that is the order it happened in, and because a failed
- * attempt's calls are the informative half of the failure.
- *
- * A scenario fault sits in that strip where it fired — after the call it followed — because
- * the agent did not ask for it and cannot see it, and a refusal further along the strip with
- * no visible cause is the one thing a fault must never look like.
- */
-function Attempt({
-  turn,
-  events,
-  faults,
-}: {
-  turn: AgentTurnSchema;
-  events: ToolEventSchema[];
-  faults: MutationEventSchema[];
-}) {
-  return (
-    <div className="grid gap-1">
-      <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
-        Agent
-        {turn.attempt > 1 ? <span className={chipClasses.mark}>attempt {turn.attempt}</span> : null}
-      </p>
-      {events.length > 0 || faults.length > 0 ? (
-        <ul className="flex flex-wrap gap-1.5">
-          {interleave(events, faults).map((entry) =>
-            "tool" in entry ? (
-              <li
-                key={`call:${entry.ordinal}:${entry.attempt}:${entry.sequence}`}
-                className={chipClasses.quiet}
-                title={`${entry.tool} ${entry.version} → ${labelOf(TOOL_OUTCOME, entry.outcome)}`}
-              >
-                {entry.tool} → {labelOf(TOOL_OUTCOME, entry.outcome)}
-                {entry.revision_after > entry.revision_before ? " · moved this arm" : ""}
-              </li>
-            ) : (
-              <li
-                key={`fault:${entry.mutation_id}`}
-                className={chipClasses.mark}
-                title={`${entry.mutation_id} · ${entry.timing} · ${entry.target}`}
-              >
-                scenario fault · moved this arm
-              </li>
-            ),
-          )}
-        </ul>
-      ) : null}
-      {turn.outcome === "answered" ? (
-        <p className="rounded-lg border border-admin-border px-3 py-2 text-[13px] leading-relaxed text-admin-ink">
-          {turn.body}
-        </p>
-      ) : (
-        <p className="rounded-lg border border-lab-error/40 px-3 py-2 text-[13px] text-lab-error">
-          This attempt produced no reply: {describeFailure(turn.failure)}.
-        </p>
-      )}
-    </div>
   );
 }
 
@@ -915,77 +780,4 @@ function StateChanges({ experiment }: { experiment: ExperimentResponse }) {
       </ul>
     </Card>
   );
-}
-
-function attemptsFor(
-  experiment: ExperimentResponse,
-  run: ExperimentRunSchema,
-  ordinal: number,
-): AgentTurnSchema[] {
-  return experiment.agent_turns
-    .filter((turn) => turn.run_id === run.run_id && turn.ordinal === ordinal)
-    .sort((left, right) => left.attempt - right.attempt);
-}
-
-function eventsFor(
-  experiment: ExperimentResponse,
-  run: ExperimentRunSchema,
-  turn: AgentTurnSchema,
-): ToolEventSchema[] {
-  return experiment.tool_events
-    .filter(
-      (event) =>
-        event.run_id === run.run_id &&
-        event.ordinal === turn.ordinal &&
-        event.attempt === turn.attempt,
-    )
-    .sort((left, right) => left.sequence - right.sequence);
-}
-
-function faultsFor(
-  experiment: ExperimentResponse,
-  run: ExperimentRunSchema,
-  turn: AgentTurnSchema,
-): MutationEventSchema[] {
-  return experiment.mutation_events
-    .filter(
-      (event) =>
-        event.run_id === run.run_id &&
-        event.ordinal === turn.ordinal &&
-        event.attempt === turn.attempt,
-    )
-    .sort((left, right) => left.after_calls - right.after_calls);
-}
-
-/**
- * The calls and the faults in the order the arm met them.
- *
- * A fault records how many calls had already been made when it fired, so it sits before the
- * call of that sequence: the world moved, and then the agent asked its next question against
- * what the fault left behind.
- */
-function interleave(
-  events: ToolEventSchema[],
-  faults: MutationEventSchema[],
-): (ToolEventSchema | MutationEventSchema)[] {
-  const ordered: (ToolEventSchema | MutationEventSchema)[] = [];
-  for (const event of events) {
-    ordered.push(...faults.filter((fault) => fault.after_calls === event.sequence));
-    ordered.push(event);
-  }
-  return [...ordered, ...faults.filter((fault) => fault.after_calls >= events.length)];
-}
-
-/**
- * Whether this arm moved past a customer turn without ever answering it.
- *
- * A membership test against the ordinals the standing names, not a rule this page keeps: an
- * operator may send a second message before running the agent on the first, and the arm then
- * answers the conversation as it stands rather than the question the customer moved on from
- * (ADR 0026). Which turns those were is the backend's reading — deriving it here again would
- * be the second reading the standing exists to remove, and would be free to disagree with the
- * sentence printed above the same thread.
- */
-function passedOver(run: ExperimentRunSchema, turn: ParticipantTurnSchema): boolean {
-  return run.standing.unanswered.includes(turn.ordinal);
 }

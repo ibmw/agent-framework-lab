@@ -3437,10 +3437,11 @@ describe("live bench", () => {
     // The first item is the turn itself; the rest are the strip, in the order it happened.
     const strip = within(armA).getAllByRole("listitem").slice(1);
 
+    // Each call leads with its outcome's glyph, which is hidden from a reader of its words.
     expect(strip.map((entry) => entry.textContent)).toEqual([
-      "orders.read_order → Success",
+      "✓ orders.read_order → Success",
       "scenario fault · moved this arm",
-      "orders.propose_address_change → Success",
+      "✓ orders.propose_address_change → Success",
     ]);
     // The calls and the fault are chips rather than controls: nothing in the strip is pressed.
     for (const chip of strip) {
@@ -5478,6 +5479,291 @@ describe("experiment results", () => {
     for (const step of TOURS.results.steps) {
       expect(document.querySelectorAll(step.anchor), step.anchor).toHaveLength(1);
     }
+  });
+});
+
+/**
+ * The seeded run's turn 2, as the operator met it: the customer asks whether anything else
+ * changed, each arm's proposal is refused, and each answers with its turn-1 sentence again.
+ */
+const QUESTION = "Can you confirm nothing else about the order changed while you were in there?";
+const REPEATED = "I have updated the shipping address on order NS-10482.";
+const REPLY_B = "Only the shipping address on NS-10482 changed.";
+const SPLIT = "Only arm A hears this: the flat is in my partner's name.";
+
+function reply(runId: string, ordinal: number, body: string): AgentTurnSchema {
+  return { ...agentTurn(runId, ordinal), body };
+}
+
+function callWith(
+  runId: string,
+  ordinal: number,
+  outcome: ToolEventSchema["outcome"],
+): ToolEventSchema {
+  const call = toolEvent(runId, 0, "orders.propose_address_change", false, ordinal);
+  return { ...call, outcome, result: { ...call.result, outcome } };
+}
+
+/**
+ * The timeline's numbering of the compositions, which is what the conversation orders its rows
+ * by: each composition at the step given, naming the arms it reached.
+ */
+function serveCompositions(...compositions: [turnId: string, runIds: string[]][]) {
+  server.use(
+    http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/timeline`, () =>
+      HttpResponse.json({
+        experiment_id: EXPERIMENT_ID,
+        entries: compositions.map(([turnId, runIds], step) =>
+          timelineEntry({
+            kind: step === 0 ? "trigger" : "customer_turn",
+            step,
+            run_ids: runIds,
+            composition_id: turnId,
+          }),
+        ),
+      } satisfies ExperimentTimelineResponse),
+    ),
+  );
+}
+
+function secondTurnRefused() {
+  turns = [...OPENED, turn(ARM_A, 1, "turn-1", QUESTION), turn(ARM_B, 1, "turn-1", QUESTION)];
+  agentTurns = [
+    reply(ARM_A, 0, REPEATED),
+    reply(ARM_B, 0, REPEATED),
+    reply(ARM_A, 1, REPEATED),
+    reply(ARM_B, 1, REPLY_B),
+  ];
+  toolEvents = [callWith(ARM_A, 1, "refused"), callWith(ARM_B, 1, "refused")];
+  serveCompositions(["trigger-0", [ARM_A, ARM_B]], ["turn-1", [ARM_A, ARM_B]]);
+}
+
+function renderConversation() {
+  return renderApp(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results/conversation`);
+}
+
+/** Whether `earlier` comes before `later` in the document, which is the order it reads in. */
+function precedes(earlier: HTMLElement, later: HTMLElement): boolean {
+  return Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+/** The conversation's rows, one per composition, without the chips nested inside them. */
+async function conversationRows(card: HTMLElement): Promise<HTMLElement[]> {
+  const items = await within(card).findAllByRole("listitem");
+  return items.filter((row) => row.parentElement?.closest("li") === null);
+}
+
+describe("the conversation on the results", () => {
+  it("sets both arms' answers to one message side by side, each under the message", async () => {
+    secondTurnRefused();
+    renderConversation();
+
+    const card = await screen.findByRole("region", { name: "Conversation" });
+    const rows = await conversationRows(card);
+    expect(rows.map((row) => within(row).getByRole("heading", { level: 3 }).textContent)).toEqual([
+      "Trigger",
+      "Message 1",
+    ]);
+
+    // The second message is one row holding both arms, so the customer's question sits level
+    // with both answers to it rather than wherever each arm's thread happened to have reached.
+    const second = within(rows[1]);
+    const armA = second.getByRole("article", { name: "Arm A · turn 2" });
+    const armB = second.getByRole("article", { name: "Arm B · turn 2" });
+    expect(precedes(within(armA).getByText(QUESTION), within(armA).getByText(REPEATED))).toBe(true);
+    expect(precedes(within(armB).getByText(QUESTION), within(armB).getByText(REPLY_B))).toBe(true);
+    expect(within(armA).queryByText(TRIGGER)).toBeNull();
+
+    const first = within(rows[0]);
+    for (const name of ["Arm A · turn 1", "Arm B · turn 1"]) {
+      const cell = first.getByRole("article", { name });
+      expect(precedes(within(cell).getByText(TRIGGER), within(cell).getByText(REPEATED))).toBe(
+        true,
+      );
+      expect(within(cell).queryByText(QUESTION)).toBeNull();
+    }
+  });
+
+  it("pairs by composition, so a message after a split reply is one row in both arms", async () => {
+    // Arm A heard a reply arm B never did, so the question that follows is arm A's third turn
+    // and arm B's second — one message, two ordinals (ADR 0027).
+    turns = [
+      ...OPENED,
+      turn(ARM_A, 1, "split-1", SPLIT),
+      turn(ARM_A, 2, "turn-2", QUESTION),
+      turn(ARM_B, 1, "turn-2", QUESTION),
+    ];
+    agentTurns = [reply(ARM_A, 2, REPEATED), reply(ARM_B, 1, REPLY_B)];
+    serveCompositions(
+      ["trigger-0", [ARM_A, ARM_B]],
+      ["split-1", [ARM_A]],
+      ["turn-2", [ARM_A, ARM_B]],
+    );
+    renderConversation();
+
+    const card = await screen.findByRole("region", { name: "Conversation" });
+    const rows = await conversationRows(card);
+    expect(rows.map((row) => within(row).getByRole("heading", { level: 3 }).textContent)).toEqual([
+      "Trigger",
+      "Message 1",
+      "Message 2",
+    ]);
+
+    const split = within(rows[1]);
+    const heard = split.getByRole("article", { name: "Arm A · turn 2" });
+    expect(within(heard).getByText(SPLIT)).toBeVisible();
+    expect(within(heard).getByText("this arm only")).toBeVisible();
+    expect(split.getByRole("article", { name: "Arm B" })).toHaveTextContent(
+      "Arm B did not receive this message.",
+    );
+
+    // Each cell is numbered as its own arm counts it, which is what each arm card's
+    // "answered n of m" counts in too.
+    const shared = within(rows[2]);
+    const armA = shared.getByRole("article", { name: "Arm A · turn 3" });
+    const armB = shared.getByRole("article", { name: "Arm B · turn 2" });
+    expect(precedes(within(armA).getByText(QUESTION), within(armA).getByText(REPEATED))).toBe(true);
+    expect(precedes(within(armB).getByText(QUESTION), within(armB).getByText(REPLY_B))).toBe(true);
+    expect(within(armB).queryByText("this arm only")).toBeNull();
+  });
+
+  it("orders the messages as the timeline numbers them, not as the record lists them", async () => {
+    // Two replies no one arm received both of: the record lists arm A's first, but the
+    // timeline says arm B's was delivered first, and the conversation reads it that way.
+    turns = [
+      ...OPENED,
+      turn(ARM_A, 1, "to-a", "For arm A alone."),
+      turn(ARM_B, 1, "to-b", "For arm B alone."),
+    ];
+    serveCompositions(["trigger-0", [ARM_A, ARM_B]], ["to-b", [ARM_B]], ["to-a", [ARM_A]]);
+    renderConversation();
+
+    const card = await screen.findByRole("region", { name: "Conversation" });
+    const rows = await conversationRows(card);
+    expect(rows[1]).toHaveTextContent("For arm B alone.");
+    expect(rows[2]).toHaveTextContent("For arm A alone.");
+  });
+
+  it("keeps a message the timeline does not number, after the ones it does", async () => {
+    // The timeline is a projection of the same record and should name every composition; if
+    // it ever named fewer, the message still reads, last, rather than vanishing.
+    secondTurnRefused();
+    serveCompositions(["trigger-0", [ARM_A, ARM_B]]);
+    renderConversation();
+
+    const card = await screen.findByRole("region", { name: "Conversation" });
+    const rows = await conversationRows(card);
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getByRole("heading", { level: 3 })).toHaveTextContent("Trigger");
+    expect(within(rows[1]).getByRole("heading", { level: 3 })).toHaveTextContent("Message 1");
+    expect(within(rows[1]).getByRole("article", { name: "Arm A · turn 2" })).toHaveTextContent(
+      QUESTION,
+    );
+  });
+
+  it("reads a refused call as refused, in words and with its glyph", async () => {
+    secondTurnRefused();
+    renderConversation();
+
+    for (const name of ["Arm A · turn 2", "Arm B · turn 2"]) {
+      const cell = await screen.findByRole("article", { name });
+      const chip = within(cell).getByText(/orders\.propose_address_change → Refused/);
+      expect(chip.querySelector("[aria-hidden='true']")?.textContent).toBe("✗ ");
+      expectInertChip(chip);
+    }
+  });
+
+  it("reads a failed call as failed, with a glyph of its own", async () => {
+    secondTurnRefused();
+    toolEvents = [callWith(ARM_A, 1, "failed")];
+    renderConversation();
+
+    const cell = await screen.findByRole("article", { name: "Arm A · turn 2" });
+    const chip = within(cell).getByText(/orders\.propose_address_change → Failed/);
+    expect(chip.querySelector("[aria-hidden='true']")?.textContent).toBe("! ");
+  });
+
+  it("says so when no turn has been recorded", async () => {
+    turns = [];
+    serveCompositions();
+    renderConversation();
+
+    const card = await screen.findByRole("region", { name: "Conversation" });
+    expect(await within(card).findByText("No turn has been recorded yet.")).toBeVisible();
+    expect(within(card).queryAllByRole("article")).toEqual([]);
+  });
+
+  it("says so when the order of the messages cannot be read", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/timeline`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "the timeline is unavailable", request_id: "req-9" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderConversation();
+
+    const card = await screen.findByRole("region", { name: "Conversation" });
+    expect(await within(card).findByRole("alert")).toHaveTextContent("the timeline is unavailable");
+  });
+
+  it("writes nothing: no composer, no send, no run and no score", async () => {
+    secondTurnRefused();
+    renderConversation();
+
+    const card = await screen.findByRole("region", { name: "Conversation" });
+    await within(card).findByRole("article", { name: "Arm A · turn 2" });
+    expect(within(card).queryAllByRole("button")).toEqual([]);
+    expect(within(card).queryAllByRole("textbox")).toEqual([]);
+    expect(within(card).queryAllByRole("checkbox")).toEqual([]);
+    expect(within(card).queryAllByRole("combobox")).toEqual([]);
+    expect(card.querySelector("form, input, textarea, select")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Customer composer" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Send as the customer|Run .*agent|Score/ }),
+    ).toBeNull();
+    // A run still in progress is driven where it always was.
+    expect(screen.getByRole("link", { name: "Back to the live bench" })).toHaveAttribute(
+      "href",
+      `/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}`,
+    );
+  });
+
+  it("is the results' second tab, between General and Execution timeline", async () => {
+    const user = userEvent.setup();
+    secondTurnRefused();
+    renderResults();
+
+    const tabs = await screen.findByRole("navigation", { name: "Results views" });
+    expect(
+      within(tabs)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["General", "Conversation", "Execution timeline", "Traces"]);
+
+    await user.click(within(tabs).getByRole("link", { name: "Conversation" }));
+    expect(within(tabs).getByRole("link", { name: "Conversation" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(await screen.findByRole("article", { name: "Arm B · turn 2" })).toHaveTextContent(
+      REPLY_B,
+    );
+  });
+
+  it("is where the timeline sends a reader for what was said", async () => {
+    const user = userEvent.setup();
+    secondTurnRefused();
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+    await user.click(within(stream).getByRole("link", { name: "Conversation" }));
+
+    expect(await screen.findByRole("region", { name: "Conversation" })).toBeVisible();
+    expect(await screen.findByRole("article", { name: "Arm A · turn 2" })).toHaveTextContent(
+      QUESTION,
+    );
   });
 });
 

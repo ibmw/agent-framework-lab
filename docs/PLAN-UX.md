@@ -113,30 +113,6 @@ each judgement's `provider`, and no contract moves. The covered journeys are
 `experiment-start.spec.ts` (the results at :640 and History's *Open results* at :818),
 `tour-anchors.spec.ts`, `sticky-header.spec.ts` (:684) and `workspace-shell.spec.ts`.
 
-### Slice 48 — The conversation is on the results
-
-- [ ] A read-only *Conversation* tab at `…/results/conversation`, between General and Execution
-  timeline: both arms side by side, the turns paired by `ordinal`, each reply under the customer
-  message it answers, with its tool calls and their outcomes; a refused call reads *Refused* in
-  words and with the glyph. It reads the documents the layout already holds and writes nothing.
-- [ ] The bench's thread rendering is the one this tab draws, without its composer.
-- [ ] "Back to the live bench" stays, for a run that is still running.
-
-Frames: `Workspace.dc.html:5012–5016` (the tabs); `DEPRECADED/BenchLive.dc.html` (the thread).
-
-Authority: ADR 0027, ADR 0054.
-
-Departures to record: the fourth tab is the conversation rather than the prototype's *Code
-paths*, whose rail stays on the timeline.
-
-Branch: `feat/results-conversation-tab`. Checks: Vitest — `Experiments.test.tsx` for the paired
-turns, a refused call and the absence of every write control; `App.test.tsx` for the route.
-`make check`, `pnpm build`; `pnpm test:e2e` for `sticky-header.spec.ts` (:684) and
-`tour-anchors.spec.ts`.
-
-Slice evidence: the seeded run's Conversation tab at 1440, turn 2's refusal and repeated reply
-readable beside the customer's question.
-
 ### Slice 49 — The depth tabs show where the operator is
 
 - [ ] The selected tab, the selected timeline lens and the selected trace attempt are visibly
@@ -276,7 +252,7 @@ Slice evidence: the results and the bench at 390, no text past the viewport.
 - **The next-step sentence from `SETUP_CHAIN`**, `GuideProse` card footers and a copy control on
   `Fingerprint` — the parts of the old Slices 13 and 16 the prototype does not draw.
 - **The prototype's *Code paths* tab.** The executed-code rail stays beside the timeline, and the
-  fourth tab is the conversation (Slice 48).
+  fourth tab is the conversation.
 - **Listing the runs derived from this one.** `derived_from` names a run's source, and nothing
   names its children; a listing narrowed by source is a backend slice in `docs/PLAN.md`.
 - **What the offline control judge decides.** Its rubric marks *Tell the customer what changed*

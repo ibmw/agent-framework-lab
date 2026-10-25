@@ -81,7 +81,7 @@ export interface Tour {
    * **exactly** rather than by prefix — a prefix rule would hand the catalog's walk to the
    * product editor beneath it, whose screen holds none of the catalog's anchors (ADR 0055). A
    * surface that genuinely answers at more than one address says so here, and one does: the
-   * comparison is one layout behind three tabs, the same screen at a second URL, which is why
+   * comparison is one layout behind four tabs, the same screen at a second URL, which is why
    * this is addressing and not a second tour.
    *
    * A parameter segment would be written as it is in a route pattern, `:likeThis`. Unlike a
@@ -298,9 +298,9 @@ export const TOURS: Record<TourId, Tour> = {
   results: {
     surface: "the results",
     route: "/lab/bench/:shopId/:experimentId/results",
-    // The three tabs are one surface: the header, the arm cards and the provenance row this
+    // The four tabs are one surface: the header, the arm cards and the provenance row this
     // tour lights are the layout's, and all three are on screen whichever tab is open.
-    alsoAt: ["timeline", "traces"],
+    alsoAt: ["conversation", "timeline", "traces"],
     steps: [
       {
         anchor: '[data-tour="results-arms"]',
@@ -321,7 +321,7 @@ export const TOURS: Record<TourId, Tour> = {
         title: "No aggregate, and nothing hidden",
         body: [
           "Nothing rolls the three up into one number. Turns, calls, retries and cost are observations rather than scores — the model, the prompt and the operator's own replies move them as much as the framework does — and a cheaper arm that missed what the scenario required is not the better one.",
-          "Each tab reads the same run at a different depth: the [[evaluation|evidence]] overview here, the normalized execution timeline both arms produced, and the sanitized traces underneath it.",
+          "Each tab reads the same run at a different depth: the [[evaluation|evidence]] overview here, the conversation each arm held, turn beside turn, the normalized execution timeline both arms produced, and the sanitized traces underneath it.",
         ],
       },
     ],

@@ -1,6 +1,6 @@
 # ADR 0054 — The lab is a mode, and the routes say so
 
-Status: accepted — 2026-09-20
+Status: accepted — 2026-09-20; amended 2026-10-25
 
 Splits the workspace into two modes — the **shop fixture** and the **experiment lab** — and moves
 every lab surface out of shop scope into its own `/lab` route, where it has always belonged: an
@@ -79,7 +79,7 @@ them apart.
 | --- | --- |
 | `/lab/bench` | New experiment — composes for the **current shop** |
 | `/lab/bench/:shopId/:experimentId` | The live bench for one run |
-| `/lab/bench/:shopId/:experimentId/results` (+ `timeline`, `traces`) | That run's comparison |
+| `/lab/bench/:shopId/:experimentId/results` (+ `conversation`, `timeline`, `traces`; amended 2026-10-25) | That run's comparison |
 | `/lab/history` | Experiment history, cross-shop, filtered by URL as before |
 | `/lab/agent-configurations(/:configurationId)` | The configuration library and its editor |
 | `/lab/judges(/:judgeId)` | The judge library and its editor |
@@ -291,3 +291,10 @@ exists and already holds the right value for any operator who has opened a shop.
 A lab that is opened for the first time after this lands has no remembered shop, lands on the
 shops index, and is told on the bench that it has no current shop. That is the same first-run path
 the application has always had, arrived at through the preference rather than through a constant.
+
+## Amendment — 2026-10-25
+
+The results gain a fourth depth tab, `…/results/conversation`, between General and the execution
+timeline: both arms' threads, read-only, one row per composition. It is a child of the results
+route like the other tabs and needs no redirect: the shop layout never held it, so no bookmark to
+a `/shops/:shopId/bench/…/results/conversation` exists to rescue.
