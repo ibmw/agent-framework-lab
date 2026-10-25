@@ -8,8 +8,9 @@
  * been a third chance to get them wrong.
  *
  * This table is the single place a tour is written down. The runtime reads it, the unit tests
- * read it, and `tests/e2e/tour-anchors.spec.ts` sweeps it: for every surface and every step, the
- * step's anchor is asserted to resolve to exactly one visible element on that surface. That sweep
+ * read it, and `tests/e2e/tour-anchors.spec.ts` sweeps it: for every surface, at every address it
+ * answers at, every step in scope there (`TourStep.at`) is asserted to resolve to exactly one
+ * visible element. That sweep
  * is the answer to the one part of ADR 0044's refusal that was correct — a tour *does* go stale
  * when a control moves, and until now nothing in this repository would have noticed. A step
  * declared here joins the sweep the day it is declared, because the sweep's cases are these rows
@@ -60,6 +61,18 @@ export interface TourStep {
   title: string;
   /** One or more paragraphs, in `[[term-id]]` markup. */
   body: readonly string[];
+  /**
+   * Which of the surface's addresses this step belongs to, where it is not all of them: `""` for
+   * the tour's `route` itself, and otherwise an entry of its `alsoAt`.
+   *
+   * A surface behind tabs shares a frame, and a step lighting the frame belongs to every tab; a
+   * step lighting one tab's card belongs to that tab alone, and says so here rather than being
+   * dropped because its anchor happens to be missing — a step skipped by absence is exactly how
+   * a tour goes stale silently. The launch control walks only the steps in scope where the reader
+   * stands, and the anchor sweep visits every address and holds each in-scope step to one
+   * visible element there.
+   */
+  at?: readonly string[];
 }
 
 export interface Tour {
@@ -143,10 +156,15 @@ function chainStepFor(tour: Tour): TourStep | null {
  * Every reader of the table goes through here — the launch control, the copy tests, and the
  * end-to-end anchor sweep — so a composed step is held to exactly what a written one is held to.
  */
-export function tourSteps(id: TourId): readonly TourStep[] {
+export function tourSteps(id: TourId, pathname?: string): readonly TourStep[] {
   const tour = TOURS[id];
   const chain = chainStepFor(tour);
-  return chain === null ? tour.steps : [chain, ...tour.steps];
+  const steps = chain === null ? tour.steps : [chain, ...tour.steps];
+  if (pathname === undefined) {
+    return steps;
+  }
+  const here = tourAddressAt(id, pathname);
+  return steps.filter((step) => step.at === undefined || (here !== null && step.at.includes(here)));
 }
 
 export const TOURS: Record<TourId, Tour> = {
@@ -298,22 +316,17 @@ export const TOURS: Record<TourId, Tour> = {
   results: {
     surface: "the results",
     route: "/lab/bench/:shopId/:experimentId/results",
-    // The four tabs are one surface: the header, the arm cards and the provenance row this
-    // tour lights are the layout's, and all three are on screen whichever tab is open.
+    // The four tabs are one surface: the arm cards and the tab row belong to the layout and
+    // are on screen whichever tab is open, so their steps are every tab's. The cards the other
+    // steps light are the General tab's — its evidence and its rail — and those steps say so
+    // with `at`, so a reader on another tab is walked only what is there (ADR 0055, amended).
     alsoAt: ["conversation", "timeline", "traces"],
     steps: [
       {
         anchor: '[data-tour="results-arms"]',
         title: "How to read the results",
         body: [
-          "Three kinds of evidence, deliberately kept apart. Deterministic rows are projected from each [[run|arm]]'s own record, so they report what happened rather than what was claimed. The rows no rule can decide are scored by the published [[judge-configuration|judge]], from an anonymized brief naming no framework, provider or model. The figures beside them are what the run measured.",
-        ],
-      },
-      {
-        anchor: '[data-tour="results-provenance"]',
-        title: "What this run pinned",
-        body: [
-          "Every chip here is something this run froze before it started — the scenario version, the starting state, and the published inputs behind them. What its two arms differ along is on the General tab, under the evidence: behaviour can be attributed to a dimension only while exactly one differs, and with two nothing can say which of them moved the result.",
+          "Three kinds of evidence, deliberately kept apart. Deterministic rows are projected from each [[run|arm]]'s own record, so they report what happened rather than what was claimed. The rows no rule can decide are scored by the published [[judge-configuration|judge]], from an anonymized brief naming no framework, provider or model, and scoring again records a new judge attempt beside the last, and never overwrites a deterministic row. The figures beside them are what the run measured.",
         ],
       },
       {
@@ -321,7 +334,40 @@ export const TOURS: Record<TourId, Tour> = {
         title: "No aggregate, and nothing hidden",
         body: [
           "Nothing rolls the three up into one number. Turns, calls, retries and cost are observations rather than scores — the model, the prompt and the operator's own replies move them as much as the framework does — and a cheaper arm that missed what the scenario required is not the better one.",
-          "Each tab reads the same run at a different depth: the [[evaluation|evidence]] overview here, the conversation each arm held, turn beside turn, the normalized execution timeline both arms produced, and the sanitized traces underneath it.",
+          "Each tab reads the same run at a different depth: the [[evaluation|evidence]] overview on General, the conversation each arm held, turn beside turn, the normalized execution timeline both arms produced, and the sanitized traces underneath it.",
+        ],
+      },
+      {
+        anchor: '[aria-label="Deterministic evidence"]',
+        title: "Deterministic evidence",
+        at: [""],
+        body: [
+          "Each row is decided from the arm's own recorded calls and the state it started in and is in now. A pending row is one the arm can still meet, and an undecidable one is a limit of this build rather than a fault of the agent — neither is a miss.",
+        ],
+      },
+      {
+        anchor: '[aria-label="Business state — verified, not claimed"]',
+        title: "Business state — verified, not claimed",
+        at: [""],
+        body: [
+          "Read from each arm's own state rather than from what its agent said it did. A scenario fault appears beside the tools because it moved the same world, and the fields listed are the whole difference between the world an arm was cloned into and the one it is in now — so nothing can have moved without appearing there.",
+        ],
+      },
+      {
+        anchor: '[data-tour="results-provenance"]',
+        title: "What this run pinned",
+        at: [""],
+        body: [
+          "Everything in this card is something this run froze before it started — the starting state, the fingerprint of every input it resolved, the scenario version and the published inputs behind it, each block by its own name, and what each [[run|arm]] ran. A derived run names the run it came from and what it changed. What the arms differ along is under the evidence: behaviour can be attributed to a dimension only while exactly one differs, and with two nothing can say which of them moved the result.",
+          "Who drove the customer matters as much: one send is one composition however many arms it reaches, and two compositions at the same turn are two questions even when the words match — from there the arms are answering different conversations, which the rail's input divergence lists turn by turn.",
+        ],
+      },
+      {
+        anchor: '[aria-label="Notes & tags"]',
+        title: "Notes & tags",
+        at: [""],
+        body: [
+          "What a reviewer concluded, stored beside the record rather than in it, so annotating a run never moves the versions or the starting state it pinned. A note is kept as written; the tags are how this run is filed now, and history narrows by them.",
         ],
       },
     ],
@@ -498,7 +544,34 @@ export function tourHref(id: TourId, ids: RouteIds): string {
  * One composition, so the resolution below and the tests over it read the same list.
  */
 function addressesOf(tour: Tour): string[] {
-  return [tour.route, ...(tour.alsoAt ?? []).map((rest) => `${tour.route}/${rest}`)];
+  return tourAddresses(tour).map((rest) => (rest === "" ? tour.route : `${tour.route}/${rest}`));
+}
+
+/** A surface's addresses relative to its route — `""` for the route itself — as `at` names them. */
+function tourAddresses(tour: Tour): string[] {
+  return ["", ...(tour.alsoAt ?? [])];
+}
+
+/** Every address a tour's surface answers at, filled, as a reader or the sweep would visit it. */
+export function tourHrefs(id: TourId, ids: RouteIds): string[] {
+  return tourAddresses(TOURS[id]).map((rest) =>
+    rest === "" ? tourHref(id, ids) : `${tourHref(id, ids)}/${rest}`,
+  );
+}
+
+/**
+ * Which of a surface's addresses a location is, relative to its route — `""` for the route
+ * itself — or null where the location is not on that surface. What `at` is read against.
+ */
+export function tourAddressAt(id: TourId, pathname: string): string | null {
+  const tour = TOURS[id];
+  for (const rest of tourAddresses(tour)) {
+    const address = rest === "" ? tour.route : `${tour.route}/${rest}`;
+    if (matchPath(address, pathname) !== null) {
+      return rest;
+    }
+  }
+  return null;
 }
 
 /**

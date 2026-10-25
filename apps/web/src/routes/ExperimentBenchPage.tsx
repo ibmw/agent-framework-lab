@@ -22,6 +22,7 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { ArmThread } from "../components/ConversationThread";
 import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
 import { BusyButton, PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { RunProvenance } from "../components/RunProvenance";
 import { ToggleChipGroup } from "../components/ToggleChipGroup";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
@@ -31,7 +32,6 @@ import {
   scoreReport,
   TAKES_A_MINUTE,
 } from "../lib/actionStatus";
-import { DEFINITION_TYPE, describeValue } from "../lib/enumLabels";
 import {
   describeArmStanding,
   divergentTurnIds,
@@ -469,22 +469,9 @@ export function ExperimentBenchPage() {
               </p>
             }
           >
-            <p className="text-[13px] text-admin-ink-soft">
-              Starting state <Fingerprint value={experiment.sandbox_fingerprint} />
-            </p>
-            <p className="text-[13px] text-admin-ink-soft">
-              Inputs <Fingerprint value={experiment.resolution_fingerprint} />
-            </p>
-            <p className="text-[13px] text-admin-ink-soft">
-              Participant: {experiment.participant_driver} operator
-            </p>
-            <ul className="grid gap-1 text-xs text-admin-muted">
-              {experiment.sandbox_inputs.map((pin) => (
-                <li key={`${pin.definition_type}:${pin.definition_id}`}>
-                  {describeValue(DEFINITION_TYPE, pin.definition_type)} v{pin.version}
-                </li>
-              ))}
-            </ul>
+            {/* The results' rail reads the same body, so the two describe one run alike; a run
+                in progress is not what a reviewer reads, so nothing here is a link (ADR 0068). */}
+            <RunProvenance experiment={experiment} shopId={shopId} linked={false} />
           </Card>
 
           <Objectives

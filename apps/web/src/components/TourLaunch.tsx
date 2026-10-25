@@ -4,7 +4,7 @@ import { Compass } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
-import { TOURS, type TourId, type TourStep, tourAt, tourSteps } from "../lib/tours";
+import { TOURS, type TourId, type TourStep, tourAddressAt, tourAt, tourSteps } from "../lib/tours";
 import { topBarControlClasses } from "../lib/ui";
 import { GuideProse } from "./GuideProse";
 
@@ -87,14 +87,19 @@ export function TourLaunch() {
   const id = tourAt(pathname);
   // The hooks below belong to one tour, so the surface without one returns before any of them
   // rather than running them against an identifier it does not have.
-  return id === null ? null : <SurfaceTour key={id} id={id} />;
+  // Keyed by the address too: a surface behind tabs walks only the steps in scope on the tab
+  // the reader stands on, so moving between tabs is a different walk, and one in progress ends.
+  return id === null ? null : (
+    <SurfaceTour key={`${id}@${tourAddressAt(id, pathname)}`} id={id} pathname={pathname} />
+  );
 }
 
-function SurfaceTour({ id }: { id: TourId }) {
+function SurfaceTour({ id, pathname }: { id: TourId; pathname: string }) {
   const tour = TOURS[id];
   // The chain step is composed rather than declared, so what this walks is the table's
-  // answer for this surface and not the rows as they were typed.
-  const steps = useMemo(() => tourSteps(id), [id]);
+  // answer for this surface and not the rows as they were typed — and only the steps in scope
+  // at this address (`TourStep.at`).
+  const steps = useMemo(() => tourSteps(id, pathname), [id, pathname]);
   const active = useRef<Driver | null>(null);
   const launcher = useRef<HTMLButtonElement | null>(null);
 

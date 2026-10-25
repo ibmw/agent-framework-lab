@@ -1,5 +1,13 @@
 import { SETUP_CHAIN, stepHref } from "../../src/lib/setupPath";
-import { TOUR_IDS, TOURS, type TourId, tourAt, tourHref, tourSteps } from "../../src/lib/tours";
+import {
+  TOUR_IDS,
+  TOURS,
+  tourAddressAt,
+  tourAt,
+  tourHref,
+  tourHrefs,
+  tourSteps,
+} from "../../src/lib/tours";
 import { test as base, expect } from "./support/e2e";
 import { type BuiltLab, buildLab } from "./support/lab";
 import { webOrigin } from "./support/stack";
@@ -20,19 +28,16 @@ import { webOrigin } from "./support/stack";
  */
 
 /**
- * Where each surface is, composed from the tour table's own `route` rather than restated.
+ * The identifiers a surface's addresses are filled from, so the sweep visits the addresses the
+ * tour table composes (`tourHrefs`: its `route` and every `alsoAt`) rather than restating them.
  *
  * The addresses used to live here, keyed exhaustively by tour identifier, so that a tour added
  * without a way to reach it failed to compile. `lib/tours.ts` names the route now (ADR 0054),
  * which is the same guarantee one step earlier: a tour cannot be declared without one, and the
  * chain assertion below holds the ten chain surfaces to the chain's own answer.
  */
-function surfaceHref(id: TourId, lab: BuiltLab): string {
-  return tourHref(id, {
-    shopId: lab.shopId,
-    scenarioId: lab.scenarioId,
-    experimentId: lab.experimentId,
-  });
+function routeIds(lab: BuiltLab) {
+  return { shopId: lab.shopId, scenarioId: lab.scenarioId, experimentId: lab.experimentId };
 }
 
 /**
@@ -131,40 +136,54 @@ for (const id of TOUR_IDS) {
     lab,
   }) => {
     const tour = TOURS[id];
-    await page.goto(surfaceHref(id, lab));
+    // Every address the surface answers at, not only its route: a step lighting one tab's card
+    // and walked on another would light nothing there (ADR 0045, ADR 0055 as amended), and a
+    // sweep that stood on the first tab alone could never see it.
+    // `tourHrefs` fills the route and then each `alsoAt`, in that order.
+    const addresses = ["", ...(tour.alsoAt ?? [])];
+    for (const [index, href] of tourHrefs(id, routeIds(lab)).entries()) {
+      await page.goto(href);
 
-    // Wait for the surface to have finished arriving before asking what the bar offers.
-    //
-    // The control is drawn from the route (ADR 0055), and a surface that replaced its own
-    // address on load would take its tour away a moment after arriving — Tickets did, opening
-    // its newest ticket as soon as its list answered, until the index became a page of its own
-    // (ADR 0073). Asked on the frame after `goto`, this guard would go on passing while the
-    // control vanished a moment later, which is exactly how a tour goes stale silently and
-    // exactly what this sweep exists to prevent. It is asked twice, of two different things:
-    // the address the surface settles at has to be one the table names, and the control has to
-    // be on screen there.
-    await page.waitForLoadState("networkidle");
-    expect(
-      tourAt(new URL(page.url()).pathname),
-      `${id} settles at ${page.url()}, which its tour does not name`,
-    ).toBe(id);
+      // Wait for the surface to have finished arriving before asking what the bar offers.
+      //
+      // The control is drawn from the route (ADR 0055), and a surface that replaced its own
+      // address on load would take its tour away a moment after arriving — Tickets did, opening
+      // its newest ticket as soon as its list answered, until the index became a page of its own
+      // (ADR 0073). Asked on the frame after `goto`, this guard would go on passing while the
+      // control vanished a moment later, which is exactly how a tour goes stale silently and
+      // exactly what this sweep exists to prevent. It is asked twice, of two different things:
+      // the address the surface settles at has to be one the table names, and the control has to
+      // be on screen there.
+      await page.waitForLoadState("networkidle");
+      expect(
+        tourAt(new URL(page.url()).pathname),
+        `${id} settles at ${page.url()}, which its tour does not name`,
+      ).toBe(id);
+      // And at the address visited, not merely on the surface: a tab that redirected to General
+      // would otherwise pass by sweeping General a second time.
+      expect(
+        tourAddressAt(id, new URL(page.url()).pathname),
+        `${id} was visited at ${href} and settled at ${page.url()}`,
+      ).toBe(addresses[index]);
 
-    // The surface offers the tour at all: a tour declared for a screen that never mounts its
-    // control is as stale as one pointing at a control that moved.
-    await expect(
-      page.getByRole("button", { name: `Show me around ${tour.surface}` }),
-      `${id} does not offer its tour`,
-    ).toBeVisible();
+      // The surface offers the tour at all: a tour declared for a screen that never mounts its
+      // control is as stale as one pointing at a control that moved.
+      await expect(
+        page.getByRole("button", { name: `Show me around ${tour.surface}` }),
+        `${id} does not offer its tour`,
+      ).toBeVisible();
 
-    // The composed chain step is swept exactly as a written one is: it lights a real
-    // element on a real surface, and `data-tour="page-name"` is as capable of coming loose as
-    // any other hook.
-    for (const step of tourSteps(id)) {
-      const anchor = page.locator(step.anchor);
-      const where = `${id} · ${step.title} · ${step.anchor}`;
-      // Soft, so one surface reports every step that has come loose rather than only its first.
-      await expect.soft(anchor, `${where} matches more or fewer than one element`).toHaveCount(1);
-      await expect.soft(anchor, `${where} matches something nobody can see`).toBeVisible();
+      // The composed chain step is swept exactly as a written one is: it lights a real
+      // element on a real surface, and `data-tour="page-name"` is as capable of coming loose as
+      // any other hook.
+      // Only the steps in scope here — which is what the launch control walks at this address.
+      for (const step of tourSteps(id, new URL(page.url()).pathname)) {
+        const anchor = page.locator(step.anchor);
+        const where = `${id} at ${href} · ${step.title} · ${step.anchor}`;
+        // Soft, so one surface reports every step that has come loose rather than only its first.
+        await expect.soft(anchor, `${where} matches more or fewer than one element`).toHaveCount(1);
+        await expect.soft(anchor, `${where} matches something nobody can see`).toBeVisible();
+      }
     }
   });
 }

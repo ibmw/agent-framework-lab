@@ -594,6 +594,13 @@ export const neutralPillClasses =
   "inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft";
 
 /**
+ * A pinned version as a chip that opens what it pinned (ADR 0068): the neutral pill's shape,
+ * with the link's underline on hover and the workspace's focus ring, because unlike the bench's
+ * chips it is a control (`chipClasses` is for the ones that are not).
+ */
+export const versionChipClasses = `rounded-full bg-admin-border px-2.5 py-0.5 font-semibold text-admin-ink-soft no-underline underline-offset-2 hover:underline ${focusRingClasses}`;
+
+/**
  * The published pill: the neutral pill's shape on the published tokens.
  *
  * `VersionChips` draws "vN published" in it and the index's publication pill draws a

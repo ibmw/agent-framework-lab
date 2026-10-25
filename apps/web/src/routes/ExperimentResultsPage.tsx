@@ -16,6 +16,7 @@ import { ComparisonTable } from "../components/ArmComparison";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { RunProvenance } from "../components/RunProvenance";
 import { BusinessStateComparison } from "../components/StateDiff";
 import { Card, Fingerprint } from "../components/WorkspaceChrome";
 import { scoreReport, TAKES_A_MINUTE } from "../lib/actionStatus";
@@ -127,8 +128,7 @@ export function ExperimentResultsPage() {
             footer={
               <p className="text-xs text-admin-muted">
                 Decided from each arm's own recorded calls and the state it started in and is in
-                now. A pending row is one the arm can still meet, and an undecidable one is a limit
-                of this build rather than a fault of the agent — neither is a miss.
+                now.
               </p>
             }
           >
@@ -151,10 +151,7 @@ export function ExperimentResultsPage() {
             title="Business state — verified, not claimed"
             footer={
               <p className="text-xs text-admin-muted">
-                Read from each arm's own state rather than from what its agent said it did. A
-                scenario fault appears beside the tools because it moved the same world, and the
-                fields below are the whole difference between the world an arm was cloned into and
-                the one it is in now — so nothing can have moved without appearing here.
+                Read from each arm's own state rather than from what its agent said it did.
               </p>
             }
           >
@@ -166,8 +163,7 @@ export function ExperimentResultsPage() {
             footer={
               <p className="text-xs text-admin-muted">
                 Each arm is judged on an anonymized record of its own run, and the judge is told
-                nothing about what ran it. Scoring again records a new attempt beside the last, and
-                never overwrites a deterministic row.
+                nothing about what ran it.
               </p>
             }
           >
@@ -229,13 +225,36 @@ export function ExperimentResultsPage() {
           </Card>
         </div>
 
-        <div className="grid content-start gap-4">
+        {/* The rail holds the record (Workspace.dc.html :2600): what the run pinned, what a
+            reviewer wrote on it, and the observations that are not evidence. */}
+        <div className="grid min-w-0 content-start gap-4">
+          <div data-tour="results-provenance">
+            <Card
+              title="Provenance"
+              footer={
+                <p className="text-xs text-admin-muted">
+                  Every arm was cloned from one snapshot, so the arms began at the same fingerprint
+                  and moved apart only when something wrote.
+                </p>
+              }
+            >
+              <RunProvenance experiment={experiment} shopId={shopId} linked />
+            </Card>
+          </div>
+
+          <NotesAndTags
+            shopId={shopId}
+            experimentId={experimentId}
+            annotations={annotations}
+            onAnnotated={onAnnotated}
+          />
+
           <Card
             title="Quantitative"
             footer={
               <p className="text-xs text-admin-muted">
-                Observations, not scores — the model, the prompt, and the operator's own replies all
-                contribute. Efficiency is readable only beside the outcome above it.
+                Observations, not scores: the model, the prompt and the operator's own replies all
+                move them.
               </p>
             }
           >
@@ -247,9 +266,7 @@ export function ExperimentResultsPage() {
               title="Input divergence"
               footer={
                 <p className="text-xs text-admin-muted">
-                  One send is one composition however many arms it reaches. Two compositions at the
-                  same turn are two questions even when the words match, and from there the arms are
-                  answering different conversations.
+                  One send is one composition however many arms it reaches.
                 </p>
               }
             >
@@ -257,15 +274,6 @@ export function ExperimentResultsPage() {
             </Card>
           ) : null}
         </div>
-      </div>
-
-      <div className="mt-4">
-        <NotesAndTags
-          shopId={shopId}
-          experimentId={experimentId}
-          annotations={annotations}
-          onAnnotated={onAnnotated}
-        />
       </div>
     </>
   );
@@ -278,7 +286,8 @@ const TAG_EMPTY = "Type the tag to file this run under.";
 const NOTE_EMPTY = "Write the note before adding it.";
 
 /**
- * Frame 9's notes-and-tags strip: what an operator concluded, beside what the run did.
+ * Frame 9's notes-and-tags card, in the rail: what an operator concluded, beside what the run
+ * did.
  *
  * The only thing on this screen that is written rather than read, and the only thing that is
  * not evidence. A note is appended and never edited, because it is what a reviewer thought
@@ -368,9 +377,7 @@ function NotesAndTags({
       title="Notes & tags"
       footer={
         <p className="text-xs text-admin-muted">
-          What a reviewer concluded, stored beside the record rather than in it — annotating a run
-          never moves the versions or the starting state it pinned. A note is kept as written; the
-          tags are how this run is filed now, and history narrows by them.
+          What a reviewer concluded, stored beside the record rather than in it.
         </p>
       }
     >

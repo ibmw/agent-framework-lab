@@ -1,6 +1,6 @@
 # ADR 0039 — The fork: the same run, with one thing changed on purpose
 
-Status: accepted — 2026-09-07
+Status: accepted — 2026-09-07; amended 2026-10-25
 
 Completes `docs/PLAN.md` Milestone 5's eighth outcome, whose other two thirds are traces
 (ADR 0037) and replay (ADR 0038). Records what a fork is allowed to vary and why everything
@@ -105,7 +105,7 @@ ADR 0038 left this call to this slice. Taken: `experiment_replays` becomes
 A sibling table was the alternative and it loses on every count. The two rows hold the same
 three facts — the derived experiment, the run it came from, when — with the same key, the same
 two foreign keys and the same distinctness check. They are read by the same three surfaces: the
-results header, the history row, and the bench composer's sentence about what drove a scripted
+results header (the results' Provenance card since the 2026-10-25 amendment), the history row, and the bench composer's sentence about what drove a scripted
 run. With two tables every one of those readings would ask two questions and merge two nullable
 objects that are never both set, and every future derivation would add a third. What actually
 differs between them is one word, and that word is exactly what a reader must be shown, because
@@ -357,3 +357,13 @@ is that a downgrade which cannot represent its data says so. ADR 0038's own down
 dropped the table it had created, which was lossless at the time because nothing had been written
 through it yet; that is not the situation here, so the older precedent is the one this follows.
 A replay-only store downgrades and comes back whole, and a test drives both halves.
+
+## Amendment — 2026-10-25
+
+On the results, the derived run's source — "A replay of …" or "A fork of …", the source's name
+as a link to its results, and what the fork changed — moved from the header into the
+*Provenance* card in the General tab's rail, with everything else the run froze before it
+started (PLAN-UX Milestone 12). The depth tabs do not repeat it: General is the tab the results
+open on, and the History row still names the source on every derivation. The live bench reads
+the same card and names the source without linking it, as its pinned versions are not linked
+(ADR 0068). The table, the `kind` vocabulary and the sentence's two words are unchanged.

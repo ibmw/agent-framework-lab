@@ -1,7 +1,6 @@
 import type {
   AgentConfigurationSummarySchema,
   ArmEvaluationSchema,
-  ComparisonDimension,
   DefinitionVersionSummarySchema,
   ExperimentAnnotationsResponse,
   ExperimentEvaluationResponse,
@@ -25,7 +24,7 @@ import {
 import { ActionStatus } from "../components/ActionStatus";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { BusyButton, PrimaryAction, RefusalLine } from "../components/PrimaryAction";
-import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
+import { PageHeader } from "../components/WorkspaceChrome";
 import {
   type ActionStatusRow,
   armDetail,
@@ -34,7 +33,6 @@ import {
   derivationReport,
   derivedRows,
 } from "../lib/actionStatus";
-import { COMPARISON_DIMENSION, DEFINITION_TYPE, describeValue, labelOf } from "../lib/enumLabels";
 import {
   armFigures,
   configurationChip,
@@ -47,13 +45,13 @@ import {
   depthTabStateClasses,
   fieldControlClasses,
   fieldLabelClasses,
-  focusRingClasses,
   formatTimestamp,
   outlineButtonClasses,
+  versionChipClasses,
 } from "../lib/ui";
 import { pinKey, publishedNameOf, usePinnedVersions } from "../lib/usePinnedVersions";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
-import { definitionPath, versionPath } from "../lib/versionLinks";
+import { definitionPath } from "../lib/versionLinks";
 
 const UNAVAILABLE = "This experiment's results are unavailable.";
 
@@ -349,18 +347,6 @@ export function ExperimentResultsLayout() {
             </Link>{" "}
             · {describeStanding(experiment)} · scenario v{experiment.scenario_version} · seed{" "}
             {experiment.seed} · started {formatTimestamp(experiment.created_at)}
-            {experiment.derived_from ? (
-              <>
-                {` · ${experiment.derived_from.kind} of `}
-                <Link
-                  className="font-semibold text-lab-ink"
-                  to={`/lab/bench/${shopId}/${experiment.derived_from.experiment_id}/results`}
-                >
-                  {experiment.derived_from.label}
-                </Link>
-                {describeChange(experiment.derived_from.changed)}
-              </>
-            ) : null}
           </>
         }
       />
@@ -412,18 +398,15 @@ export function ExperimentResultsLayout() {
         />
       ) : null}
 
-      <div className="mb-4 grid gap-3">
-        <div data-tour="results-arms" className="grid gap-3 lg:grid-cols-2">
-          {experiment.runs.map((run) => (
-            <ArmSummary
-              key={run.run_id}
-              shopId={shopId}
-              run={run}
-              arm={evaluation.arms.find((entry) => entry.run_id === run.run_id) ?? null}
-            />
-          ))}
-        </div>
-        <Provenance shopId={shopId} experiment={experiment} />
+      <div data-tour="results-arms" className="mb-4 grid gap-3 lg:grid-cols-2">
+        {experiment.runs.map((run) => (
+          <ArmSummary
+            key={run.run_id}
+            shopId={shopId}
+            run={run}
+            arm={evaluation.arms.find((entry) => entry.run_id === run.run_id) ?? null}
+          />
+        ))}
       </div>
 
       <nav aria-label="Results views" className={`mb-4 ${depthTabRowClasses}`}>
@@ -435,28 +418,6 @@ export function ExperimentResultsLayout() {
 
       <Outlet context={context} />
     </>
-  );
-}
-
-/**
- * What a derivation moved from the run it came from, said where it names that run.
- *
- * Empty for a replay, which pins what its source pinned. More than one dimension is the
- * setup gate's comparison warning one level out: a fork that moved two things has no claim
- * that the thing it changed is the only thing that changed, so the sentence says so rather
- * than leaving it to be noticed months later.
- */
-function describeChange(changed: ComparisonDimension[]) {
-  if (changed.length === 0) {
-    return null;
-  }
-  const named = changed.map((dimension) => labelOf(COMPARISON_DIMENSION, dimension)).join(", ");
-  return changed.length === 1 ? (
-    <span className="text-admin-muted">{` · changed ${named}`}</span>
-  ) : (
-    <span className="text-admin-draft-ink">
-      {` · changed ${named} — no difference from that run can be attributed to any one of them`}
-    </span>
   );
 }
 
@@ -679,7 +640,12 @@ function ForkArmPicker({
   return (
     <fieldset className="grid gap-2 rounded-lg border border-admin-border p-3">
       <legend className="px-1 text-xs font-semibold text-admin-muted">
-        {run.label} · ran {run.agent_configuration_name} v{run.agent_configuration_version}
+        {run.label} · ran{" "}
+        {configurationChip(
+          run.label,
+          run.agent_configuration_name,
+          run.agent_configuration_version,
+        )}
       </legend>
       <div className="flex flex-wrap items-end gap-3">
         <label className={fieldLabelClasses}>
@@ -839,62 +805,6 @@ function ArmSummary({
         ))}
       </ul>
     </section>
-  );
-}
-
-/**
- * A version as a chip that opens what it pinned: the provenance strip's shape, with the link's
- * underline on hover and the workspace's focus ring, because unlike the bench's chips it is a
- * control (`chipClasses` is for the ones that are not).
- */
-const versionChipClasses = `rounded-full bg-admin-border px-2.5 py-0.5 font-semibold text-admin-ink-soft no-underline underline-offset-2 hover:underline ${focusRingClasses}`;
-
-/**
- * The chip strip: the versions this run pinned, each opening what it pinned (ADR 0068). What
- * its arms differ along is the General tab's *What the arms differed on*, which says it with
- * each arm's value beside it.
- */
-function Provenance({ shopId, experiment }: { shopId: string; experiment: ExperimentResponse }) {
-  // The scenario is pinned by the run itself; a sandbox input may pin it again, and one chip
-  // per version is enough.
-  const inputs = experiment.sandbox_inputs.filter(
-    (pin) => !(pin.definition_type === "scenario" && pin.definition_id === experiment.scenario_id),
-  );
-  return (
-    <div
-      data-tour="results-provenance"
-      className="flex flex-wrap items-center gap-2 text-[11.5px] text-admin-ink-soft"
-    >
-      <Link
-        className={versionChipClasses}
-        to={definitionPath("scenario", experiment.scenario_id, experiment.scenario_version, shopId)}
-      >
-        scenario v{experiment.scenario_version}
-      </Link>
-      {inputs.map((pin) => {
-        const to = versionPath(pin.definition_type, pin.definition_id, pin.version, shopId);
-        const label = `${describeValue(DEFINITION_TYPE, pin.definition_type)} v${pin.version}`;
-        return to === null ? (
-          <span
-            key={`${pin.definition_type}:${pin.definition_id}`}
-            className="rounded-full bg-admin-border px-2.5 py-0.5 font-semibold"
-          >
-            {label}
-          </span>
-        ) : (
-          <Link
-            key={`${pin.definition_type}:${pin.definition_id}`}
-            className={versionChipClasses}
-            to={to}
-          >
-            {label}
-          </Link>
-        );
-      })}
-      <span className="rounded-full bg-admin-border px-2.5 py-0.5 font-semibold">
-        starting state <Fingerprint value={experiment.sandbox_fingerprint} />
-      </span>
-    </div>
   );
 }
 

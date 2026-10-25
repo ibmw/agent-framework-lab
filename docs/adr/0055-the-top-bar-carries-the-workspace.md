@@ -1,6 +1,6 @@
 # ADR 0055 — The top bar carries the workspace: a switcher, the tour and a Settings toggle
 
-Status: accepted — 2026-09-20
+Status: accepted — 2026-09-20; amended 2026-10-25
 
 Finishes the chrome ADR 0054 left half-drawn. The mode tabs take the prototype's glyph, underline
 and inactive ink; the shop switcher stops being a `<select>` and becomes a button opening a panel;
@@ -339,3 +339,16 @@ needs one yet; when a second does, the keyboard rules belong in a primitive rath
 None in the database, the contracts or the published versions. One browser key is added,
 `agent-lab.settings-return`, and a browser that has never held it returns from Settings to the
 shops index. No existing key changes meaning. Every URL resolves to the page it did.
+
+## Amendment — 2026-10-25
+
+The comparison's frame is narrower than the 20 September text said. Its header, arm cards and depth
+tabs belong to the layout and are on screen whichever tab is open; its provenance does not any
+more — it is a card in the General tab's rail, beside Notes & tags, Quantitative and Input
+divergence (PLAN-UX Milestone 12). `alsoAt` stays addressing and not a second tour: one table
+row, one surface, one set of steps. What changes is that a step lighting one tab's card says
+which of the surface's addresses it belongs to (`TourStep.at`, `""` for the route itself), the
+launch control walks only the steps in scope where the reader stands, and the anchor sweep
+visits every address a surface declares and holds each in-scope step to exactly one visible
+element there. A step is never skipped because its anchor is absent: that is the silent
+staleness ADR 0045 exists to catch.

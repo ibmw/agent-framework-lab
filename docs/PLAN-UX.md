@@ -113,28 +113,6 @@ each judgement's `provider`, and no contract moves. The covered journeys are
 `experiment-start.spec.ts` (the results at :640 and History's *Open results* at :818),
 `tour-anchors.spec.ts`, `sticky-header.spec.ts` (:684) and `workspace-shell.spec.ts`.
 
-### Slice 51 — The rail holds the record
-
-- [ ] Provenance moves into the right rail with Quantitative and Input divergence: the pins, each
-  objective block named by its own name rather than three *Objective block v1*, the starting
-  state, the resolution fingerprint, each arm's inputs, and the run it was derived from when
-  `derived_from` is set.
-- [ ] Notes & tags join the rail.
-- [ ] Each card's explanatory footer is one sentence, the rest behind the tour.
-- [ ] Fork's legends name each arm once.
-
-Frames: `Workspace.dc.html:2577–2625`; `DEPRECADED/ExperimentResults.dc.html`.
-
-Authority: ADR 0034, ADR 0036, ADR 0038, ADR 0039, ADR 0068.
-
-Departures to record: none.
-
-Branch: `feat/results-hierarchy-rail`. Checks: Vitest — `Experiments.test.tsx` for the rail's
-contents, a derived run's source link and distinct block names. `make check`, `pnpm build`;
-`pnpm test:e2e` for `tour-anchors.spec.ts`, whose provenance anchor moves.
-
-Slice evidence: the seeded run's General tab at 1440 and 1280.
-
 ### Slice 52 — A refusal on an untouched form is a hint
 
 - [ ] ADR 0078 amends ADR 0063: a refused submit's reason is drawn muted while its form is

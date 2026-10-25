@@ -78,6 +78,12 @@ function library<DraftT, PayloadT, PreviewT, VersionT>(collection: string) {
         await fetch(blockPath(collection, blockId, "/versions"), { method: "POST" }),
       );
     },
+    /** One immutable published version, as a run pinned it. */
+    async getVersion(blockId: string, version: number, signal?: AbortSignal): Promise<VersionT> {
+      return read<VersionT>(
+        await fetch(blockPath(collection, blockId, `/versions/${version}`), { signal }),
+      );
+    },
   };
 }
 

@@ -3748,6 +3748,19 @@ describe("live bench", () => {
     expect(within(provenance).getByTitle(SANDBOX_FINGERPRINT)).toBeVisible();
     expect(within(provenance).getByTitle(RESOLUTION_FINGERPRINT)).toBeVisible();
     expect(within(provenance).getByText(/human operator/)).toBeVisible();
+    // The results' record, read on the bench as it runs: nothing in it is a link (ADR 0068).
+    expect(within(provenance).getByText("scenario v1")).toBeVisible();
+    expect(within(provenance).queryAllByRole("link")).toEqual([]);
+  });
+
+  it("names a derived run's source on the bench without linking it", async () => {
+    renderApp(`/lab/bench/${SHOP_ID}/${FORK_ID}`);
+
+    const provenance = await screen.findByRole("region", { name: "Provenance" });
+    expect(
+      within(provenance).getByText("A fork of", { exact: false, selector: "p" }),
+    ).toHaveTextContent("A fork of Wrong address — framework comparison · changed prompt");
+    expect(within(provenance).queryAllByRole("link")).toEqual([]);
   });
 });
 
@@ -4840,8 +4853,8 @@ describe("experiment results", () => {
     );
     renderResults();
 
-    const strip = await screen.findByRole("link", { name: "scenario v1" });
-    const provenance = strip.parentElement as HTMLElement;
+    const provenance = await screen.findByRole("region", { name: "Provenance" });
+    const strip = within(provenance).getByRole("link", { name: "scenario v1" });
 
     expect(strip).toHaveAttribute("href", `/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
     expect(within(provenance).getByRole("link", { name: "Shop v3" })).toHaveAttribute(
@@ -7406,5 +7419,271 @@ describe("what the arms differed on", () => {
     expect(
       within(card).getByText("One difference, so the behaviour above is attributable to it."),
     ).toBeVisible();
+  });
+});
+
+describe("the rail holds the record", () => {
+  const BLOCKS = {
+    "03089d7f-b0ee-47a6-88bb-050d0f11d50f": "redirect-the-order",
+    "1710d64d-17db-46b8-a0cf-9edb61e82ded": "read-required-document",
+    "8e53720a-4f57-4c50-8331-424e918739a5": "explain-the-change-to-the-customer",
+  } as const;
+  const MUTATION = "bbbdf977-073d-4acc-a3d4-85a5a098511d";
+  const IDENTITY = "aadf1767-4c8f-4e39-965a-f67ba16edbe0";
+
+  function pin(definition_type: string, definition_id: string, version = 1) {
+    return { definition_type, definition_id, version, content_fingerprint: "9".repeat(64) };
+  }
+
+  /** The seeded run's shape: three objective blocks and a mutation block, all at v1. */
+  function serveSeededPins(overrides: Partial<ExperimentResponse> = {}) {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
+        const record = experiment(turns, agentTurns, toolEvents, mutationEvents);
+        return HttpResponse.json({
+          ...record,
+          sandbox_inputs: [
+            ...record.sandbox_inputs,
+            pin("mutation_block", MUTATION),
+            ...Object.keys(BLOCKS).map((id) => pin("objective_block", id)),
+          ],
+          arm_inputs: [
+            [pin("agent_configuration", ATLAS_ID), pin("support_identity", IDENTITY)],
+            [pin("agent_configuration", BEACON_ID), pin("support_identity", IDENTITY)],
+          ],
+          ...overrides,
+        } satisfies ExperimentResponse);
+      }),
+      http.get("*/api/v1/objective-blocks/:blockId/versions/:version", ({ params }) => {
+        const name = BLOCKS[String(params.blockId) as keyof typeof BLOCKS];
+        return name === undefined
+          ? HttpResponse.json({ detail: "not found" }, { status: 404 })
+          : HttpResponse.json(blockVersion(String(params.blockId), name));
+      }),
+      http.get(`*/api/v1/mutation-blocks/${MUTATION}/versions/1`, () =>
+        HttpResponse.json(blockVersion(MUTATION, "concurrent-entity-mutation")),
+      ),
+    );
+  }
+
+  function blockVersion(blockId: string, name: string) {
+    return {
+      block_id: blockId,
+      lifecycle_state: "published",
+      version: 1,
+      content_fingerprint: "9".repeat(64),
+      published_at: "2026-08-28T09:00:00+00:00",
+      content: { name, statement: name, description: "", parameters: [] },
+    };
+  }
+
+  /** The column beside the evidence, read from the card the rail always held. */
+  function rail(): HTMLElement {
+    return screen.getByRole("region", { name: "Quantitative" }).parentElement as HTMLElement;
+  }
+
+  it("names each pinned block by its own name, beside the record's fingerprints and each arm's inputs", async () => {
+    serveSeededPins();
+    renderResults();
+
+    const provenance = await screen.findByRole("region", { name: "Provenance" });
+    const pinned = within(provenance).getByRole("list", { name: "What this run pinned" });
+    // Three objective blocks at v1 are three blocks, each by the name its version was published
+    // under, and each still opens what it pinned.
+    for (const [id, name] of Object.entries(BLOCKS)) {
+      expect(
+        await within(pinned).findByRole("link", { name: `Objective block · ${name} v1` }),
+      ).toHaveAttribute("href", `/lab/objective-blocks/${id}`);
+    }
+    expect(
+      within(pinned).getByRole("link", { name: "Mutation block · concurrent-entity-mutation v1" }),
+    ).toHaveAttribute("href", `/lab/mutation-blocks/${MUTATION}`);
+    expect(within(provenance).queryByText("Objective block v1")).toBeNull();
+    expect(within(pinned).getByRole("link", { name: "scenario v1" })).toBeVisible();
+
+    // The starting state, the fingerprint of everything the run resolved, and who drove it.
+    expect(within(provenance).getByTitle(SANDBOX_FINGERPRINT)).toBeVisible();
+    expect(within(provenance).getByTitle(RESOLUTION_FINGERPRINT)).toBeVisible();
+    expect(within(provenance).getByText("human operator")).toBeVisible();
+
+    // Each arm's own inputs, under the arm: its configuration by name, and its identity.
+    const armA = within(provenance).getByRole("list", { name: "What Arm A pinned" });
+    expect(within(armA).getByRole("link", { name: "Atlas v1" })).toHaveAttribute(
+      "href",
+      `/lab/agent-configurations/${ATLAS_ID}`,
+    );
+    expect(within(armA).getByRole("link", { name: "Support identity v1" })).toHaveAttribute(
+      "href",
+      `/lab/support-identities/${IDENTITY}`,
+    );
+    const armB = within(provenance).getByRole("list", { name: "What Arm B pinned" });
+    expect(within(armB).getByRole("link", { name: "Beacon v1" })).toBeVisible();
+
+    // In the rail, with what a reviewer wrote, and not under the arm cards any more.
+    expect(rail()).toContainElement(provenance);
+    expect(rail()).toContainElement(screen.getByRole("region", { name: "Notes & tags" }));
+    expect(rail()).toContainElement(screen.getByRole("region", { name: "Input divergence" }));
+    expect(rail()).not.toContainElement(
+      screen.getByRole("region", { name: "Deterministic evidence" }),
+    );
+    expect(document.querySelector('[data-tour="results-provenance"]')).toContainElement(provenance);
+  });
+
+  it("keeps a block it could not read as the type and version the record carries", async () => {
+    // Blocks of their own: a name another case read is kept for the page's life, which is the
+    // point of the cache and no business of this case.
+    const unread = [
+      "c1000000-0000-4000-8000-000000000001",
+      "c1000000-0000-4000-8000-000000000002",
+      "c1000000-0000-4000-8000-000000000003",
+    ];
+    serveSeededPins({
+      sandbox_inputs: [
+        ...experiment([]).sandbox_inputs,
+        pin("mutation_block", MUTATION),
+        ...unread.map((id) => pin("objective_block", id)),
+      ],
+    });
+    server.use(
+      http.get("*/api/v1/objective-blocks/:blockId/versions/:version", () =>
+        HttpResponse.json({ detail: "unavailable" }, { status: 503 }),
+      ),
+    );
+    renderResults();
+
+    const provenance = await screen.findByRole("region", { name: "Provenance" });
+    expect(
+      await within(provenance).findByRole("link", {
+        name: "Mutation block · concurrent-entity-mutation v1",
+      }),
+    ).toBeVisible();
+    await waitFor(() =>
+      expect(within(provenance).getAllByRole("link", { name: "Objective block v1" })).toHaveLength(
+        3,
+      ),
+    );
+  });
+
+  it("reads each block version once, however often it is pinned and however often the rail returns", async () => {
+    const once = "d2000000-0000-4000-8000-000000000001";
+    const reads: string[] = [];
+    serveSeededPins({
+      sandbox_inputs: [...experiment([]).sandbox_inputs, pin("objective_block", once)],
+      // Pinned again by both arms: three pins of one version.
+      arm_inputs: [[pin("objective_block", once)], [pin("objective_block", once)]],
+    });
+    server.use(
+      http.get(`*/api/v1/objective-blocks/${once}/versions/1`, () => {
+        reads.push(once);
+        return HttpResponse.json(blockVersion(once, "read-once"));
+      }),
+    );
+    const user = userEvent.setup();
+    renderResults();
+
+    const provenance = await screen.findByRole("region", { name: "Provenance" });
+    expect(
+      await within(provenance).findAllByRole("link", { name: "Objective block · read-once v1" }),
+    ).toHaveLength(3);
+    expect(reads).toEqual([once]);
+
+    // Away to another tab and back: the rail mounts again, and the immutable version is not
+    // asked a second time.
+    await user.click(screen.getByRole("link", { name: "Execution timeline" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Provenance" })).toBeNull());
+    await user.click(screen.getByRole("link", { name: "General" }));
+    const again = await screen.findByRole("region", { name: "Provenance" });
+    expect(
+      within(again).getAllByRole("link", { name: "Objective block · read-once v1" }),
+    ).toHaveLength(3);
+    expect(reads).toEqual([once]);
+  });
+
+  it("links a derived run to the run it came from, in the rail and nowhere else", async () => {
+    renderApp(`/lab/bench/${SHOP_ID}/${FORK_ID}/results`);
+
+    const provenance = await screen.findByRole("region", { name: "Provenance" });
+    const source = within(provenance).getByRole("link", {
+      name: "Wrong address — framework comparison",
+    });
+    expect(source).toHaveAttribute("href", `/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results`);
+    expect(source.parentElement).toHaveTextContent(
+      "A fork of Wrong address — framework comparison · changed prompt",
+    );
+    // Said once: the header no longer names the source beside the seed.
+    expect(
+      screen.getAllByRole("link", { name: "Wrong address — framework comparison" }),
+    ).toHaveLength(1);
+  });
+
+  it("names no source for a run nothing was derived from", async () => {
+    renderResults();
+
+    const provenance = await screen.findByRole("region", { name: "Provenance" });
+    expect(within(provenance).queryByText(/ of /)).toBeNull();
+    expect(
+      within(provenance)
+        .queryAllByRole("link")
+        .filter((link) => link.getAttribute("href")?.includes("/lab/bench/")),
+    ).toEqual([]);
+  });
+
+  it("ends every card on the General tab with one sentence, the rest in the tour", async () => {
+    renderResults();
+
+    await screen.findByRole("region", { name: "Provenance" });
+    for (const name of [
+      "Deterministic evidence",
+      "Business state — verified, not claimed",
+      "LLM judge evidence",
+      "Provenance",
+      "Notes & tags",
+      "Quantitative",
+      "Input divergence",
+    ]) {
+      const footer = screen.getByRole("region", { name }).lastElementChild as HTMLElement;
+      const text = (footer.textContent ?? "").trim();
+      expect(text.match(/[.!?](\s|$)/g), `${name}: ${text}`).toHaveLength(1);
+    }
+
+    // What the footers said and no longer say is still said, by the walk around this screen.
+    const tour = TOURS.results.steps.flatMap((step) => step.body).join(" ");
+    for (const claim of [
+      "neither is a miss",
+      "never overwrites a deterministic row",
+      "nothing can have moved without appearing there",
+      "annotating a run never moves the versions or the starting state it pinned",
+      "history narrows by them",
+      "the arms are answering different conversations",
+    ]) {
+      expect(tour).toContain(claim);
+    }
+  });
+
+  it("names each arm once in the fork panel's legends", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
+        const record = experiment(turns, agentTurns, toolEvents, mutationEvents);
+        // The seeded run's arms carry their configuration's name as their label.
+        return HttpResponse.json({
+          ...record,
+          runs: [{ ...record.runs[0], agent_configuration_name: "Arm A" }, record.runs[1]],
+        } satisfies ExperimentResponse);
+      }),
+    );
+    renderResults();
+
+    await user.click(await screen.findByRole("button", { name: "Fork…" }));
+    const panel = await screen.findByRole("region", { name: "Fork this experiment" });
+    expect(
+      within(panel)
+        .getAllByRole("group")
+        .map((group) => group.textContent),
+    ).toEqual([
+      expect.stringMatching(/^Arm A · ran configuration v1/),
+      expect.stringMatching(/^Arm B · ran Beacon v1/),
+    ]);
+    expect(within(panel).getByText("Arm A · ran configuration v1")).toBeVisible();
   });
 });

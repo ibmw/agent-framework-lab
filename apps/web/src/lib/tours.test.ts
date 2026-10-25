@@ -62,12 +62,18 @@ describe("the tour table", () => {
     }
   });
 
-  it("lights the editor panel's card a step is titled after, never its neighbour", () => {
+  it("lights the card a step is titled after, never its neighbour", () => {
     // The scenario's freeze step once lit the Publish gate above the card it is named for, and
     // every anchor still resolved: the sweep proves an anchor is on the page, not that it is
     // the element the step talks about. A step titled after one of the panel's cards lights
     // that card, whose name is its title (`Card`'s `aria-label`).
-    const cards = ["Publish gate", "What publishing freezes"];
+    const cards = [
+      "Publish gate",
+      "What publishing freezes",
+      "Deterministic evidence",
+      "Business state — verified, not claimed",
+      "Notes & tags",
+    ];
     const titled = STEPS.filter(([, step]) => cards.includes(step.title));
     expect(titled.length).toBeGreaterThan(0);
     for (const [id, step] of titled) {
@@ -258,6 +264,40 @@ describe("the tour a location is on", () => {
     expect(TOURS.results.alsoAt).toEqual(["conversation", "timeline", "traces"]);
     for (const tab of TOURS.results.alsoAt ?? []) {
       expect(tourAt(`${results}/${tab}`)).toBe("results");
+    }
+  });
+
+  it("walks a tab only the steps that are on it", () => {
+    // The arm cards and the tab row are the layout's; the provenance card, the evidence and the
+    // notes are the General tab's, and a reader on the timeline is not walked to them.
+    const results = tourHref("results", IDS);
+    const titles = (pathname: string) => tourSteps("results", pathname).map((step) => step.title);
+    // Top to bottom on General: the arm cards and the tab row above it, then its evidence and
+    // its rail — so no step scrolls the reader back up.
+    expect(titles(results)).toEqual([
+      "How to read the results",
+      "No aggregate, and nothing hidden",
+      "Deterministic evidence",
+      "Business state — verified, not claimed",
+      "What this run pinned",
+      "Notes & tags",
+    ]);
+    for (const tab of TOURS.results.alsoAt ?? []) {
+      expect(titles(`${results}/${tab}`), tab).toEqual([
+        "How to read the results",
+        "No aggregate, and nothing hidden",
+      ]);
+    }
+  });
+
+  it("scopes a step only to addresses its surface answers at", () => {
+    for (const id of TOUR_IDS) {
+      const addresses = ["", ...(TOURS[id].alsoAt ?? [])];
+      for (const step of tourSteps(id)) {
+        for (const at of step.at ?? []) {
+          expect(addresses, `${id} · ${step.title} names ${at}`).toContain(at);
+        }
+      }
     }
   });
 

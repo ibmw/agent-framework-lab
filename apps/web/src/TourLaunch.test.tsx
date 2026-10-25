@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TourLaunch } from "./components/TourLaunch";
 import { TOUR_IDS, TOURS, type TourId, tourHref } from "./lib/tours";
 
@@ -27,6 +27,8 @@ const server = setupServer();
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
+  // A case that stubs a global (the walk's `matchMedia`) never leaks it, even when it fails.
+  vi.unstubAllGlobals();
   server.events.removeAllListeners();
   server.resetHandlers();
   window.localStorage.clear();
@@ -87,8 +89,8 @@ describe("the launch control", () => {
   });
 
   it("treats the comparison's three tabs as the one surface they are", () => {
-    // Every element the comparison's tour lights belongs to the layout, and the layout is on
-    // screen whichever tab is open — so all three addresses offer it.
+    // The tabs are one layout, on screen whichever tab is open — so all three addresses offer
+    // the one walk, each walking the steps in scope there (the case below).
     const results = surfaceHref("results");
     for (const at of [results, `${results}/timeline`, `${results}/traces`]) {
       const mounted = launch(at);
@@ -97,6 +99,29 @@ describe("the launch control", () => {
         at,
       ).toBeVisible();
       mounted.unmount();
+    }
+  });
+
+  it("walks a tab of the comparison only the steps on that tab", async () => {
+    // The provenance card, the evidence and the notes are the General tab's; on the timeline
+    // the walk is the layout's two steps, never a popover lighting nothing (ADR 0055, amended).
+    // The tour reads `prefers-reduced-motion` when it starts, which jsdom does not answer.
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    const results = surfaceHref("results");
+    for (const [at, total] of [
+      [`${results}/timeline`, 2],
+      [results, 6],
+    ] as const) {
+      const mounted = launch(at);
+      await act(async () => {
+        screen.getByRole("button", { name: `Show me around ${TOURS.results.surface}` }).click();
+      });
+      expect(document.querySelector(".driver-popover-progress-text"), at).toHaveTextContent(
+        `1 of ${total}`,
+      );
+      await act(async () => {
+        mounted.unmount();
+      });
     }
   });
 
