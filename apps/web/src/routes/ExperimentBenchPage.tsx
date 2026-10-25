@@ -21,6 +21,7 @@ import {
   scoreExperiment,
 } from "../api/experiments";
 import { ActionStatus } from "../components/ActionStatus";
+import { DifferenceList } from "../components/ArmComparison";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
 import { BusyButton, PrimaryAction, RefusalLine } from "../components/PrimaryAction";
@@ -33,13 +34,7 @@ import {
   scoreReport,
   TAKES_A_MINUTE,
 } from "../lib/actionStatus";
-import {
-  COMPARISON_DIMENSION,
-  DEFINITION_TYPE,
-  describeValue,
-  labelOf,
-  TOOL_OUTCOME,
-} from "../lib/enumLabels";
+import { DEFINITION_TYPE, describeValue, labelOf, TOOL_OUTCOME } from "../lib/enumLabels";
 import {
   describeArmStanding,
   describeFailure,
@@ -316,7 +311,6 @@ export function ExperimentBenchPage() {
     );
   }
 
-  const differences = experiment.comparison.filter((variable) => variable.differs);
   const divergent = divergentTurnIds(experiment);
   const queue = benchReport(experiment.runs, action);
   // An arm whose row is still to change is the card that is about to change.
@@ -512,27 +506,7 @@ export function ExperimentBenchPage() {
           <StateChanges experiment={experiment} />
 
           <Card title="Comparison variables">
-            {differences.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">
-                These arms are identical along every recorded dimension.
-              </p>
-            ) : (
-              <>
-                <ul className="grid gap-1 text-[13px] text-admin-ink-soft">
-                  {differences.map((variable) => (
-                    <li key={variable.dimension}>
-                      {labelOf(COMPARISON_DIMENSION, variable.dimension)}
-                    </li>
-                  ))}
-                </ul>
-                {differences.length > 1 ? (
-                  <p className="text-xs text-admin-draft-ink">
-                    {differences.length} differences — a change in behavior cannot be attributed to
-                    any one of them.
-                  </p>
-                ) : null}
-              </>
-            )}
+            <DifferenceList experiment={experiment} shopId={shopId} />
           </Card>
 
           <Card title="Arms">

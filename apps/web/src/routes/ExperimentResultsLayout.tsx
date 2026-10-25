@@ -848,11 +848,11 @@ function ArmSummary({
 const versionChipClasses = `rounded-full bg-admin-border px-2.5 py-0.5 font-semibold text-admin-ink-soft no-underline underline-offset-2 hover:underline ${focusRingClasses}`;
 
 /**
- * The chip strip: the versions this run pinned, each opening what it pinned (ADR 0068), and
- * the dimensions its arms differ along.
+ * The chip strip: the versions this run pinned, each opening what it pinned (ADR 0068). What
+ * its arms differ along is the General tab's *What the arms differed on*, which says it with
+ * each arm's value beside it.
  */
 function Provenance({ shopId, experiment }: { shopId: string; experiment: ExperimentResponse }) {
-  const differences = experiment.comparison.filter((variable) => variable.differs);
   // The scenario is pinned by the run itself; a sandbox input may pin it again, and one chip
   // per version is enough.
   const inputs = experiment.sandbox_inputs.filter(
@@ -892,19 +892,6 @@ function Provenance({ shopId, experiment }: { shopId: string; experiment: Experi
       <span className="rounded-full bg-admin-border px-2.5 py-0.5 font-semibold">
         starting state <Fingerprint value={experiment.sandbox_fingerprint} />
       </span>
-      {differences.map((variable) => (
-        <span
-          key={variable.dimension}
-          className="rounded-full bg-admin-draft px-2.5 py-0.5 font-semibold text-admin-draft-ink"
-        >
-          {labelOf(COMPARISON_DIMENSION, variable.dimension)} differs
-        </span>
-      ))}
-      {differences.length > 1 ? (
-        <span className="text-admin-draft-ink">
-          {differences.length} differences — no behavior here can be attributed to any one of them.
-        </span>
-      ) : null}
     </div>
   );
 }

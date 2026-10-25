@@ -5477,8 +5477,8 @@ describe("replay", () => {
 
   it("warns on the derived screen when a fork left its own arms differing two ways", async () => {
     // Two comparisons, and both belong here. `changed` is the derivation's — what this fork
-    // moved from the run it came from — and the chip strip is ADR 0025's, over the arms this
-    // experiment actually holds. A fork is the operation most likely to turn a one-variable
+    // moved from the run it came from — and *What the arms differed on* is ADR 0025's, over
+    // the arms this experiment actually holds. A fork is the operation most likely to turn a one-variable
     // source into a two-variable run, and the screen it lands on has to say so.
     renderApp(`/lab/bench/${SHOP_ID}/${FORK_ID}/results`);
 
@@ -5805,5 +5805,256 @@ describe("replay, fork and the provider the lab can reach", () => {
       expectNotRefused(within(panel).getByRole("button", { name: "Fork this run" })),
     );
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+  });
+});
+
+describe("what the arms differed on", () => {
+  /** The comparison fixture with only the named dimensions left differing. */
+  function differingOnly(
+    ...dimensions: ComparisonVariableSchema["dimension"][]
+  ): ComparisonVariableSchema[] {
+    return COMPARISON.map((entry) =>
+      dimensions.includes(entry.dimension)
+        ? entry
+        : variable(entry.dimension, [entry.values[0], entry.values[0]]),
+    );
+  }
+
+  function serveExperiment(overrides: Partial<ExperimentResponse>) {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () =>
+        HttpResponse.json({
+          ...experiment(turns, agentTurns, toolEvents, mutationEvents),
+          ...overrides,
+        }),
+      ),
+    );
+  }
+
+  function serveComparison(comparison: ComparisonVariableSchema[]) {
+    serveExperiment({ comparison });
+  }
+
+  /** The same experiment with arm A alone: one run, one value per dimension. */
+  function serveOneArm() {
+    const base = experiment(turns, agentTurns, toolEvents, mutationEvents);
+    serveExperiment({
+      runs: [base.runs[0]],
+      arm_inputs: [[]],
+      comparison: COMPARISON.map((entry) => variable(entry.dimension, [entry.values[0]])),
+    });
+  }
+
+  async function differedOn() {
+    return screen.findByRole("region", { name: "What the arms differed on" });
+  }
+
+  /** A row's cells after the variable's own header, read left to right. */
+  function cellsOf(card: HTMLElement, dimension: RegExp) {
+    return within(within(card).getByRole("row", { name: dimension }))
+      .getAllByRole("cell")
+      .map((cell) => cell.textContent);
+  }
+
+  it("names each arm's value along the one difference and says it is attributable", async () => {
+    serveComparison(differingOnly("framework"));
+    renderResults();
+
+    const card = await differedOn();
+    // Each value sits in its arm's column, in the setup matrix's words.
+    expect(
+      within(card)
+        .getAllByRole("columnheader")
+        .map((head) => head.textContent),
+    ).toEqual(["Variable", "Arm A", "Arm B", "Assessment"]);
+    expect(cellsOf(card, /^Framework/)).toEqual(["pydantic-ai", "fake", "Difference"]);
+    // An agreeing variable is one value across both arms, spelled as the lab spells it.
+    expect(cellsOf(card, /^Architecture/)).toEqual(["Single agent", "Same"]);
+    expect(cellsOf(card, /^Tone of voice/)).toEqual(["shop default", "Same"]);
+    expect(
+      within(card).getByText("One difference, so the behaviour above is attributable to it."),
+    ).toBeVisible();
+    expect(within(card).queryByText(/cannot be attributed|can be attributed/)).toBeNull();
+  });
+
+  it("says two differences make nothing attributable, in the card and not as a chip", async () => {
+    renderResults();
+
+    const card = await differedOn();
+    expect(cellsOf(card, /^Framework/)).toEqual(["pydantic-ai", "fake", "Difference"]);
+    expect(cellsOf(card, /^Model/)).toEqual([
+      "openai/gpt-5-mini · temp 0.20 · 8 tool rounds",
+      "fake/deterministic",
+      "Difference",
+    ]);
+    const confounded = "2 differences — no behavior here can be attributed to any one of them.";
+    expect(within(card).getByText(confounded)).toBeVisible();
+    // The strip under the header keeps the pins and no longer says what differs.
+    expect(screen.getAllByText(confounded)).toHaveLength(1);
+    expect(screen.queryByText(/ differs$/)).toBeNull();
+    expect(screen.getByText("scenario v1")).toBeVisible();
+  });
+
+  it("says nothing can be attributed when no dimension differs", async () => {
+    serveComparison(differingOnly());
+    renderResults();
+
+    const card = await differedOn();
+    expect(within(card).queryByRole("cell", { name: "Difference" })).toBeNull();
+    expect(within(card).getAllByRole("cell", { name: "Same" })).toHaveLength(COMPARISON.length);
+    expect(
+      within(card).getByText(
+        "No dimension differs, so nothing above can be attributed to a difference between the arms.",
+      ),
+    ).toBeVisible();
+    expect(within(card).queryByText(/attributable to it/)).toBeNull();
+  });
+
+  it("draws a differing prompt whole, for a reader who cannot hover", async () => {
+    const long = (opening: string) =>
+      `${opening} Read the order back before proposing anything, quote the address on file, ` +
+      "and apply the change only with the confirmation the proposal answered with.";
+    serveComparison(
+      differingOnly().map((entry) =>
+        entry.dimension === "prompt"
+          ? variable("prompt", [long("You are support."), long("You are the returns desk.")])
+          : entry,
+      ),
+    );
+    renderResults();
+
+    const card = await differedOn();
+    const row = within(card).getByRole("row", { name: /^Prompt/ });
+    const [armA, armB] = within(row).getAllByRole("cell");
+    // The whole of each prompt is the cell's own text, and nothing in it is clamped: the
+    // difference is in the text a keyboard, touch or screen reader reaches.
+    expect(armA).toHaveTextContent(long("You are support."), { normalizeWhitespace: false });
+    expect(armB).toHaveTextContent(long("You are the returns desk."));
+    for (const cell of [armA, armB]) {
+      expect(cell.querySelector("[class*='line-clamp']")).toBeNull();
+      expect(cell).not.toHaveClass("line-clamp-2");
+    }
+  });
+
+  it("names a support identity by the version each arm pinned and opens it", async () => {
+    const frontline = "aadf1767-4c8f-4e39-965a-f67ba16edbe0";
+    const escalation = "bbcf2871-4c8f-4e39-965a-f67ba16edbe1";
+    const pin = (id: string, version: number) => ({
+      definition_type: "support_identity",
+      definition_id: id,
+      version,
+      content_fingerprint: "9".repeat(64),
+    });
+    serveExperiment({
+      comparison: differingOnly().map((entry) =>
+        entry.dimension === "support_identity"
+          ? variable("support_identity", [frontline, escalation])
+          : entry,
+      ),
+      arm_inputs: [[pin(frontline, 1)], [pin(escalation, 1)]],
+    });
+    renderResults();
+
+    const card = await differedOn();
+    const row = within(card).getByRole("row", { name: /^Support identity/ });
+    // Both at v1, and still told apart by their ids; each opens what that arm pinned.
+    const a = within(row).getByRole("link", { name: "v1 · aadf1767" });
+    expect(a).toHaveAttribute("href", `/lab/support-identities/${frontline}`);
+    expect(a).toHaveAttribute("title", frontline);
+    const b = within(row).getByRole("link", { name: "v1 · bbcf2871" });
+    expect(b).toHaveAttribute("href", `/lab/support-identities/${escalation}`);
+    expect(within(row).queryByText(frontline)).toBeNull();
+  });
+
+  it("opens the one support identity both arms pinned from the cell they share", async () => {
+    const frontline = "aadf1767-4c8f-4e39-965a-f67ba16edbe0";
+    const pin = {
+      definition_type: "support_identity",
+      definition_id: frontline,
+      version: 2,
+      content_fingerprint: "9".repeat(64),
+    };
+    serveExperiment({
+      comparison: differingOnly().map((entry) =>
+        entry.dimension === "support_identity"
+          ? variable("support_identity", [frontline, frontline])
+          : entry,
+      ),
+      arm_inputs: [[pin], [pin]],
+    });
+    renderResults();
+
+    const card = await differedOn();
+    const row = within(card).getByRole("row", { name: /^Support identity/ });
+    expect(within(row).getByRole("link", { name: "v2 · aadf1767" })).toHaveAttribute(
+      "href",
+      `/lab/support-identities/${frontline}`,
+    );
+    expect(cellsOf(card, /^Support identity/)).toEqual(["v2 · aadf1767", "Same"]);
+  });
+
+  it("reads each value under the arm at its position, whatever order the runs arrive in", async () => {
+    const base = experiment(turns, agentTurns, toolEvents, mutationEvents);
+    serveExperiment({
+      comparison: differingOnly("framework"),
+      runs: [base.runs[1], base.runs[0]],
+    });
+    renderResults();
+
+    const card = await differedOn();
+    expect(
+      within(card)
+        .getAllByRole("columnheader")
+        .map((head) => head.textContent),
+    ).toEqual(["Variable", "Arm A", "Arm B", "Assessment"]);
+    expect(cellsOf(card, /^Framework/)).toEqual(["pydantic-ai", "fake", "Difference"]);
+  });
+
+  it("says one arm has nothing to compare against rather than that it agrees", async () => {
+    serveOneArm();
+    renderResults();
+
+    const card = await differedOn();
+    expect(
+      within(card)
+        .getAllByRole("columnheader")
+        .map((head) => head.textContent),
+    ).toEqual(["Variable", "Arm A"]);
+    expect(within(card).queryByRole("cell", { name: "Same" })).toBeNull();
+    expect(cellsOf(card, /^Framework/)).toEqual(["pydantic-ai"]);
+    expect(
+      within(card).getByText("One arm ran, so there is nothing to compare it against."),
+    ).toBeVisible();
+    expect(within(card).queryByText(/No dimension differs/)).toBeNull();
+  });
+
+  it("says the same of one arm on the bench", async () => {
+    serveOneArm();
+    renderBench();
+
+    const card = await screen.findByRole("region", { name: "Comparison variables" });
+    expect(
+      within(card).getByText("One arm ran, so there is nothing to compare it against."),
+    ).toBeVisible();
+    expect(within(card).queryByText(/No dimension differs/)).toBeNull();
+  });
+
+  it("reads the bench's comparison variables from the same rows and the same sentence", async () => {
+    serveComparison(differingOnly("framework"));
+    renderBench();
+
+    const card = await screen.findByRole("region", { name: "Comparison variables" });
+    expect(within(card).getByText("Framework")).toBeVisible();
+    // Each arm's line, read whole: the arm's name, then its value.
+    const lines = within(card)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
+    expect(lines).toContain("Arm A: pydantic-ai");
+    expect(lines).toContain("Arm B: fake");
+    // Only what differs is listed on the bench.
+    expect(within(card).queryByText("Architecture")).toBeNull();
+    expect(
+      within(card).getByText("One difference, so the behaviour above is attributable to it."),
+    ).toBeVisible();
   });
 });

@@ -313,7 +313,7 @@ export const TOURS: Record<TourId, Tour> = {
         anchor: '[data-tour="results-provenance"]',
         title: "What this run pinned",
         body: [
-          "Every chip here is something this run froze before it started — the scenario version, the starting state, and the published inputs behind them — followed by the dimensions its two arms actually differ along. Behaviour can be attributed to a dimension only while that last list holds exactly one: two differences and nothing here can say which of them moved the result.",
+          "Every chip here is something this run froze before it started — the scenario version, the starting state, and the published inputs behind them. What its two arms differ along is on the General tab, under the evidence: behaviour can be attributed to a dimension only while exactly one differs, and with two nothing can say which of them moved the result.",
         ],
       },
       {

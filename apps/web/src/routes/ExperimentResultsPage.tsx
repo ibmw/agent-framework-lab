@@ -12,6 +12,7 @@ import { type FormEvent, useId, useState } from "react";
 import { describeApiError } from "../api/client";
 import { addExperimentNote, scoreExperiment, setExperimentTags } from "../api/experiments";
 import { ActionStatus } from "../components/ActionStatus";
+import { ComparisonTable } from "../components/ArmComparison";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
@@ -225,6 +226,12 @@ export function ExperimentResultsPage() {
                 )}
               </>
             )}
+          </Card>
+
+          {/* Below the evidence it explains: what the arms differed on is what any difference
+              above can, or cannot, be attributed to (ADR 0025, ADR 0042). */}
+          <Card title="What the arms differed on">
+            <ComparisonTable experiment={experiment} shopId={shopId} />
           </Card>
         </div>
 

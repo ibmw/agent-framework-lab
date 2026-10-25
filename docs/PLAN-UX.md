@@ -113,26 +113,6 @@ each judgement's `provider`, and no contract moves. The covered journeys are
 `experiment-start.spec.ts` (the results at :640 and History's *Open results* at :818),
 `tour-anchors.spec.ts`, `sticky-header.spec.ts` (:684) and `workspace-shell.spec.ts`.
 
-### Slice 46 — What the arms differed on
-
-- [ ] A card *What the arms differed on* on the General tab, drawn from `experiment.comparison`:
-  every dimension, whether it differs, and each arm's value. One difference reads "One
-  difference, so the behaviour above is attributable to it."; more than one, the sentence the
-  chip strip has today (`ExperimentResultsLayout.tsx:884–896`), which moves into the card.
-- [ ] The strip keeps the pins, and the *framework differs* chip goes, because the card says it.
-- [ ] The bench's *Comparison variables* card and this one read one helper.
-
-Frames: `Workspace.dc.html:2627–2640`.
-
-Authority: ADR 0033, ADR 0042.
-
-Departures to record: none.
-
-Branch: `feat/results-comparison-card`. Checks: Vitest — `Experiments.test.tsx` for one
-difference, two, and none. `make check`, `pnpm build`.
-
-Slice evidence: the seeded run's card at 1440 and 1280.
-
 ### Slice 47 — The state diff reads as a difference
 
 - [ ] Each arm's diff opens with one summary line — "3 groups changed: shipping address,
