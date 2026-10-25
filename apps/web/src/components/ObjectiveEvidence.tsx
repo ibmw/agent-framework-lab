@@ -6,10 +6,12 @@ import type {
 } from "@agent-lab/contracts";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useState } from "react";
+import { Link } from "react-router-dom";
 import { CONTROL_JUDGE_NOTE, CONTROL_JUDGE_PROVIDER } from "../lib/agents";
 import { labelOf, OBJECTIVE_SEVERITY } from "../lib/enumLabels";
 import { describeJudgement, firstSentence, judgementProvenance, OUTCOMES } from "../lib/evidence";
 import { onlyChoiceNote } from "../lib/singleChoice";
+import { callAnchor, timelineEventPath } from "../lib/timelineAnchors";
 import {
   fieldControlClasses,
   fieldLabelClasses,
@@ -47,6 +49,7 @@ export function ObjectiveMatrix({
   compact = false,
   caption = EVERY_OBJECTIVE,
   judges = [],
+  timeline,
 }: {
   runs: ExperimentRunSchema[];
   arms: ArmEvaluationSchema[];
@@ -56,9 +59,20 @@ export function ObjectiveMatrix({
   caption?: string;
   /** The published judges, by which a judged cell names the judge that scored it. */
   judges?: JudgeConfigurationSummarySchema[];
+  /** The experiment whose timeline a decided line links into; no link is drawn without it. */
+  timeline?: TimelineOf;
 }) {
   if (!compact) {
-    return <EvidenceMatrix runs={runs} arms={arms} rows={rows} caption={caption} judges={judges} />;
+    return (
+      <EvidenceMatrix
+        runs={runs}
+        arms={arms}
+        rows={rows}
+        caption={caption}
+        judges={judges}
+        timeline={timeline}
+      />
+    );
   }
   return (
     <table className="w-full text-left text-[13px]">
@@ -109,6 +123,12 @@ export function ObjectiveMatrix({
   );
 }
 
+/** The experiment a matrix belongs to, by which its lines address that experiment's timeline. */
+interface TimelineOf {
+  shopId: string;
+  experimentId: string;
+}
+
 /** One arm's result for one objective, paired by the objective rather than by position. */
 function resultFor(
   arm: ArmEvaluationSchema,
@@ -129,12 +149,14 @@ function EvidenceMatrix({
   rows,
   caption,
   judges,
+  timeline,
 }: {
   runs: ExperimentRunSchema[];
   arms: ArmEvaluationSchema[];
   rows: ObjectiveResultSchema[];
   caption: string;
   judges: JudgeConfigurationSummarySchema[];
+  timeline: TimelineOf | undefined;
 }) {
   return (
     // A phone's width is narrower than two arms' sentences; the table scrolls inside its card
@@ -166,7 +188,12 @@ function EvidenceMatrix({
               </th>
               {arms.map((arm) => (
                 <td key={arm.run_id} className={`${tableCellClasses} min-w-[12rem]`}>
-                  <EvidenceCell result={resultFor(arm, row)} judges={judges} />
+                  <EvidenceCell
+                    result={resultFor(arm, row)}
+                    runId={arm.run_id}
+                    judges={judges}
+                    timeline={timeline}
+                  />
                 </td>
               ))}
             </tr>
@@ -184,13 +211,22 @@ function EvidenceMatrix({
  * rationale is prose: its first sentence is the line, held to one line, and the whole of it
  * opens beneath with the judge that wrote it, by its published name. A verdict by the offline
  * control says, in words, what that judge does not read.
+ *
+ * A rule's line is a link when one recorded call decided the verdict (`decided_by`): it opens
+ * the execution timeline on exactly that event of this arm. A row no single call decided — a
+ * miss, a pending row, a field that moved, a judge's — carries no link rather than a guessed
+ * one.
  */
 function EvidenceCell({
   result,
+  runId,
   judges,
+  timeline,
 }: {
   result: ObjectiveResultSchema | undefined;
+  runId: string;
   judges: JudgeConfigurationSummarySchema[];
+  timeline: TimelineOf | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const bodyId = useId();
@@ -213,12 +249,27 @@ function EvidenceCell({
     </span>
   );
   if (!judgement) {
+    const decided = result.decided_by ?? null;
     return (
       <>
         {mark}
-        <span className="mt-0.5 block text-xs leading-normal text-admin-ink-soft">
-          {result.detail}
-        </span>
+        {decided && timeline ? (
+          <Link
+            to={timelineEventPath(
+              timeline.shopId,
+              timeline.experimentId,
+              callAnchor(runId, decided),
+            )}
+            className={`mt-0.5 block rounded text-xs leading-normal text-admin-ink-soft underline decoration-admin-muted underline-offset-2 hover:text-admin-ink hover:decoration-admin-ink ${focusRingClasses}`}
+          >
+            {result.detail}
+            <span className="sr-only"> — open the event that decided it in the timeline</span>
+          </Link>
+        ) : (
+          <span className="mt-0.5 block text-xs leading-normal text-admin-ink-soft">
+            {result.detail}
+          </span>
+        )}
       </>
     );
   }

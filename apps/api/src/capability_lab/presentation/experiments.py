@@ -99,7 +99,12 @@ from capability_lab.domain.blocks import (
 )
 from capability_lab.domain.content import MAX_LABEL_LENGTH
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, MIN_SCENARIO_SEED
-from capability_lab.domain.evaluation import ArmEvaluation, ObjectiveOutcome, ObjectiveResult
+from capability_lab.domain.evaluation import (
+    ArmEvaluation,
+    DecidingCall,
+    ObjectiveOutcome,
+    ObjectiveResult,
+)
 from capability_lab.domain.experiment import (
     MAX_NOTE_LENGTH,
     MAX_PARTICIPANT_TURN_LENGTH,
@@ -1187,12 +1192,34 @@ class JudgementSchema(StrictApiModel):
         )
 
 
+class DecidingCallSchema(StrictApiModel):
+    """The recorded tool call an objective's verdict rests on, inside the same arm.
+
+    The coordinate is the one this arm's timeline already gives that call — a `tool_call`
+    entry carrying this run, ordinal, attempt and sequence — so a client can point at the
+    one event that decided the row without matching on anything else.
+    """
+
+    ordinal: int
+    attempt: int
+    sequence: int
+
+    @classmethod
+    def from_domain(cls, call: DecidingCall) -> Self:
+        return cls(ordinal=call.ordinal, attempt=call.attempt, sequence=call.sequence)
+
+
 class ObjectiveResultSchema(StrictApiModel):
     """One bound objective as one arm's record answers it.
 
     `detail` is the evidence in a sentence — the call that answered it, or the call that was
     never made. A cell that said only "missed" would be a score; the reason it is missed is
     the finding.
+
+    `decided_by` names the call that decided the row when one call did: the read that met a
+    requirement, or the call that broke a prohibition. It is null on every other row — a
+    requirement missed, a prohibition kept, a pending or undecidable row, a judged row, and a
+    field that moved between two states — and never a call that only looks related.
     """
 
     objective_id: str
@@ -1205,6 +1232,7 @@ class ObjectiveResultSchema(StrictApiModel):
     outcome: ObjectiveOutcome
     detail: str
     judgement: JudgementSchema | None = None
+    decided_by: DecidingCallSchema | None = None
 
     @classmethod
     def from_domain(cls, result: ObjectiveResult) -> Self:
@@ -1220,6 +1248,11 @@ class ObjectiveResultSchema(StrictApiModel):
             detail=result.detail,
             judgement=(
                 None if result.judgement is None else JudgementSchema.from_domain(result.judgement)
+            ),
+            decided_by=(
+                None
+                if result.decided_by is None
+                else DecidingCallSchema.from_domain(result.decided_by)
             ),
         )
 

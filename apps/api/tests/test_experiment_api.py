@@ -18,6 +18,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from api_factories import (
+    OBJECTIVE_TEMPLATE,
     api_client,
     create_scenario,
     make_block,
@@ -1159,6 +1160,61 @@ async def test_an_experiment_is_judged_against_the_objectives_its_scenario_compo
     assert objective["evidence"] == "event"
     assert objective["block_version"] == 1
     assert "support.read_document" in objective["detail"]
+
+
+TOOL_TEMPLATE: dict[str, Any] = {
+    **OBJECTIVE_TEMPLATE,
+    "name": "look-the-order-up",
+    "statement": "Look the order up",
+    "description": "Passes when the bound tool answered the arm.",
+    "parameters": [
+        {**OBJECTIVE_TEMPLATE["parameters"][0], "name": "tool_ref", "kind": "tool_reference"},
+        OBJECTIVE_TEMPLATE["parameters"][1],
+    ],
+}
+
+
+async def test_a_verdict_names_the_timeline_event_that_decided_it(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The deciding call is the arm's own `tool_call` entry, addressed by its coordinate."""
+    block_id = await make_block(client, "objective-blocks", TOOL_TEMPLATE)
+    assert (await client.post(f"/api/v1/objective-blocks/{block_id}/versions")).status_code == 201
+    body = scenario_body(lab)
+    scenario = await published_scenario(
+        client,
+        lab,
+        objectives=[
+            *body["objectives"],
+            {
+                "id": "look-the-order-up",
+                "block_id": block_id,
+                "severity": "required",
+                "bindings": [{"parameter": "tool_ref", "value": "orders.read_order"}],
+            },
+        ],
+    )
+    identity = await make_identity(client)
+    experiment = await start(client, lab, start_body(scenario, await control_arm(client, identity)))
+    await advance(client, lab, experiment)
+
+    arm = (await evaluation(client, lab, experiment)).json()["arms"][0]
+    entries = (await timeline(client, lab, experiment)).json()["entries"]
+    rows = {row["objective_id"]: row for row in arm["objectives"]}
+    decided = rows["look-the-order-up"]["decided_by"]
+    matching = [
+        entry
+        for entry in entries
+        if entry["kind"] == "tool_call"
+        and entry["run_ids"] == [arm["run_id"]]
+        and (entry["ordinal"], entry["attempt"], entry["sequence"])
+        == (decided["ordinal"], decided["attempt"], decided["sequence"])
+    ]
+
+    assert rows["look-the-order-up"]["outcome"] == "met"
+    assert [entry["tool"] for entry in matching] == ["orders.read_order"]
+    assert rows["read-address-change-policy"]["outcome"] == "pending"
+    assert rows["read-address-change-policy"]["decided_by"] is None
 
 
 async def test_an_arm_driven_past_its_cap_settles_what_it_never_did(

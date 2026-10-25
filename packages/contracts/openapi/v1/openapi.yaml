@@ -7291,6 +7291,35 @@ components:
       required:
       - decision
       title: DecideOrderActionRequest
+    DecidingCallSchema:
+      properties:
+        ordinal:
+          type: integer
+          title: Ordinal
+        attempt:
+          type: integer
+          title: Attempt
+        sequence:
+          type: integer
+          title: Sequence
+      additionalProperties: false
+      type: object
+      required:
+      - ordinal
+      - attempt
+      - sequence
+      title: DecidingCallSchema
+      description: 'The recorded tool call an objective''s verdict rests on, inside
+        the same arm.
+
+
+        The coordinate is the one this arm''s timeline already gives that call — a
+        `tool_call`
+
+        entry carrying this run, ordinal, attempt and sequence — so a client can point
+        at the
+
+        one event that decided the row without matching on anything else.'
     DefinitionChangeKind:
       type: string
       enum:
@@ -9743,6 +9772,10 @@ components:
           anyOf:
           - $ref: '#/components/schemas/JudgementSchema'
           - type: 'null'
+        decided_by:
+          anyOf:
+          - $ref: '#/components/schemas/DecidingCallSchema'
+          - type: 'null'
       additionalProperties: false
       type: object
       required:
@@ -9765,7 +9798,19 @@ components:
         never made. A cell that said only "missed" would be a score; the reason it
         is missed is
 
-        the finding.'
+        the finding.
+
+
+        `decided_by` names the call that decided the row when one call did: the read
+        that met a
+
+        requirement, or the call that broke a prohibition. It is null on every other
+        row — a
+
+        requirement missed, a prohibition kept, a pending or undecidable row, a judged
+        row, and a
+
+        field that moved between two states — and never a call that only looks related.'
     ObjectiveSeverity:
       type: string
       enum:

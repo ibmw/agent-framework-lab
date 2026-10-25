@@ -44,6 +44,7 @@ from capability_lab.domain.judgement import Judgement
 
 __all__ = [
     "ArmEvaluation",
+    "DecidingCall",
     "EvaluationError",
     "EvidencePolarity",
     "ExperimentStatus",
@@ -117,6 +118,29 @@ def decide(polarity: EvidencePolarity, *, observed: bool, settled: bool) -> Obje
     return ObjectiveOutcome.MET if settled else ObjectiveOutcome.PENDING
 
 
+@dataclass(frozen=True, slots=True, order=True)
+class DecidingCall:
+    """The one recorded tool call an objective's outcome rests on, inside its own arm.
+
+    Named by the coordinate the record already keys a call by — the arm's turn, the attempt
+    at it, and the order the agent asked in — so it addresses exactly one event of the arm
+    whose evaluation carries it, and the timeline can point at the same one (ADR 0027). The
+    order is the arm's own: an earlier turn, then an earlier attempt, then an earlier call.
+    """
+
+    ordinal: int
+    attempt: int
+    sequence: int
+
+    def __post_init__(self) -> None:
+        _require_non_negative_int(self.ordinal, "deciding call ordinal")
+        _require_non_negative_int(self.attempt, "deciding call attempt")
+        _require_non_negative_int(self.sequence, "deciding call sequence")
+
+
+_DECIDED = frozenset({ObjectiveOutcome.MET, ObjectiveOutcome.MISSED})
+
+
 @dataclass(frozen=True, slots=True)
 class ObjectiveResult:
     """One bound objective as one arm's record answers it.
@@ -129,6 +153,13 @@ class ObjectiveResult:
     auditable: which published judge, at which version, on which model, shown which exact
     input. A verdict whose provenance travelled separately would be a claim nobody could
     check (ADR 0031).
+
+    `decided_by` is the call the verdict rests on, when one call is what decided it: the read
+    that met a requirement, or the call that broke a prohibition. Everything else carries
+    none — a requirement missed or a prohibition kept is an absence, a pending row has not
+    been decided, a field that moved is a difference between two states rather than one
+    event, and a judge read the whole thread. A row with no deciding call says so rather
+    than pointing at a call that merely looks related (ADR 0030, amended 2026-10-25).
     """
 
     objective_id: str
@@ -141,6 +172,7 @@ class ObjectiveResult:
     outcome: ObjectiveOutcome
     detail: str
     judgement: Judgement | None = None
+    decided_by: DecidingCall | None = None
 
     def __post_init__(self) -> None:
         _require_slug(self.objective_id, "bound objective ID")
@@ -158,6 +190,19 @@ class ObjectiveResult:
             _require_instance(
                 self.judgement, Judgement, "a judged result carries the execution that judged it"
             )
+        if self.decided_by is not None:
+            _require_instance(
+                self.decided_by, DecidingCall, "a deciding call is named by its coordinate"
+            )
+            if self.judgement is not None:
+                raise EvaluationError(
+                    "only a verdict the rules reached rests on one call; a judged row names none"
+                )
+            if self.outcome not in _DECIDED:
+                raise EvaluationError(
+                    "only a verdict the rules reached rests on one call; "
+                    f"a {self.outcome.value} row names none"
+                )
 
     @property
     def failed(self) -> bool:

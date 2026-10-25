@@ -142,6 +142,7 @@ export function ExperimentResultsPage() {
                 arms={arms}
                 rows={deterministic}
                 caption="Objectives decided from the record"
+                timeline={{ shopId, experimentId }}
               />
             )}
           </Card>

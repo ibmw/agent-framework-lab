@@ -113,24 +113,6 @@ each judgement's `provider`, and no contract moves. The covered journeys are
 `experiment-start.spec.ts` (the results at :640 and History's *Open results* at :818),
 `tour-anchors.spec.ts`, `sticky-header.spec.ts` (:684) and `workspace-shell.spec.ts`.
 
-### Slice 50 — The timeline in two lanes, and the evidence links into it
-
-- [ ] The timeline draws each arm in its own lane on one clock, the turns as bands, a scenario
-  fault where it fired.
-- [ ] Every event has an anchor, and each evidence line on the results matrices links to the
-  event that decided it.
-
-Frames: `Workspace.dc.html:5014`; `DEPRECADED/ResultsTimeline.dc.html`.
-
-Authority: ADR 0027, ADR 0030.
-
-Departures to record: none.
-
-Branch: `feat/results-timeline-lanes`. Checks: Vitest — `Experiments.test.tsx` for two lanes, the
-turn bands and an evidence link landing on its event. `make check`, `pnpm build`.
-
-Slice evidence: the seeded run's timeline at 1440, both arms' turn 2 side by side.
-
 ### Slice 51 — The rail holds the record
 
 - [ ] Provenance moves into the right rail with Quantitative and Input divergence: the pins, each

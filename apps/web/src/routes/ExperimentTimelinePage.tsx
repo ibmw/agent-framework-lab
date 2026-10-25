@@ -6,14 +6,15 @@ import type {
   TimelineCategory,
   TimelineEntrySchema,
 } from "@agent-lab/contracts";
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getExperimentTimeline } from "../api/experiments";
 import { Card } from "../components/WorkspaceChrome";
 import { breakable } from "../lib/breakable";
 import { labelOf as enumLabel, TOOL_OUTCOME } from "../lib/enumLabels";
-import { describeFailure } from "../lib/evidence";
+import { describeFailure, TOOL_MARK } from "../lib/evidence";
+import { timelineAnchor } from "../lib/timelineAnchors";
 import { chipClasses, filterChipStateClasses } from "../lib/ui";
 import { useExperimentResults } from "./useExperimentResults";
 
@@ -57,6 +58,17 @@ const EFFECTS: Record<string, string> = {
  * the results' Conversation tab — is where the words live; this is where the order and the code
  * paths do.
  *
+ * Each arm runs in its own lane, and the lanes share one clock: the customer composition, the
+ * coordinate ADR 0027 gave both arms, drawn as a band per turn with what the customer said
+ * across its top. Two arms' answers to one message therefore sit side by side, whatever depth
+ * each arm had reached — a wall clock would have put them wherever their providers happened to
+ * answer. A scenario fault sits in its arm's lane at the point it fired, between the calls it
+ * came between.
+ *
+ * Every event carries an anchor built from its own coordinates (`timelineAnchor`), and a URL
+ * that names one lands on it: scrolled to, focused, and marked in words as the event the
+ * operator followed — the results matrices link each verdict to the call that decided it.
+ *
  * The experiment itself comes from the results layout rather than from a read of its own:
  * depth is a tab on one screen, and a header that reloaded under the operator as they moved
  * between tabs would be a second reading of the run they are trying to follow.
@@ -66,6 +78,9 @@ export function ExperimentTimelinePage() {
   const [timeline, setTimeline] = useState<ExperimentTimelineResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lenses, setLenses] = useState<TimelineCategory[]>([]);
+  // The anchors are ASCII, so the fragment is read as written: decoding a hand-typed `#%`
+  // would throw during render and take the page down with it.
+  const target = useLocation().hash.slice(1);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -116,11 +131,12 @@ export function ExperimentTimelinePage() {
           {shown.length === 0 ? (
             <p className="text-[13px] text-admin-muted">No event matches this lens yet.</p>
           ) : (
-            <ol className="grid gap-2">
-              {shown.map((entry) => (
-                <Row key={entryKey(entry)} entry={entry} experiment={experiment} />
-              ))}
-            </ol>
+            <Lanes
+              entries={shown}
+              experiment={experiment}
+              target={target}
+              filtered={lenses.length > 0}
+            />
           )}
         </Card>
       </div>
@@ -203,26 +219,179 @@ function lensClasses(active: boolean): string {
   return active ? filterChipStateClasses.selected : filterChipStateClasses.unselected;
 }
 
-/** One event: which arms it belongs to, what it was, and where the lab's code ran. */
+/** One band of the shared clock: a customer composition and what each arm did with it. */
+interface Band {
+  step: number;
+  customer: TimelineEntrySchema | null;
+  lanes: Map<string, TimelineEntrySchema[]>;
+}
+
+function bandsOf(entries: TimelineEntrySchema[]): Band[] {
+  const bands = new Map<number, Band>();
+  for (const entry of entries) {
+    const band = bands.get(entry.step) ?? { step: entry.step, customer: null, lanes: new Map() };
+    bands.set(entry.step, band);
+    if (entry.kind === "trigger" || entry.kind === "customer_turn") {
+      band.customer = entry;
+      continue;
+    }
+    // An arm's own event names that arm alone; the stream's order is kept inside the lane.
+    for (const runId of entry.run_ids) {
+      band.lanes.set(runId, [...(band.lanes.get(runId) ?? []), entry]);
+    }
+  }
+  return [...bands.values()].sort((left, right) => left.step - right.step);
+}
+
+/**
+ * The arms in lanes on one clock: a band per turn, the arms side by side inside it.
+ *
+ * Desktop first: the lanes are columns from `md` up and stack beneath each other narrower,
+ * each still named by its arm, so a phone reads one arm's turn and then the other's.
+ */
+function Lanes({
+  entries,
+  experiment,
+  target,
+  filtered,
+}: {
+  entries: TimelineEntrySchema[];
+  experiment: ExperimentResponse;
+  target: string;
+  filtered: boolean;
+}) {
+  const runs = experiment.runs;
+  const lanes = { "--lanes": runs.length } as CSSProperties;
+  const laneGrid = "grid gap-3 md:grid-cols-[repeat(var(--lanes),minmax(0,1fr))] md:gap-4";
+  return (
+    <div className="grid gap-3">
+      <div aria-hidden="true" className={`hidden ${laneGrid} md:grid`} style={lanes}>
+        {runs.map((run) => (
+          <p
+            key={run.run_id}
+            className="border-b-2 border-admin-border pb-1 text-[11px] font-semibold uppercase tracking-wide text-admin-muted"
+          >
+            {run.label} · {run.framework_id} · {run.model_id}
+          </p>
+        ))}
+      </div>
+      {bandsOf(entries).map((band) => {
+        const turn = `Turn ${band.step + 1}`;
+        return (
+          <section
+            key={band.step}
+            aria-label={turn}
+            className="grid gap-2 rounded-[10px] border border-admin-border bg-admin-canvas p-3"
+          >
+            <h3 className="text-xs font-bold text-admin-ink">{turn}</h3>
+            {band.customer ? (
+              <ol className="grid gap-2">
+                <Row
+                  entry={band.customer}
+                  experiment={experiment}
+                  target={target}
+                  className="border-b border-admin-border/60 px-1 pb-2"
+                />
+              </ol>
+            ) : null}
+            <div className={laneGrid} style={lanes}>
+              {runs.map((run) => {
+                const own = band.lanes.get(run.run_id) ?? [];
+                const heard = band.customer === null || band.customer.run_ids.includes(run.run_id);
+                const name = `${run.label}, ${turn.toLowerCase()}`;
+                return (
+                  <div key={run.run_id} className="grid min-w-0 content-start gap-1.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-admin-muted md:sr-only">
+                      {run.label}
+                    </p>
+                    {own.length === 0 ? (
+                      <p className="text-[12px] text-admin-muted">
+                        {!heard
+                          ? "Never received this turn."
+                          : filtered
+                            ? "Nothing under this lens."
+                            : "Nothing recorded yet."}
+                      </p>
+                    ) : (
+                      <ol aria-label={name} className="grid gap-2">
+                        {own.map((entry) => (
+                          <Row
+                            key={entryKey(entry)}
+                            entry={entry}
+                            experiment={experiment}
+                            target={target}
+                            className="rounded-lg border border-admin-border bg-admin-surface px-2.5 py-2"
+                          />
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * One event: which arms it belongs to, what it was, and where the lab's code ran.
+ *
+ * The event a followed link names is focused and scrolled to, and says so in words beside a
+ * heavier outline — the mark is never its colour alone.
+ */
 function Row({
   entry,
   experiment,
+  target,
+  className,
 }: {
   entry: TimelineEntrySchema;
   experiment: ExperimentResponse;
+  target: string;
+  className: string;
 }) {
+  const anchor = timelineAnchor(entry);
+  const landed = anchor === target;
+  const ref = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (landed) {
+      ref.current?.focus({ preventScroll: true });
+      ref.current?.scrollIntoView?.({ block: "center" });
+    }
+  }, [landed]);
   const arms = entry.run_ids.map((runId) => labelOf(experiment.runs, runId));
   const split = entry.kind === "customer_turn" && entry.run_ids.length < experiment.runs.length;
   return (
-    <li className="grid gap-1 border-b border-admin-border/60 pb-2 last:border-b-0">
+    <li
+      id={anchor}
+      ref={ref}
+      tabIndex={landed ? -1 : undefined}
+      aria-current={landed ? "location" : undefined}
+      className={`grid scroll-mt-40 gap-1 outline-none ${className} ${
+        landed ? "ring-2 ring-lab-primary ring-offset-2" : ""
+      }`}
+    >
       <p className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
         <span>{arms.join(" · ")}</span>
         {split ? <span className={`${chipClasses.mark} normal-case`}>this arm only</span> : null}
         {entry.kind === "mutation" ? (
           <span className={`${chipClasses.mark} normal-case`}>scenario fault</span>
         ) : null}
+        {landed ? (
+          <span className={`${chipClasses.mark} normal-case`}>the event you followed</span>
+        ) : null}
       </p>
-      <p className="text-[13px] leading-relaxed text-admin-ink">{describe(entry)}</p>
+      <p className="text-[13px] leading-relaxed text-admin-ink">
+        {/* The outcome's glyph beside its word, as the thread and the traces draw it, so a
+            refusal is never told by its word alone. */}
+        {entry.kind === "tool_call" && entry.tool_outcome !== null ? (
+          <span aria-hidden="true">{`${TOOL_MARK[entry.tool_outcome]} `}</span>
+        ) : null}
+        {describe(entry)}
+      </p>
       {entry.source ? <Source location={entry.source} /> : null}
     </li>
   );

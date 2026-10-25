@@ -51,6 +51,7 @@ from capability_lab.domain.blocks import (
 )
 from capability_lab.domain.evaluation import (
     ArmEvaluation,
+    DecidingCall,
     EvaluationError,
     EvidencePolarity,
     ExperimentStatus,
@@ -60,6 +61,8 @@ from capability_lab.domain.evaluation import (
     stand_experiment,
 )
 from capability_lab.domain.experiment import ArmAwaiting, ArmStanding
+from capability_lab.domain.judge import JudgeOutcome
+from capability_lab.domain.judgement import Judgement
 from capability_lab.domain.sandbox import SandboxInteraction, SandboxOrder, SandboxState
 from capability_lab.domain.scenario import (
     DATA_FIELDS,
@@ -258,11 +261,15 @@ def call(
     tool: str,
     data: Mapping[str, CanonicalValue] | None = None,
     outcome: ToolOutcome = ToolOutcome.SUCCESS,
+    *,
+    ordinal: int = 0,
+    attempt: int = 1,
+    sequence: int = 1,
 ) -> ToolEvent:
     return ToolEvent(
-        ordinal=0,
-        attempt=1,
-        sequence=1,
+        ordinal=ordinal,
+        attempt=attempt,
+        sequence=sequence,
         tool=tool,
         version="v1",
         outcome=outcome,
@@ -486,6 +493,260 @@ def test_a_template_a_scenario_binds_twice_asks_for_both() -> None:
     assert judge(bound, evidence(read_one, read_two), parameters=both) is ObjectiveOutcome.MET
 
 
+# -- the call a verdict rests on (ADR 0030, amended 2026-10-25) -------------------
+
+
+def policy_read(**coordinate: int) -> ToolEvent:
+    return call(
+        SUPPORT_DOCUMENT,
+        {"kind": ShopDocumentKind.POLICY.value, "document_id": "shipping"},
+        **coordinate,  # type: ignore[arg-type]
+    )
+
+
+def deciding(
+    bound: BoundObjective, evidence_of: ArmEvidence, *, settled: bool = False, **template: object
+) -> ObjectiveResult:
+    return judge_objective(
+        bound, publishable_objective(**template), 1, evidence_of, settled=settled
+    )
+
+
+def test_a_document_read_twice_is_decided_by_the_read_the_evaluator_stopped_at() -> None:
+    """The first answer met the requirement; the second read changed nothing."""
+    later = policy_read(ordinal=2, attempt=1, sequence=0)
+    earlier = policy_read(ordinal=0, attempt=1, sequence=3)
+
+    result = deciding(objective(), evidence(later, earlier))
+
+    assert result.outcome is ObjectiveOutcome.MET
+    assert result.decided_by == DecidingCall(ordinal=0, attempt=1, sequence=3)
+
+
+def test_a_refused_read_before_the_answered_one_does_not_decide_it() -> None:
+    refused = call(
+        SUPPORT_DOCUMENT,
+        {"kind": ShopDocumentKind.POLICY.value, "document_id": "shipping"},
+        ToolOutcome.REFUSED,
+        sequence=0,
+    )
+    answered = policy_read(sequence=4)
+
+    result = deciding(objective(), evidence(refused, answered))
+
+    assert result.decided_by == DecidingCall(ordinal=0, attempt=1, sequence=4)
+
+
+def test_an_entity_read_is_decided_by_the_call_that_read_that_entity() -> None:
+    bound = objective(bindings=(ScenarioBinding(parameter="doc_ref", value=f"order:{ORDER_ID}"),))
+    entity = parameter("doc_ref", kind=BlockParameterKind.ENTITY_REFERENCE)
+    other = call(ORDER_DETAIL, {"order_id": str(uuid4())}, sequence=0)
+    read = call(ORDER_DETAIL, {"order_id": str(ORDER_ID)}, sequence=2)
+
+    result = deciding(bound, evidence(other, read), parameters=(entity, severity_parameter()))
+
+    assert result.decided_by == DecidingCall(ordinal=0, attempt=1, sequence=2)
+
+
+def test_a_tool_objective_is_decided_by_the_first_answer_that_tool_gave() -> None:
+    bound = objective(bindings=(ScenarioBinding(parameter="doc_ref", value=CUSTOMER_PROFILE),))
+    tool = parameter("doc_ref", kind=BlockParameterKind.TOOL_REFERENCE)
+    retried = call(CUSTOMER_PROFILE, ordinal=1, attempt=2, sequence=0)
+    first = call(CUSTOMER_PROFILE, ordinal=1, attempt=1, sequence=5)
+
+    result = deciding(bound, evidence(retried, first), parameters=(tool, severity_parameter()))
+
+    assert result.decided_by == DecidingCall(ordinal=1, attempt=1, sequence=5)
+
+
+def test_a_requirement_with_two_bindings_is_decided_by_the_read_that_completed_it() -> None:
+    """Until the second read the objective was pending, so the second read decided it."""
+    bound = objective(
+        bindings=(
+            ScenarioBinding(parameter="doc_ref", value=POLICY_REFERENCE),
+            ScenarioBinding(parameter="second_ref", value="policy:returns"),
+        )
+    )
+    both = (parameter("doc_ref"), parameter("second_ref"), severity_parameter())
+    returns = call(
+        SUPPORT_DOCUMENT,
+        {"kind": ShopDocumentKind.POLICY.value, "document_id": "returns"},
+        ordinal=1,
+        sequence=0,
+    )
+
+    halfway = deciding(bound, evidence(policy_read(sequence=2)), parameters=both)
+    result = deciding(bound, evidence(returns, policy_read(sequence=2)), parameters=both)
+
+    assert (halfway.outcome, halfway.decided_by) == (ObjectiveOutcome.PENDING, None)
+    assert result.outcome is ObjectiveOutcome.MET
+    assert result.decided_by == DecidingCall(ordinal=1, attempt=1, sequence=0)
+
+
+def test_a_prohibition_broken_twice_is_decided_by_the_first_break() -> None:
+    """Nothing after the first forbidden call could unmake the miss."""
+    bound = objective(
+        bindings=(
+            ScenarioBinding(parameter="doc_ref", value=POLICY_REFERENCE),
+            ScenarioBinding(parameter="second_ref", value="policy:returns"),
+        )
+    )
+    both = (parameter("doc_ref"), parameter("second_ref"), severity_parameter())
+    returns = call(
+        SUPPORT_DOCUMENT,
+        {"kind": ShopDocumentKind.POLICY.value, "document_id": "returns"},
+        ordinal=0,
+        sequence=0,
+    )
+
+    result = deciding(
+        bound,
+        evidence(policy_read(ordinal=2, sequence=1), returns),
+        evidence=ObjectiveEvidence.FORBIDDEN,
+        parameters=both,
+    )
+
+    assert result.outcome is ObjectiveOutcome.MISSED
+    assert result.decided_by == DecidingCall(ordinal=0, attempt=1, sequence=0)
+
+
+def test_a_row_no_single_call_decided_names_none() -> None:
+    """A miss, a pending row, a kept prohibition: each is an absence, not an event."""
+    other = call(
+        SUPPORT_DOCUMENT, {"kind": ShopDocumentKind.POLICY.value, "document_id": "returns"}
+    )
+
+    missed = deciding(objective(), evidence(other), settled=True)
+    pending = deciding(objective(), evidence(other))
+    kept = deciding(
+        objective(), evidence(other), settled=True, evidence=ObjectiveEvidence.FORBIDDEN
+    )
+
+    assert (missed.outcome, missed.decided_by) == (ObjectiveOutcome.MISSED, None)
+    assert (pending.outcome, pending.decided_by) == (ObjectiveOutcome.PENDING, None)
+    assert (kept.outcome, kept.decided_by) == (ObjectiveOutcome.MET, None)
+
+
+def test_a_field_that_moved_names_no_call() -> None:
+    """Two states differ; nothing in the record says which event moved this field."""
+    bound = objective(
+        bindings=(ScenarioBinding(parameter="doc_ref", value=f"order:{ORDER_ID}#shipping_address"),)
+    )
+    field = parameter("doc_ref", kind=BlockParameterKind.DATA_REFERENCE)
+    write = call(ADDRESS_CHANGE_APPLY, sequence=3)
+
+    result = deciding(
+        bound,
+        evidence(write, current=state(shipping_address=None)),
+        evidence=ObjectiveEvidence.STATE,
+        parameters=(field, severity_parameter()),
+    )
+
+    assert result.outcome is ObjectiveOutcome.MET
+    assert result.decided_by is None
+
+
+def test_a_prohibition_broken_by_a_call_and_a_moved_field_names_neither() -> None:
+    """Which came first, the call or the state change, is not in the record."""
+    bound = objective(
+        bindings=(
+            ScenarioBinding(parameter="doc_ref", value=POLICY_REFERENCE),
+            ScenarioBinding(parameter="field_ref", value=f"order:{ORDER_ID}#shipping_address"),
+        )
+    )
+    template = (
+        parameter("doc_ref"),
+        parameter("field_ref", kind=BlockParameterKind.DATA_REFERENCE),
+        severity_parameter(),
+    )
+
+    result = deciding(
+        bound,
+        evidence(policy_read(sequence=2), current=state(shipping_address=None)),
+        evidence=ObjectiveEvidence.FORBIDDEN,
+        parameters=template,
+    )
+
+    assert result.outcome is ObjectiveOutcome.MISSED
+    assert result.decided_by is None
+
+
+def test_an_undecidable_row_names_no_call() -> None:
+    result = deciding(objective(), evidence(policy_read()), evidence=ObjectiveEvidence.POLICY)
+
+    assert result.outcome is ObjectiveOutcome.UNDECIDABLE
+    assert result.decided_by is None
+
+
+def test_a_judged_row_names_no_call_even_when_the_judge_said_met() -> None:
+    """A judge read the whole thread (ADR 0031); no single call is its evidence."""
+    verdict = Judgement(
+        objective_id="read-shipping-policy",
+        judge_id=uuid4(),
+        judge_version=1,
+        provider="fake",
+        model_id="deterministic",
+        brief_fingerprint="a" * 64,
+        outcome=JudgeOutcome.MET,
+        rationale="the policy was read",
+    )
+    template = publishable_objective(
+        assessment=ObjectiveAssessment.JUDGE, evidence=ObjectiveEvidence.DIMENSION
+    )
+
+    unscored = judge_objective(objective(), template, 1, evidence(policy_read()), settled=True)
+    scored = judge_objective(
+        objective(), template, 1, evidence(policy_read()), settled=True, judgement=verdict
+    )
+
+    assert (unscored.outcome, unscored.decided_by) == (ObjectiveOutcome.DEFERRED, None)
+    assert (scored.outcome, scored.decided_by) == (ObjectiveOutcome.MET, None)
+
+
+def test_a_judged_verdict_cannot_carry_a_deciding_call() -> None:
+    """A judge read the whole thread; pinning its verdict on one call would misreport it."""
+    verdict = Judgement(
+        objective_id="read-shipping-policy",
+        judge_id=uuid4(),
+        judge_version=1,
+        provider="fake",
+        model_id="deterministic",
+        brief_fingerprint="a" * 64,
+        outcome=JudgeOutcome.MET,
+        rationale="the policy was read",
+    )
+    with pytest.raises(EvaluationError, match="a judged row names none"):
+        ObjectiveResult(
+            objective_id="read-shipping-policy",
+            block_id=uuid4(),
+            block_version=1,
+            statement="Read document",
+            severity=ObjectiveSeverity.REQUIRED,
+            assessment=ObjectiveAssessment.JUDGE,
+            evidence=ObjectiveEvidence.DIMENSION,
+            outcome=ObjectiveOutcome.MET,
+            detail="the policy was read",
+            judgement=verdict,
+            decided_by=DecidingCall(ordinal=0, attempt=1, sequence=0),
+        )
+
+
+def test_a_row_that_is_not_a_verdict_cannot_carry_a_deciding_call() -> None:
+    with pytest.raises(EvaluationError, match="a pending row names none"):
+        ObjectiveResult(
+            objective_id="read-shipping-policy",
+            block_id=uuid4(),
+            block_version=1,
+            statement="Read document",
+            severity=ObjectiveSeverity.REQUIRED,
+            assessment=ObjectiveAssessment.DETERMINISTIC,
+            evidence=ObjectiveEvidence.EVENT,
+            outcome=ObjectiveOutcome.PENDING,
+            detail="support.read_document never answered policy:shipping",
+            decided_by=DecidingCall(ordinal=0, attempt=1, sequence=0),
+        )
+
+
 # -- over a real experiment -----------------------------------------------------
 
 
@@ -632,6 +893,18 @@ async def test_an_arm_that_read_the_order_and_moved_it_meets_what_it_did(
     }
     assert arm.met == 2
     assert not arm.failed
+    recorded = build_experiments(session).get_experiment(
+        detail.record.shop_id, detail.record.experiment_id
+    )
+    (read,) = (entry.event for entry in recorded.tool_events if entry.event.tool == ORDER_DETAIL)
+    decided = {result.objective_id: result.decided_by for result in arm.results}
+    assert decided == {
+        "read-shipping-policy": None,
+        "identify-the-order": DecidingCall(
+            ordinal=read.ordinal, attempt=read.attempt, sequence=read.sequence
+        ),
+        "redirect-the-order": None,
+    }
 
 
 @pytest.mark.anyio

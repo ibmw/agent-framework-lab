@@ -268,6 +268,7 @@ export type MutationEventSchema = components["schemas"]["MutationEventSchema"];
 export type RunTurnResponse = components["schemas"]["RunTurnResponse"];
 export type ExperimentEvaluationResponse = components["schemas"]["ExperimentEvaluationResponse"];
 export type ArmEvaluationSchema = components["schemas"]["ArmEvaluationSchema"];
+export type DecidingCallSchema = components["schemas"]["DecidingCallSchema"];
 export type ObjectiveResultSchema = components["schemas"]["ObjectiveResultSchema"];
 export type ObjectiveOutcome = components["schemas"]["ObjectiveOutcome"];
 export type ExperimentTimelineResponse = components["schemas"]["ExperimentTimelineResponse"];

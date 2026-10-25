@@ -5790,6 +5790,277 @@ describe("the conversation on the results", () => {
   });
 });
 
+/** Both arms' turn 2 side by side: a fault in arm A, the reply in each. */
+const LANED: ExperimentTimelineResponse = {
+  experiment_id: EXPERIMENT_ID,
+  entries: [
+    timelineEntry({ kind: "trigger", step: 0, run_ids: [ARM_A, ARM_B] }),
+    timelineEntry({
+      kind: "tool_call",
+      step: 0,
+      run_ids: [ARM_A],
+      categories: ["tool"],
+      ordinal: 0,
+      attempt: 1,
+      sequence: 0,
+      tool: "support.read_document",
+      tool_version: "v1",
+      tool_outcome: "success",
+    }),
+    timelineEntry({
+      kind: "agent_turn",
+      step: 0,
+      run_ids: [ARM_A],
+      categories: ["model"],
+      ordinal: 0,
+      attempt: 1,
+      turn_outcome: "answered",
+    }),
+    timelineEntry({
+      kind: "agent_turn",
+      step: 0,
+      run_ids: [ARM_B],
+      categories: ["model"],
+      ordinal: 0,
+      attempt: 1,
+      turn_outcome: "answered",
+    }),
+    timelineEntry({
+      kind: "customer_turn",
+      step: 1,
+      run_ids: [ARM_A, ARM_B],
+      composition_id: "composition-1",
+    }),
+    timelineEntry({
+      kind: "mutation",
+      step: 1,
+      run_ids: [ARM_A],
+      categories: ["state"],
+      ordinal: 1,
+      attempt: 1,
+      sequence: 0,
+      mutation: "order-moves-under-the-arm",
+      mutation_effect: "entity_mutation",
+      revision_before: 0,
+      revision_after: 1,
+    }),
+    timelineEntry({
+      kind: "agent_turn",
+      step: 1,
+      run_ids: [ARM_A],
+      categories: ["model"],
+      ordinal: 1,
+      attempt: 1,
+      turn_outcome: "answered",
+    }),
+    timelineEntry({
+      kind: "tool_call",
+      step: 1,
+      run_ids: [ARM_B],
+      categories: ["tool", "refusal"],
+      ordinal: 1,
+      attempt: 1,
+      sequence: 0,
+      tool: "orders.apply_address_change",
+      tool_version: "v1",
+      tool_outcome: "refused",
+    }),
+    timelineEntry({
+      kind: "agent_turn",
+      step: 1,
+      run_ids: [ARM_B],
+      categories: ["model"],
+      ordinal: 1,
+      attempt: 1,
+      turn_outcome: "answered",
+    }),
+  ],
+};
+
+/** Arm A's read-check, met by the call at turn 0, attempt 1, sequence 0; arm B's left pending. */
+function decidedEvaluation(): ExperimentEvaluationResponse {
+  const base = evaluation(OPENED);
+  return {
+    ...base,
+    arms: base.arms.map((arm) =>
+      arm.run_id !== ARM_A
+        ? arm
+        : {
+            ...arm,
+            met: 1,
+            decided: 1,
+            objectives: arm.objectives.map((row) =>
+              row.objective_id !== "read-address-change-policy"
+                ? row
+                : {
+                    ...row,
+                    outcome: "met" as const,
+                    detail: "support.read_document answered policy:address-change",
+                    decided_by: { ordinal: 0, attempt: 1, sequence: 0 },
+                  },
+            ),
+          },
+    ),
+  };
+}
+
+describe("execution timeline in lanes", () => {
+  beforeEach(() => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/timeline`, () =>
+        HttpResponse.json(LANED),
+      ),
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/evaluation`, () =>
+        HttpResponse.json(decidedEvaluation()),
+      ),
+    );
+  });
+
+  it("draws each arm in its own lane, the turns as bands on one clock", async () => {
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+    const bands = within(stream).getAllByRole("region");
+    expect(bands.map((band) => band.getAttribute("aria-label"))).toEqual(["Turn 1", "Turn 2"]);
+
+    // Turn 2 holds what the customer said across its top, then both arms side by side.
+    const second = within(stream).getByRole("region", { name: "Turn 2" });
+    expect(within(second).getAllByRole("listitem")[0]).toHaveTextContent(
+      "The customer sent a message.",
+    );
+    const laneA = within(second).getByRole("list", { name: "Arm A, turn 2" });
+    const laneB = within(second).getByRole("list", { name: "Arm B, turn 2" });
+    expect(
+      within(laneA)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringMatching(/order-moves-under-the-arm fired/),
+      expect.stringMatching(/The agent replied/),
+    ]);
+    expect(
+      within(laneB)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringMatching(/orders\.apply_address_change v1 → Refused/),
+      expect.stringMatching(/The agent replied/),
+    ]);
+    // A refusal carries its glyph beside its word, unheard: the word is what is announced.
+    const [refused] = within(laneB).getAllByRole("listitem");
+    const glyph = refused.querySelector('[aria-hidden="true"]');
+    expect(glyph?.textContent).toBe("✗ ");
+    expect(
+      within(laneA).getAllByRole("listitem")[1].querySelector('[aria-hidden="true"]'),
+    ).toBeNull();
+    // Arm B's events never land in arm A's lane, nor in turn 1's band.
+    const first = within(stream).getByRole("region", { name: "Turn 1" });
+    expect(within(first).getByRole("list", { name: "Arm B, turn 1" })).not.toHaveTextContent(
+      /Refused/,
+    );
+  });
+
+  it("marks a scenario fault in the lane of the arm it fired into, where it fired", async () => {
+    renderTimeline();
+
+    const second = await screen.findByRole("region", { name: "Turn 2" });
+    const laneA = within(second).getByRole("list", { name: "Arm A, turn 2" });
+    const [fault] = within(laneA).getAllByRole("listitem");
+
+    expect(within(fault).getByText("scenario fault")).toBeVisible();
+    expect(fault).toHaveTextContent("moved this arm r0 → r1");
+    expect(
+      within(within(second).getByRole("list", { name: "Arm B, turn 2" })).queryByText(
+        "scenario fault",
+      ),
+    ).toBeNull();
+  });
+
+  it("gives every event an anchor of its own", async () => {
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+    const ids = within(stream)
+      .getAllByRole("listitem")
+      .map((row) => row.id);
+
+    expect(ids).toHaveLength(LANED.entries.length);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain(`event-${ARM_A}-0-1-call-0`);
+    expect(ids).toContain(`event-${ARM_B}-1-1-call-0`);
+    expect(ids).toContain("event-turn-1");
+  });
+
+  it("keeps the lenses working across the lanes, with their selected state shown", async () => {
+    const user = userEvent.setup();
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+    const refusals = within(stream).getByRole("button", { name: "Refusals" });
+    await user.click(refusals);
+
+    expect(refusals).toHaveAttribute("aria-pressed", "true");
+    expect(refusals).toHaveClass("bg-admin-chip");
+    expect(within(stream).getAllByRole("listitem")).toHaveLength(1);
+    const second = within(stream).getByRole("region", { name: "Turn 2" });
+    expect(within(second).getByText("Nothing under this lens.")).toBeVisible();
+    expect(within(stream).queryByRole("region", { name: "Turn 1" })).toBeNull();
+  });
+
+  it("lands on the event a link names, and says so in words", async () => {
+    renderApp(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results/timeline#event-${ARM_A}-0-1-call-0`);
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+    const landed = within(stream)
+      .getAllByRole("listitem")
+      .find((row) => row.id === `event-${ARM_A}-0-1-call-0`);
+
+    await waitFor(() => expect(landed).toHaveFocus());
+    expect(landed).toHaveAttribute("aria-current", "location");
+    expect(within(landed as HTMLElement).getByText("the event you followed")).toBeVisible();
+    expect(within(stream).getAllByText("the event you followed")).toHaveLength(1);
+  });
+
+  it("reads a hand-typed fragment it cannot decode as no landing, not as a broken page", async () => {
+    renderApp(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results/timeline#%`);
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+
+    expect(within(stream).getByRole("region", { name: "Turn 2" })).toBeVisible();
+    expect(within(stream).queryByText("the event you followed")).toBeNull();
+  });
+
+  it("links an evidence line to the call that decided it, and lands there", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    const card = await screen.findByRole("region", { name: "Deterministic evidence" });
+    const row = await within(card).findByRole("row", { name: /Read the address-change policy/ });
+    const [armA, armB] = within(row).getAllByRole("cell");
+    const link = within(armA).getByRole("link", {
+      name: /support\.read_document answered policy:address-change/,
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      `/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results/timeline#event-${ARM_A}-0-1-call-0`,
+    );
+    // Arm B's row was decided by no call, so its line is text and never a guessed link.
+    expect(within(armB).queryByRole("link")).toBeNull();
+    expect(armB).toHaveTextContent("support.read_document never answered");
+
+    link.focus();
+    expect(link).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+    const landed = within(stream)
+      .getAllByRole("listitem")
+      .find((entry) => entry.id === `event-${ARM_A}-0-1-call-0`);
+    await waitFor(() => expect(landed).toHaveFocus());
+    expect(landed).toHaveTextContent("support.read_document v1 → Success");
+  });
+});
+
 describe("execution timeline", () => {
   it("reads both arms' execution as one ordered stream", async () => {
     renderTimeline();
@@ -5826,6 +6097,10 @@ describe("execution timeline", () => {
     expect(split).toHaveTextContent("Arm B");
     expect(within(split).getByText("this arm only")).toBeVisible();
     expectInertChip(within(split).getByText("this arm only"));
+    // The arm that never heard it says so in its own lane, rather than reading as idle.
+    const band = within(stream).getByRole("region", { name: "Turn 2" });
+    expect(within(band).getByText("Never received this turn.")).toBeVisible();
+    expect(within(band).getByText("Nothing recorded yet.")).toBeVisible();
   });
 
   it("names the project-owned code each event ran through", async () => {

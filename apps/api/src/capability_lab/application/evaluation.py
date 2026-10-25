@@ -69,6 +69,7 @@ from capability_lab.domain.blocks import (
 from capability_lab.domain.definitions import DefinitionType
 from capability_lab.domain.evaluation import (
     ArmEvaluation,
+    DecidingCall,
     EvidencePolarity,
     ObjectiveOutcome,
     ObjectiveResult,
@@ -99,6 +100,7 @@ __all__ = [
     "ExperimentEvaluation",
     "ExperimentEvaluationService",
     "Observation",
+    "deciding_call",
     "evaluate_arm",
     "judge_objective",
     "latest_judgements",
@@ -113,11 +115,16 @@ class Observation:
     `decidable` is what separates "this build read the record and the thing is not there"
     from "this build cannot read that at all". Both are false observations and they mean
     opposite things about the agent.
+
+    `call` is the recorded call the reading found, when a call is what it found: the first
+    answer that named the thing, which is the one the reading stopped at. A field read off
+    two states finds no call, and says so with `None`.
     """
 
     detail: str
     observed: bool = False
     decidable: bool = True
+    call: ToolEvent | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,10 +143,26 @@ class ArmEvidence:
     current: SandboxState
 
     def answered(self, tool: str) -> tuple[ToolEvent, ...]:
-        """This arm's successful calls to one tool, in the order it made them."""
+        """This arm's successful calls to one tool, in the order it made them.
+
+        Sorted here rather than trusted from the listing, because the first of them is the
+        one a reading names as its evidence (`Observation.call`).
+        """
         return tuple(
-            call for call in self.calls if call.tool == tool and call.outcome is ToolOutcome.SUCCESS
+            sorted(
+                (
+                    call
+                    for call in self.calls
+                    if call.tool == tool and call.outcome is ToolOutcome.SUCCESS
+                ),
+                key=_coordinate,
+            )
         )
+
+
+def _coordinate(call: ToolEvent) -> DecidingCall:
+    """Where one call sits in its arm: the turn, the attempt at it, the order it was asked."""
+    return DecidingCall(ordinal=call.ordinal, attempt=call.attempt, sequence=call.sequence)
 
 
 ObjectiveReader = Callable[[ArmEvidence, str], Observation]
@@ -162,7 +185,9 @@ def document_read(evidence: ArmEvidence, value: str) -> Observation:
             data.get("kind") == reference.kind.value
             and data.get("document_id") == reference.document_id
         ):
-            return Observation(observed=True, detail=f"{SUPPORT_DOCUMENT} answered {value}")
+            return Observation(
+                observed=True, detail=f"{SUPPORT_DOCUMENT} answered {value}", call=call
+            )
     return Observation(detail=f"{SUPPORT_DOCUMENT} never answered {value}")
 
 
@@ -186,7 +211,7 @@ def entity_read(evidence: ArmEvidence, value: str) -> Observation:
     tool, field = ENTITY_READS[reference.kind]
     for call in evidence.answered(tool):
         if _data(call).get(field) == reference.identifier:
-            return Observation(observed=True, detail=f"{tool} answered {value}")
+            return Observation(observed=True, detail=f"{tool} answered {value}", call=call)
     return Observation(detail=f"{tool} never answered {value}")
 
 
@@ -198,8 +223,9 @@ def tool_called(evidence: ArmEvidence, value: str) -> Observation:
     """Whether this arm got an answer out of the tool a binding names."""
     if value not in PUBLISHED_TOOLS:
         return Observation(decidable=False, detail=f"{value} is not a tool this lab publishes")
-    if evidence.answered(value):
-        return Observation(observed=True, detail=f"{value} answered this arm")
+    answers = evidence.answered(value)
+    if answers:
+        return Observation(observed=True, detail=f"{value} answered this arm", call=answers[0])
     return Observation(detail=f"{value} never answered this arm")
 
 
@@ -359,17 +385,46 @@ def judge_objective(
             ObjectiveOutcome.UNDECIDABLE,
             "; ".join(entry.detail for entry in undecidable),
         )
+    outcome = decide(
+        contract.polarity,
+        observed=_combined(contract.polarity, observations),
+        settled=settled,
+    )
     return _result(
         objective,
         template,
         version,
-        outcome=decide(
-            contract.polarity,
-            observed=_combined(contract.polarity, observations),
-            settled=settled,
-        ),
+        outcome=outcome,
         detail="; ".join(entry.detail for entry in observations),
+        decided_by=deciding_call(contract.polarity, outcome, observations),
     )
+
+
+def deciding_call(
+    polarity: EvidencePolarity,
+    outcome: ObjectiveOutcome,
+    observations: tuple[Observation, ...],
+) -> DecidingCall | None:
+    """The one recorded call an outcome rests on, or `None` when no single call decided it.
+
+    A call decides exactly two verdicts: a requirement met, and a prohibition broken. A
+    requirement met by several readings was decided by the *last* of them — until it, the
+    objective was still pending — and a prohibition broken by several was decided by the
+    *first*, because nothing after it could unmake the miss. Every other row names none:
+    a miss or a kept prohibition is an absence, a pending row is undecided, and a reading
+    that found no call (a field that moved between two states) cannot say which event moved
+    it. When any reading that counted found no call, the row names none rather than the
+    calls it can see, because ordering those against a state change would be a guess.
+    """
+    if polarity is EvidencePolarity.MUST_OCCUR and outcome is not ObjectiveOutcome.MET:
+        # Half of a pair read is still pending; the read it has is not what decided it.
+        return None
+    # A prohibition needs no such gate: it is missed exactly when some reading found it.
+    found = [entry.call for entry in observations if entry.observed]
+    calls = [_coordinate(call) for call in found if call is not None]
+    if not calls or len(calls) != len(found):
+        return None
+    return max(calls) if polarity is EvidencePolarity.MUST_OCCUR else min(calls)
 
 
 # What a judge's verdict is, in the vocabulary the matrix reports. `UNCLEAR` becomes
@@ -477,6 +532,7 @@ def _result(
     outcome: ObjectiveOutcome,
     detail: str,
     judgement: Judgement | None = None,
+    decided_by: DecidingCall | None = None,
 ) -> ObjectiveResult:
     return ObjectiveResult(
         objective_id=objective.id,
@@ -489,6 +545,7 @@ def _result(
         outcome=outcome,
         detail=detail,
         judgement=judgement,
+        decided_by=decided_by,
     )
 
 

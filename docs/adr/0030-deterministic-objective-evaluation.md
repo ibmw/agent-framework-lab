@@ -196,3 +196,46 @@ events already hold.
 None. No table is created, no column is added, no fingerprint moves, and no published
 definition is touched. `ArmAwaiting` gains a value that only ever appears for an arm at its
 scenario's cap, which no experiment could previously reach because nothing enforced one.
+
+## Amendment — 2026-10-25: a verdict names the call that decided it
+
+The matrix said *which* call answered a row only in a sentence ("support.read_document answered
+policy:address-change"), and a timeline entry carries no arguments (ADR 0027), so nothing on
+screen could point at the one event a verdict rests on without guessing — two reads of the
+same tool are two entries, and only one of them is the evidence. The reader already held that
+call and discarded it. Milestone 12's evidence links into the timeline needed it,
+and the operator chose on 2026-10-25 to serve it rather than have the client match on a tool
+name.
+
+- **An objective result carries `decided_by`**, optional and nullable in the contract
+  (`DecidingCallSchema`: `ordinal`, `attempt`, `sequence`). It is the coordinate the record
+  already keys a tool call by within its arm — the primary key of `experiment_tool_events`
+  under the arm's `run_id`, and the coordinate the arm's `tool_call` timeline entry carries —
+  so it addresses exactly one event, is stable for as long as the record is, and needs no
+  identifier of its own. The arm is the `ArmEvaluation`'s `run_id`.
+- **A call decides two verdicts and no others.** A requirement met is decided by the *last*
+  reading that completed it (until then it was pending); a prohibition broken by the *first*
+  call that broke it (nothing later could unmake the miss). A single reading names the first
+  answer that matched, in the arm's own order — the one the reader stops at — and a refused
+  call is never a reading, so it never decides.
+- **Every other row carries `null`, never a guess.** A requirement missed or a prohibition
+  kept is an absence; a pending or undecidable row is not a verdict; a judged row was decided
+  by a judge reading the whole thread (ADR 0031); and a field that moved from its starting
+  value is a difference between two states. The record keeps a sandbox's current state and its
+  starting state but not the state at each revision, so it cannot say whether the agent's
+  write or the scenario's fault moved a given field — a state row therefore names no event,
+  and a forbidden row broken by both a call and a moved field names none either, because
+  ordering the call against the state change would be a guess. The domain refuses a deciding
+  call on any row that is not a verdict the rules reached.
+- **Nothing is stored and nothing migrates.** The evaluation is still a projection read on
+  every request ("The evaluation is a projection, served apart from the record" above), so
+  every experiment already recorded gains the field on its next read. A client that predates
+  it reads the same response it did; the field is additive.
+
+The results matrices draw a line with a deciding call as a link to that event on the
+execution timeline, which addresses each event by the same coordinate; a line without one is
+text. Tests: `test_evaluation.py` (each evidence kind, a document read twice, a refused read
+before an answered one, the required and forbidden pairs, a miss, pending, undecidable, judged
+and state rows, the domain's refusal, and a real experiment's entity read),
+`test_experiment_api.py` (the deciding call is the arm's own `tool_call` timeline entry), and
+`Experiments.test.tsx` (the link, its absence, and the landing).
