@@ -27,6 +27,7 @@ const OTHER_SCENARIO_ID = "7e8f9a0b-1c2d-4e3f-8a4b-5c6d7e8f9a0b";
 const FINISHED_ID = "9f8e7d6c-5b4a-4392-8817-6f5e4d3c2b1a";
 const RUNNING_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const DERIVED_ID = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
+const COMPLETED_ID = "3c4d5e6f-7a8b-4c9d-8e0f-2a3b4c5d6e7f";
 
 const SHOP_CONTENT: ShopDraftResponse["content"] = {
   identity: {
@@ -430,13 +431,100 @@ describe("experiment history", () => {
       .getByText("Prompt A against prompt B")
       .closest("tr") as HTMLElement;
 
-    const objectives = within(row).getByRole("cell", { name: /decided/ });
+    const objectives = within(row).getByRole("cell", { name: /met/ });
     const [first, second] = within(objectives).getAllByRole("listitem");
-    expect(first).toHaveTextContent("Arm A 1/1 decided");
-    expect(second).toHaveTextContent("Arm B 0/1 decided");
-    expect(second).toHaveTextContent("missed a requirement");
+    // In the words the results card counts in, not a fraction of what was "decided".
+    expect(first).toHaveTextContent(/^Arm A 1 of 1 met$/);
+    expect(second).toHaveTextContent(/^Arm B 0 of 1 met/);
     // Two arms, two denominators, and nothing that adds them into one.
-    expect(within(row).queryByText(/1\/2 decided/)).toBeNull();
+    expect(within(row).queryByText(/1 of 2 met/)).toBeNull();
+    expect(within(row).queryByText(/decided/)).toBeNull();
+  });
+
+  it("says an arm missed a requirement in words, with the missed mark beside them", async () => {
+    renderHistory();
+
+    const row = within(await screen.findByRole("table"))
+      .getByText("Prompt A against prompt B")
+      .closest("tr") as HTMLElement;
+    const [, second] = within(within(row).getByRole("cell", { name: /met/ })).getAllByRole(
+      "listitem",
+    );
+
+    const missed = within(second).getByText("missed a requirement", { exact: false });
+    expect(missed).toHaveClass("text-lab-error");
+    const mark = missed.querySelector("[aria-hidden]");
+    expect(mark).toHaveTextContent("✗");
+  });
+
+  it("names each arm once, with the configuration it ran and its framework", async () => {
+    // The seeded run labels each arm after its configuration, and its configuration after its
+    // framework: the row named the arm three times.
+    rows = [
+      {
+        ...FINISHED,
+        arms: [
+          arm("Arm A — Pydantic AI", "Arm A — Pydantic AI", {
+            agent_configuration_version: 1,
+            agent_configuration_latest_version: 1,
+          }),
+          arm("Arm B", "cfg-beacon"),
+        ],
+      },
+    ];
+    renderHistory();
+
+    const row = within(await screen.findByRole("table"))
+      .getByText("Prompt A against prompt B")
+      .closest("tr") as HTMLElement;
+    const [seeded, plain] = within(within(row).getAllByRole("cell")[2]).getAllByRole("listitem");
+
+    expect(seeded).toHaveTextContent(/^Arm A — Pydantic AI · configuration v1$/);
+    expect(seeded.textContent?.split("Pydantic AI")).toHaveLength(2);
+    // A label that names neither keeps both, as the frame draws the cell.
+    expect(plain).toHaveTextContent(/^Arm B · cfg-beacon v4 · Pydantic AI$/);
+  });
+
+  it("keeps an arm's framework when its label only mentions it in passing", async () => {
+    rows = [
+      {
+        ...FINISHED,
+        arms: [
+          arm("Pydantic AI vs OpenAI baseline", "cfg-baseline"),
+          arm("Baseline — Pydantic AI", "cfg-atlas"),
+        ],
+      },
+    ];
+    renderHistory();
+
+    const row = within(await screen.findByRole("table"))
+      .getByText("Prompt A against prompt B")
+      .closest("tr") as HTMLElement;
+    const [mentions, ends] = within(within(row).getAllByRole("cell")[2]).getAllByRole("listitem");
+
+    // A label that compares frameworks is not the arm's framework said once: it is still drawn.
+    expect(mentions).toHaveTextContent(
+      /^Pydantic AI vs OpenAI baseline · cfg-baseline v4 · Pydantic AI$/,
+    );
+    // A label ending "— {framework}" already says it, as the seeded labels do.
+    expect(ends).toHaveTextContent(/^Baseline — Pydantic AI · cfg-atlas v4$/);
+  });
+
+  it("says what each arm's count is out of, as the results card does", async () => {
+    renderHistory();
+
+    const row = within(await screen.findByRole("table"))
+      .getByText("Prompt A against prompt B")
+      .closest("tr") as HTMLElement;
+
+    expect(within(row).getByText("0 of 1 met")).toHaveAttribute(
+      "title",
+      "0 of the 1 objective(s) something has decided for this arm",
+    );
+    expect(within(row).getByText("1 of 1 met")).toHaveAttribute(
+      "title",
+      "1 of the 1 objective(s) something has decided for this arm",
+    );
   });
 
   it("says a run's scenario has moved on without pretending the run did", async () => {
@@ -459,16 +547,31 @@ describe("experiment history", () => {
     expect(within(table).getByText("Running")).toBeVisible();
   });
 
-  it("draws a run's status as the shared pill: the axis's glyph beside the word", async () => {
+  it("draws a run's status as the shared pill: its value's glyph beside the word", async () => {
+    rows = [
+      ...EVERY_ROW,
+      {
+        ...FINISHED,
+        experiment_id: COMPLETED_ID,
+        label: "Every requirement met",
+        status: "completed",
+        arms: [arm("Arm A", "cfg-atlas"), arm("Arm B", "cfg-beacon")],
+      },
+    ];
     renderHistory();
 
     const table = await screen.findByRole("table");
-    for (const word of ["Failed", "Running"]) {
+    // A finished run carries the completed check, never the play mark of a run still going.
+    for (const [word, mark] of [
+      ["Failed", "✗"],
+      ["Running", "▷"],
+      ["Completed", "✓"],
+    ] as const) {
       const pill = within(table).getByText(word);
       const glyph = pill.firstElementChild;
       expect(glyph, `the glyph beside ${word}`).not.toBeNull();
       expect(glyph).toHaveAttribute("aria-hidden");
-      expect(glyph).toHaveTextContent("▷");
+      expect(glyph, `the glyph beside ${word}`).toHaveTextContent(mark);
       // One fill for every state, as every status axis but publication draws: the word and
       // the glyph carry it, never a colour of the page's own.
       expect(pill).toHaveClass("rounded-full", "bg-admin-border/60");

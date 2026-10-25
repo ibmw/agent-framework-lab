@@ -41,6 +41,7 @@ import {
   TOOL_OUTCOME,
 } from "../lib/enumLabels";
 import {
+  describeArmStanding,
   describeFailure,
   formatCost,
   formatDuration,
@@ -377,7 +378,7 @@ export function ExperimentBenchPage() {
                   Configuration v{run.agent_configuration_version} · r{run.revision} ·{" "}
                   <Fingerprint value={run.state_fingerprint} />
                 </p>
-                <Standing standing={run.standing} />
+                <Standing standing={run.standing} metrics={run.metrics} />
                 <Thread experiment={experiment} run={run} divergent={divergent} />
                 <RunCost metrics={run.metrics} />
                 <AdvanceControl
@@ -576,20 +577,21 @@ function divergentTurnIds(experiment: ExperimentResponse): Set<string> {
  * The first thing on the card because it is the first thing someone reopening a bench needs:
  * two arms progress independently, so "which of these is mine to move" is not answerable by
  * reading two transcripts. It is the server's reading rather than this page's — the same one
- * the runner acts on, so the button below can never offer a run the backend would decline.
+ * the runner acts on, so the button below can never offer a run the backend would decline. The
+ * sentence is `describeArmStanding`'s, the one the results' arm card reads, so the bench and the
+ * results count a thread's turns the same way — from one.
  */
-function Standing({ standing }: { standing: ArmStandingSchema }) {
-  const waiting =
-    standing.awaiting === "completed"
-      ? "Completed — this arm has answered every turn the scenario allows"
-      : standing.awaiting === "customer"
-        ? "Waiting for the customer"
-        : standing.attempts === 0
-          ? "Waiting for the agent"
-          : `Attempt ${standing.attempts} produced no reply — waiting for a retry`;
+function Standing({
+  standing,
+  metrics,
+}: {
+  standing: ArmStandingSchema;
+  metrics: ArmMetricsSchema;
+}) {
+  const waiting = describeArmStanding(standing, metrics);
   return (
     <p className="text-xs font-semibold text-admin-ink-soft">
-      {waiting} · turn {standing.ordinal}
+      {waiting}
       {standing.unanswered.length > 0 ? (
         <span className="font-normal text-admin-muted">
           {" "}

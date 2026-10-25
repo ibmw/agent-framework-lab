@@ -24,6 +24,7 @@ import {
   formatCost,
   formatDuration,
   formatTokens,
+  turnNumber,
   writeKey,
   writeLabel,
   writesOf,
@@ -717,7 +718,7 @@ function Divergence({ experiment }: { experiment: ExperimentResponse }) {
       {divergent.map((ordinal) => (
         <li key={ordinal} className="grid gap-0.5">
           <span className="text-xs font-semibold uppercase tracking-wide text-admin-muted">
-            Turn {ordinal}
+            Turn {turnNumber(ordinal)}
           </span>
           {experiment.runs.map((run) => {
             const heard = experiment.turns.find(

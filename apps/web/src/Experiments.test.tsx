@@ -3408,11 +3408,27 @@ describe("live bench", () => {
     const armA = await screen.findByRole("region", { name: "Arm A" });
     const armB = screen.getByRole("region", { name: "Arm B" });
 
-    expect(within(armA).getByText(/Waiting for the customer · turn 0/)).toBeVisible();
-    expect(within(armB).getByText(/Waiting for the agent · turn 0/)).toBeVisible();
+    // Turns counted from one, as the operator counts them: the trigger is the first.
+    expect(
+      within(armA).getByText("Waiting for the customer — answered 1 of 1 turn so far"),
+    ).toBeVisible();
+    expect(within(armB).getByText("Waiting for the agent at turn 1")).toBeVisible();
     // The answered arm is offered nothing: advancing it would return the reply it has.
     expect(within(armA).queryByRole("button", { name: /Arm A's agent/ })).toBeNull();
     expect(within(armB).getByRole("button", { name: "Run Arm B's agent" })).toBeVisible();
+  });
+
+  it("counts a completed arm's turns from one, as the results card does", async () => {
+    // The seeded run's shape: the trigger and one reply, both answered, at the cap.
+    maxTurns = 1;
+    turns = [...OPENED, turn(ARM_A, 1, "reply-1", "Any update?")];
+    agentTurns = [agentTurn(ARM_A, 0), agentTurn(ARM_A, 1)];
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+
+    expect(within(armA).getByText("Completed — answered 2 of 2 turns")).toBeVisible();
+    expect(within(armA).queryByText(/· turn \d/)).toBeNull();
   });
 
   it("says an arm whose attempt failed is waiting for a retry", async () => {
@@ -3422,7 +3438,7 @@ describe("live bench", () => {
     const armA = await screen.findByRole("region", { name: "Arm A" });
 
     expect(
-      within(armA).getByText(/Attempt 1 produced no reply — waiting for a retry/),
+      within(armA).getByText("Attempt 1 produced no reply — waiting for a retry at turn 1"),
     ).toBeVisible();
     expect(within(armA).getByRole("button", { name: "Try Arm A's agent again" })).toBeVisible();
   });
@@ -3561,7 +3577,9 @@ describe("live bench", () => {
     const objectives = screen.getByRole("region", { name: "Objectives" });
     const composer = screen.getByRole("region", { name: "Customer composer" });
 
-    expect(within(armA).getByText(/Completed — this arm has answered every turn/)).toBeVisible();
+    // Two turns received, counted from one, and only the second answered: the trigger was
+    // passed over when the customer wrote again, and the count says so rather than "every".
+    expect(within(armA).getByText("Completed — answered 1 of 2 turns")).toBeVisible();
     expect(within(objectives).getByText(/read-address-change-policy missed/)).toBeInTheDocument();
     // Nothing offers a move the backend would refuse: no advance, and no message.
     expect(within(armA).queryByRole("button", { name: /Arm A's agent/ })).toBeNull();
@@ -4510,6 +4528,60 @@ describe("experiment results", () => {
     expect(screen.getByText(/There is no aggregate score/)).toBeVisible();
   });
 
+  it("counts each arm's turns from one on its card, in the bench's own words", async () => {
+    // Arm A driven to the cap and answered there; arm B never run on the trigger.
+    maxTurns = 1;
+    turns = [...OPENED, turn(ARM_A, 1, "reply-1", "Any update?")];
+    agentTurns = [agentTurn(ARM_A, 0), agentTurn(ARM_A, 1)];
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+    const armB = screen.getByRole("region", { name: "Arm B summary" });
+
+    expect(within(armA).getByText("Completed — answered 2 of 2 turns")).toBeVisible();
+    expect(within(armB).getByText("Waiting for the agent at turn 1")).toBeVisible();
+    expect(screen.queryByText(/at turn 0|Completed at turn/)).toBeNull();
+  });
+
+  it("says on its card that an arm missed a requirement, in words and with the mark", async () => {
+    // Arm A completed without ever reading the policy its required objective names.
+    maxTurns = 1;
+    turns = [...OPENED, turn(ARM_A, 1, "reply-1", "Any update?")];
+    agentTurns = [agentTurn(ARM_A, 0), agentTurn(ARM_A, 1)];
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+    const armB = screen.getByRole("region", { name: "Arm B summary" });
+
+    const missed = await within(armA).findByText("missed a requirement", { exact: false });
+    expect(missed).toHaveClass("text-lab-error");
+    expect(missed).toHaveTextContent(/^✗ missed a requirement$/);
+    expect(missed.querySelector("[aria-hidden]")).toHaveTextContent("✗");
+    // The arm still waiting has missed nothing yet, and says nothing of the kind.
+    expect(within(armB).queryByText(/missed a requirement/)).toBeNull();
+  });
+
+  it("names an arm's configuration on its chip, never the arm's own label again", async () => {
+    // The seeded run labels each arm with its configuration's name.
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
+        const record = experiment(turns, agentTurns, toolEvents, mutationEvents);
+        const [first, second] = record.runs;
+        return HttpResponse.json({
+          ...record,
+          runs: [{ ...first, label: "Atlas" }, second],
+        } satisfies ExperimentResponse);
+      }),
+    );
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Atlas summary" });
+    const version = within(armA).getByRole("link", { name: "configuration v1" });
+
+    expect(version).toHaveAttribute("href", `/lab/agent-configurations/${ATLAS_ID}`);
+    expect(within(armA).queryByText("Atlas v1")).toBeNull();
+  });
+
   it("puts each arm's four figures on its card, from the metrics the table reads", async () => {
     turns = [...OPENED];
     agentTurns = [agentTurn(ARM_A, 0)];
@@ -4725,7 +4797,9 @@ describe("experiment results", () => {
 
     const divergence = await screen.findByRole("region", { name: "Input divergence" });
 
-    expect(within(divergence).getByText("Turn 1")).toBeVisible();
+    // The second turn, counted from one as the arm cards count it: the trigger is the first.
+    expect(within(divergence).getByText("Turn 2")).toBeVisible();
+    expect(within(divergence).queryByText("Turn 1")).toBeNull();
     expect(within(divergence).getByText(/never received this turn/)).toBeVisible();
     expect(within(divergence).getByText(/Yes, go ahead\./)).toBeVisible();
   });

@@ -35,7 +35,12 @@ import {
   derivedRows,
 } from "../lib/actionStatus";
 import { COMPARISON_DIMENSION, DEFINITION_TYPE, describeValue, labelOf } from "../lib/enumLabels";
-import { armFigures } from "../lib/evidence";
+import {
+  armFigures,
+  configurationChip,
+  describeArmStanding,
+  MISSED_REQUIREMENT,
+} from "../lib/evidence";
 import { unreachableArmsNote } from "../lib/modelConnections";
 import {
   fieldControlClasses,
@@ -759,7 +764,10 @@ function Tab({ to, end, label }: { to: string; end?: boolean; label: string }) {
  * reason it is drawn in one ink on both cards, where the frame paints one green and one amber.
  *
  * The configuration's version is a link to the editor of the draft it was published from
- * (ADR 0068), so a reviewer reading a finished run reaches what the arm ran in one press.
+ * (ADR 0068), so a reviewer reading a finished run reaches what the arm ran in one press. It
+ * names the configuration rather than the arm again (`configurationChip`), and the standing
+ * is the bench's own sentence (`describeArmStanding`), turns counted from one. An arm that missed
+ * a required objective says so under its count, in History's words and with the missed mark.
  */
 function ArmSummary({
   shopId,
@@ -789,7 +797,11 @@ function ArmSummary({
               )}
               title={`Open ${run.agent_configuration_name}, whose draft published v${run.agent_configuration_version}`}
             >
-              {run.agent_configuration_name} v{run.agent_configuration_version}
+              {configurationChip(
+                run.label,
+                run.agent_configuration_name,
+                run.agent_configuration_version,
+              )}
             </Link>
             <span>
               {run.framework_id} · {run.model_id}
@@ -805,16 +817,15 @@ function ArmSummary({
               {arm.met} of {arm.decided}
             </p>
             <p className="text-[11px] text-admin-muted">decided objectives met</p>
+            {arm.failed ? (
+              <p className="text-[11px] font-semibold text-lab-error">
+                <span aria-hidden>{MISSED_REQUIREMENT.mark}</span> {MISSED_REQUIREMENT.label}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>
-      <p className="text-xs text-admin-muted">
-        {run.standing.awaiting === "completed"
-          ? `Completed at turn ${run.standing.ordinal}`
-          : run.standing.awaiting === "agent"
-            ? `Still running — waiting for the agent at turn ${run.standing.ordinal}`
-            : `Still running — waiting for the customer at turn ${run.standing.ordinal}`}
-      </p>
+      <p className="text-xs text-admin-muted">{describeArmStanding(run.standing, run.metrics)}</p>
       <ul
         aria-label={`What ${run.label} spent`}
         className="flex flex-wrap gap-x-3.5 gap-y-1 border-t border-admin-border/60 pt-2 text-[11.5px] text-admin-ink-soft"

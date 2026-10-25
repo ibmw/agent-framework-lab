@@ -113,31 +113,6 @@ each judgement's `provider`, and no contract moves. The covered journeys are
 `experiment-start.spec.ts` (the results at :640 and History's *Open results* at :818),
 `tour-anchors.spec.ts`, `sticky-header.spec.ts` (:684) and `workspace-shell.spec.ts`.
 
-### Slice 45 — Each arm's standing is counted the way the operator counts
-
-- [ ] "Completed at turn N" counts turns from one: the seeded two-turn arms read "Completed —
-  answered 2 of 2 turns". `standing.ordinal` is the customer turn being answered, from zero
-  (`openapi.yaml:5981`), so the label adds one, on the results' arm card
-  (`ExperimentResultsLayout.tsx:813–816`) and on the bench, from one helper.
-- [ ] An arm that missed a required objective says so on its card, in words and with the
-  glyph, as History's row already reads it (`ExperimentHistoryPage.tsx:888`).
-- [ ] The configuration chip names the configuration and its version, not the arm label again.
-- [ ] History's row reads "3 of 3 met" rather than "3/3 decided", its Arms cell names each arm
-  once with its configuration and framework, and *Completed* carries the completed glyph, not
-  the play glyph.
-
-Frames: `Workspace.dc.html:2577–2600`; `DEPRECADED/ExperimentsHistory.dc.html`.
-
-Authority: ADR 0033, ADR 0034, ADR 0042.
-
-Departures to record: none.
-
-Branch: `fix/results-arm-standing`. Checks: Vitest — `Experiments.test.tsx` and
-`History.test.tsx` for the turn count, a missed arm, the chip and the row's wording. `make check`,
-`pnpm build`; `pnpm test:e2e` for `experiment-start.spec.ts` (:818).
-
-Slice evidence: the seeded run's arm cards and its History row at 1440.
-
 ### Slice 46 — What the arms differed on
 
 - [ ] A card *What the arms differed on* on the General tab, drawn from `experiment.comparison`:

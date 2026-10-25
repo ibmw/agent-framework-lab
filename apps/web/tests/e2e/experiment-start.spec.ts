@@ -526,8 +526,10 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
 
   // Each arm says what it is waiting for, which is the only difference an operator can act
   // on: arm A has answered and owes nothing, arm B has never been run.
-  await expect(armA.getByText("Waiting for the customer · turn 0")).toBeVisible();
-  await expect(armB.getByText("Waiting for the agent · turn 0")).toBeVisible();
+  await expect(
+    armA.getByText("Waiting for the customer — answered 1 of 1 turn so far"),
+  ).toBeVisible();
+  await expect(armB.getByText("Waiting for the agent at turn 1")).toBeVisible();
   // The run reported itself under the composer as it went, and says where both arms now stand.
   const queue = card(page, "Customer composer").getByRole("status", {
     name: "Where each arm stands",
@@ -557,7 +559,9 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   ).toBeVisible();
   await expect(armA.getByText(/I found order NS-10482/)).toBeVisible();
   await expect(armA.getByText("scenario fault · moved this arm")).toBeVisible();
-  await expect(armA.getByText("Waiting for the customer · turn 0")).toBeVisible();
+  await expect(
+    armA.getByText("Waiting for the customer — answered 1 of 1 turn so far"),
+  ).toBeVisible();
   // And the arm that was left owing a reply is still the one the bench offers to run.
   await expect(armB.getByRole("button", { name: "Run Arm B's agent" })).toBeVisible();
 
@@ -599,10 +603,10 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(armB.getByText("Only arm A hears this.")).toHaveCount(0);
   await expect(armA.getByText("this arm only")).toBeVisible();
 
-  // Turn 2 was the last this scenario allows, and arm A answered it: the arm is completed,
+  // The third turn was the last this scenario allows, and arm A answered it: it is completed,
   // nothing offers to run or message it again, and what it never did is now a miss rather
   // than something it might still do.
-  await expect(armA.getByText(/Completed — this arm has answered every turn/)).toBeVisible();
+  await expect(armA.getByText("Completed — answered 3 of 3 turns")).toBeVisible();
   // The arm the turn did not reach was not run, and the queue says so beside the one it did.
   await expect(turnQueue).toContainText("Arm A has completed · Arm B is waiting for the customer");
   await expect(
@@ -697,7 +701,8 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
 
   // And the turn only one arm heard is what makes everything after it two conversations.
   const divergence = card(page, "Input divergence");
-  await expect(divergence.getByText("Turn 2")).toBeVisible();
+  // Counted from one, as the arm cards count: the trigger, the shared reply, then this.
+  await expect(divergence.getByText("Turn 3")).toBeVisible();
   await expect(divergence.getByText(/never received this turn/)).toBeVisible();
 
   // The same incident read as one normalized stream: the arms interleaved on the messages
@@ -758,8 +763,8 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(row.getByText(`cfg-beacon-${unique} v1`)).toBeVisible();
   // Each arm against what was decided *for it*: the arm driven to the cap has two decided
   // rows, and the arm still holding a turn has none — a denominator, not a defeat.
-  await expect(row.getByText("Arm A 1/2 decided")).toBeVisible();
-  await expect(row.getByText("Arm B 0/0 decided")).toBeVisible();
+  await expect(row.getByText("Arm A 1 of 2 met")).toBeVisible();
+  await expect(row.getByText("Arm B 0 of 0 met")).toBeVisible();
 
   // Narrowing is the backend's answer, so the assertion waits for the answer rather than
   // for the select to have changed.
@@ -841,9 +846,13 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   // The derived arms were driven by the script rather than by anyone at the composer, and
   // they reached the same place: the arm driven to the recipe's cap, the arm beside it still
   // holding the turn only it received, and the read-check the first arm missed again.
-  await expect(card(page, "Arm A summary").getByText("Completed at turn 2")).toBeVisible();
   await expect(
-    card(page, "Arm B summary").getByText(/waiting for the customer at turn 1/),
+    card(page, "Arm A summary").getByText("Completed — answered 3 of 3 turns"),
+  ).toBeVisible();
+  await expect(
+    card(page, "Arm B summary").getByText(
+      "Waiting for the customer — answered 1 of 2 turns so far",
+    ),
   ).toBeVisible();
   await expect(
     card(page, "Deterministic evidence")
@@ -884,9 +893,13 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(page.getByText("· changed prompt")).toBeVisible();
   // And it holds everything else still: the same starting state, and the same script, so the
   // arms end where the source's did rather than where a different conversation would.
-  await expect(card(page, "Arm A summary").getByText("Completed at turn 2")).toBeVisible();
   await expect(
-    card(page, "Arm B summary").getByText(/waiting for the customer at turn 1/),
+    card(page, "Arm A summary").getByText("Completed — answered 3 of 3 turns"),
+  ).toBeVisible();
+  await expect(
+    card(page, "Arm B summary").getByText(
+      "Waiting for the customer — answered 1 of 2 turns so far",
+    ),
   ).toBeVisible();
 
   // The run it forked is untouched, and the listing shows the three as one family.

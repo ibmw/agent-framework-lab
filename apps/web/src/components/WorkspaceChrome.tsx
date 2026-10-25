@@ -1,4 +1,4 @@
-import type { DefinitionIssueSchema } from "@agent-lab/contracts";
+import type { DefinitionIssueSchema, ExperimentHistoryEntrySchema } from "@agent-lab/contracts";
 import { type ReactNode, type Ref, useId } from "react";
 import { Link, type To } from "react-router-dom";
 import {
@@ -993,8 +993,10 @@ export function PublishButton({
  *
  * `run` is where an experiment stands — *Running*, *Completed*, *Failed* — on Experiment
  * history, whose status column had a colour map of its own until it took this pill (PLAN-UX
- * Milestone 9, the index template). The prototype draws no status there, so the glyph is this
- * table's: a play mark, for the axis a run moves along.
+ * Milestone 9, the index template). It is the one axis whose glyph is its value's, as its frame
+ * draws them (`DEPRECADED/ExperimentsHistory.dc.html`): a finished run carries the completed
+ * check and a failed one the cross, where a play mark on *Completed* read as a run still to
+ * start. *Running* keeps the play mark this entry holds, for an axis a run is still moving along.
  */
 const PILL_GLYPHS = {
   payment: "◆",
@@ -1006,6 +1008,15 @@ const PILL_GLYPHS = {
 } as const;
 
 export type StatusTone = keyof typeof PILL_GLYPHS;
+
+type ExperimentStatus = ExperimentHistoryEntrySchema["status"];
+
+/** The run axis's glyph for each of its values (see `PILL_GLYPHS`). */
+const RUN_GLYPHS: Record<ExperimentStatus, string> = {
+  running: PILL_GLYPHS.run,
+  completed: "✓",
+  failed: "✗",
+};
 
 const statusPillClasses =
   "inline-flex items-center gap-1.5 rounded-full bg-admin-border/60 px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft";
@@ -1023,7 +1034,8 @@ const statusPillClasses =
  */
 export function StatusPill(
   props:
-    | { tone: Exclude<StatusTone, "publication">; label: string }
+    | { tone: Exclude<StatusTone, "publication" | "run">; label: string }
+    | { tone: "run"; label: string; status: ExperimentStatus }
     | { tone: "publication"; label: string; published: boolean },
 ) {
   const classes =
@@ -1032,7 +1044,10 @@ export function StatusPill(
       : statusPillClasses;
   return (
     <span className={classes}>
-      <span aria-hidden>{PILL_GLYPHS[props.tone]}</span> {props.label}
+      <span aria-hidden>
+        {props.tone === "run" ? RUN_GLYPHS[props.status] : PILL_GLYPHS[props.tone]}
+      </span>{" "}
+      {props.label}
     </span>
   );
 }

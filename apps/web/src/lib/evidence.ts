@@ -1,6 +1,7 @@
 import type {
   AgentTurnSchema,
   ArmMetricsSchema,
+  ArmStandingSchema,
   EstimatedCostSchema,
   ExperimentResponse,
   ExperimentRunSchema,
@@ -253,4 +254,64 @@ export function armFigures(metrics: ArmMetricsSchema): ArmFigure[] {
     figures.push({ key: "cost", text: `${floor}${formatCost(metrics.estimated_cost)}` });
   }
   return figures;
+}
+
+/**
+ * A customer turn as an operator counts it: from one, the trigger first.
+ *
+ * The record counts from zero — the trigger is turn zero (ADR 0028) — and every surface that
+ * names a turn names it through here, so no two of them can number one thread differently.
+ */
+export function turnNumber(ordinal: number): number {
+  return ordinal + 1;
+}
+
+/**
+ * Where one arm stands, in the words an operator counts turns in.
+ *
+ * One sentence for the bench's arm and the results' arm card, so the two surfaces cannot
+ * count the same thread differently. `standing.ordinal` is the customer turn the arm is on,
+ * counted from zero; it is named through `turnNumber`, from one.
+ *
+ * A finished arm says how many of the turns it received it answered, out of the metrics the
+ * card already reads: completion means it answered the last turn its scenario's cap allows,
+ * so what it received is the whole of the run. A running arm is not given an "of N" for the
+ * run — the cap is the scenario's and no response these pages hold carries it — so it says
+ * what it has answered *so far*, or which turn it owes.
+ */
+export function describeArmStanding(
+  standing: ArmStandingSchema,
+  metrics: ArmMetricsSchema,
+): string {
+  const turn = turnNumber(standing.ordinal);
+  const answered = `answered ${metrics.answered_turns} of ${metrics.turns} ${
+    metrics.turns === 1 ? "turn" : "turns"
+  }`;
+  if (standing.awaiting === "completed") {
+    return `Completed — ${answered}`;
+  }
+  if (standing.awaiting === "customer") {
+    return `Waiting for the customer — ${answered} so far`;
+  }
+  return standing.attempts === 0
+    ? `Waiting for the agent at turn ${turn}`
+    : `Attempt ${standing.attempts} produced no reply — waiting for a retry at turn ${turn}`;
+}
+
+/**
+ * What an arm that missed a required objective says beside its count, wherever it is drawn:
+ * the words History's row reads it in, and the matrices' missed mark beside them, so the
+ * reason is never the error colour alone.
+ */
+export const MISSED_REQUIREMENT = { mark: OUTCOMES.missed.mark, label: "missed a requirement" };
+
+/**
+ * The configuration an arm ran, as its chip names it: the configuration and its version.
+ *
+ * An arm is often labelled after the configuration it runs — the seeded arms are — and a
+ * chip that repeated the arm's name beside the arm's name says nothing; it is then the
+ * configuration's version, said as one.
+ */
+export function configurationChip(armLabel: string, name: string, version: number): string {
+  return name === armLabel ? `configuration v${version}` : `${name} v${version}`;
 }

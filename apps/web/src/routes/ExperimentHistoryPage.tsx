@@ -16,7 +16,7 @@ import {
   derivationReport,
 } from "../lib/actionStatus";
 import { EXPERIMENT_STATUS, labelOf } from "../lib/enumLabels";
-import { OUTCOMES } from "../lib/evidence";
+import { configurationChip, MISSED_REQUIREMENT, OUTCOMES } from "../lib/evidence";
 import { unreachableArmsNote } from "../lib/modelConnections";
 import {
   accentButtonClasses,
@@ -863,8 +863,15 @@ function HistoryRow({
         <ul className="grid gap-1">
           {experiment.arms.map((arm) => (
             <li key={arm.run_id}>
-              <span className="font-semibold">{arm.label}</span> · {arm.agent_configuration_name} v
-              {arm.agent_configuration_version}
+              {/* Each arm named once: its label, the configuration it ran (its version alone
+                  where the label is the configuration's name), and the framework unless the
+                  label is it or ends "— {framework}", as the seeded labels do. */}
+              <span className="font-semibold">{arm.label}</span> ·{" "}
+              {configurationChip(
+                arm.label,
+                arm.agent_configuration_name,
+                arm.agent_configuration_version,
+              )}
               {arm.agent_configuration_latest_version !== null &&
               arm.agent_configuration_latest_version > arm.agent_configuration_version ? (
                 // Provenance beside the recipe's own: this run stays explained by what it
@@ -874,7 +881,10 @@ function HistoryRow({
                   · v{arm.agent_configuration_latest_version} published
                 </span>
               ) : null}
-              <span className="text-admin-muted"> · {arm.framework_label}</span>
+              {arm.label === arm.framework_label ||
+              arm.label.endsWith(` — ${arm.framework_label}`) ? null : (
+                <span className="text-admin-muted"> · {arm.framework_label}</span>
+              )}
             </li>
           ))}
         </ul>
@@ -884,16 +894,27 @@ function HistoryRow({
           {experiment.arms.map((arm) => (
             <li key={arm.run_id}>
               {/* Each arm out of what was decided for it — never added to the arm beside it. */}
-              <span className="font-semibold">{arm.label}</span> {arm.met}/{arm.decided} decided
+              <span className="font-semibold">{arm.label}</span>{" "}
+              <span
+                title={`${arm.met} of the ${arm.decided} objective(s) something has decided for this arm`}
+              >
+                {arm.met} of {arm.decided} met
+              </span>
               {arm.failed ? (
-                <span className="ml-1.5 text-lab-error">· missed a requirement</span>
+                <span className="ml-1.5 text-lab-error">
+                  · <span aria-hidden>{MISSED_REQUIREMENT.mark}</span> {MISSED_REQUIREMENT.label}
+                </span>
               ) : null}
             </li>
           ))}
         </ul>
       </td>
       <td className={tableCellClasses}>
-        <StatusPill tone="run" label={labelOf(EXPERIMENT_STATUS, experiment.status)} />
+        <StatusPill
+          tone="run"
+          status={experiment.status}
+          label={labelOf(EXPERIMENT_STATUS, experiment.status)}
+        />
         {/* What an operator wrote, which is the one thing on a row the run did not produce.
             The tags because they are what this listing narrows by, and the notes as a count
             because a note reads as itself only beside the evidence it was written about. */}
