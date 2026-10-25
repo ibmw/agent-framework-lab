@@ -113,28 +113,6 @@ each judgement's `provider`, and no contract moves. The covered journeys are
 `experiment-start.spec.ts` (the results at :640 and History's *Open results* at :818),
 `tour-anchors.spec.ts`, `sticky-header.spec.ts` (:684) and `workspace-shell.spec.ts`.
 
-### Slice 52 — A refusal on an untouched form is a hint
-
-- [ ] ADR 0078 amends ADR 0063: a refused submit's reason is drawn muted while its form is
-  untouched, and in `validationMessageClasses` (`lib/ui.ts:554`) once the operator has edited
-  the form or pressed the action. The button, its `aria-disabled`, its `title` and its
-  description do not change.
-- [ ] Every `RefusalLine` adopts it in this slice — Fork, tags, notes, the thread and every other
-  consumer — so the rule has no exception.
-
-Frames: `tmp/design-frames/README.md`, *The form pattern*.
-
-Authority: ADR 0063.
-
-Departures to record: the README's validation colour is kept for a refusal the operator has
-caused, and an untouched form's reason is muted.
-
-Branch: `feat/refusal-muted-until-touched`. Checks: Vitest — each adopter's test for muted then
-red, and the submit-without-press tests ADR 0063 lists unchanged. `make check`, `pnpm build`;
-`pnpm test:e2e` for `experiment-start.spec.ts`.
-
-Slice evidence: the results page's Fork, tag and note forms at 1440, untouched then touched.
-
 ### Slice 53 — The rail collapses at phone width
 
 - [ ] Below the narrow breakpoint the rail draws its 52px collapsed strip without writing the

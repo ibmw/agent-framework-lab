@@ -92,7 +92,9 @@ function Harness({
               fields: editor.open ? (
                 <>
                   {editor.open.fields.title === "" ? (
-                    <RefusalLine id="title-refusal">{TITLE_REFUSAL}</RefusalLine>
+                    <RefusalLine id="title-refusal" touched>
+                      {TITLE_REFUSAL}
+                    </RefusalLine>
                   ) : null}
                   <label>
                     Title

@@ -32,6 +32,7 @@ import { DEFINITION_TYPE, labelOf } from "../lib/enumLabels";
 import { LABEL_MAX_LENGTH, MAX_SEED, SEED_RULE } from "../lib/fieldRules";
 import { fulfilmentLabel, paymentLabel } from "../lib/orders";
 import { pythonStrip } from "../lib/pythonText";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import { channelLabel, originLabel } from "../lib/tickets";
 import {
   editorColumnsClasses,
@@ -87,6 +88,8 @@ export function SnapshotsPage() {
   const seedReasonId = useId();
   const freezeNoteId = useId();
   const seedRefusal = seed.trim() === "" ? { id: seedReasonId, reason: SEED_MISSING } : null;
+  // A hint until the operator edits the form or presses *Freeze snapshot* (ADR 0078).
+  const freezeTouch = useRefusalTouch();
 
   const reload = useCallback(
     async (signal?: AbortSignal) => {
@@ -203,7 +206,11 @@ export function SnapshotsPage() {
                   : "This scenario has no published version yet. Publish the scenario first."}
               </p>
             ) : (
-              <form className="flex flex-wrap items-end gap-3" onSubmit={materialize}>
+              <form
+                className="flex flex-wrap items-end gap-3"
+                onSubmit={materialize}
+                {...freezeTouch.watch}
+              >
                 <label className={fieldLabelClasses}>
                   Scenario version
                   <select
@@ -244,7 +251,9 @@ export function SnapshotsPage() {
                     {working ? "Freezing…" : "Freeze snapshot"}
                   </PrimaryAction>
                   {seedRefusal === null ? null : (
-                    <RefusalLine id={seedReasonId}>{SEED_MISSING}</RefusalLine>
+                    <RefusalLine id={seedReasonId} touched={freezeTouch.touched}>
+                      {SEED_MISSING}
+                    </RefusalLine>
                   )}
                 </div>
               </form>
@@ -449,6 +458,9 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
   const labelReasonId = useId();
   const labelRefusal =
     pythonStrip(label) === "" ? { id: labelReasonId, reason: LABEL_MISSING } : null;
+  // A hint until the operator types a label or presses *Clone sandbox*, and again once a clone
+  // has emptied the field (ADR 0078).
+  const cloneTouch = useRefusalTouch();
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -483,6 +495,7 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
       const created = await cloneSandbox(shopId, snapshotId, { label: pythonStrip(label) });
       setArms((current) => [...current, created]);
       setLabel("");
+      cloneTouch.reset();
     } catch (cause: unknown) {
       setError(describeApiError(cause, "This snapshot could not be cloned."));
     } finally {
@@ -508,7 +521,7 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
             {error}
           </p>
         ) : null}
-        <form className="flex flex-wrap items-end gap-3" onSubmit={clone}>
+        <form className="flex flex-wrap items-end gap-3" onSubmit={clone} {...cloneTouch.watch}>
           <label className={fieldLabelClasses}>
             Arm label
             <input
@@ -524,7 +537,9 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
               {working ? "Cloning…" : "Clone sandbox"}
             </PrimaryAction>
             {labelRefusal === null ? null : (
-              <RefusalLine id={labelReasonId}>{LABEL_MISSING}</RefusalLine>
+              <RefusalLine id={labelReasonId} touched={cloneTouch.touched}>
+                {LABEL_MISSING}
+              </RefusalLine>
             )}
           </div>
         </form>

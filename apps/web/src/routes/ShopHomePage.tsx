@@ -22,6 +22,7 @@ import {
 } from "../components/WorkspaceChrome";
 import { shopIssueEntries } from "../lib/issueRoutes";
 import { type ActivityEntry, recentActivity } from "../lib/recentActivity";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import { formatTimestamp, labNoteClasses, outlineButtonClasses, surfaceClasses } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
@@ -252,6 +253,9 @@ export function ShopHomePage() {
   // one named thing rather than a second unnamed list beside the timeline's.
   const becomingId = useId();
   const publishReasonsId = useId();
+  // Publish's reasons are a hint until the shop draft has been edited or a refused Publish
+  // pressed, and again after a publish was taken (ADR 0078).
+  const publishTouch = useRefusalTouch(dirty);
   const [experiments, setExperiments] = useState<ExperimentSummarySchema[]>([]);
   const [experimentsError, setExperimentsError] = useState<string | null>(null);
 
@@ -362,6 +366,7 @@ export function ShopHomePage() {
       // Only once the version exists: a refused publish leaves the operator on the review with
       // the reason, and the control they pressed still under their hands.
       pressed.current = true;
+      publishTouch.reset();
       setPublished(version);
       setReviewing(false);
       setVersions((await listShopVersions(shopId)).versions);
@@ -449,6 +454,7 @@ export function ShopHomePage() {
                       publishing={publishing}
                       checking={checking}
                       reasonsId={publishReasonsId}
+                      onRefusedPress={publishTouch.touch}
                       onPublish={() => void onPublish()}
                     >
                       <ButtonIcon verb="publish" />
@@ -477,6 +483,7 @@ export function ShopHomePage() {
                     preview={preview}
                     dirty={dirty}
                     checking={checking}
+                    touched={publishTouch.touched}
                   />
                 </div>
               ) : (
@@ -497,6 +504,7 @@ export function ShopHomePage() {
                       publishing={false}
                       checking={checking}
                       reasonsId={publishReasonsId}
+                      onRefusedPress={publishTouch.touch}
                       onPublish={() => {
                         pressed.current = true;
                         setReviewing(true);
@@ -513,6 +521,7 @@ export function ShopHomePage() {
                     preview={preview}
                     dirty={dirty}
                     checking={checking}
+                    touched={publishTouch.touched}
                   />
                 </div>
               )

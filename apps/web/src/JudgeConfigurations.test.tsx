@@ -21,7 +21,7 @@ import { labConnection } from "./test/connection";
 import { expectWayBack } from "./test/header";
 import { expectPublicationPill } from "./test/indexes";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
-import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectNotRefused, expectRefusalWeight, expectRefused, refusalFacts } from "./test/refused";
 import { expectEditorOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -759,6 +759,31 @@ describe("the provider the lab can reach", () => {
       expectNotRefused(screen.getByRole("button", { name: "Publish v1" }));
     });
   }
+
+  it("says why Publish is refused as a hint on an editor nobody has touched (ADR 0078)", async () => {
+    currentPreview = preview({
+      publishable: false,
+      issues: [
+        {
+          severity: "error",
+          code: "rubric_empty",
+          message: "a published judge must carry the rubric it scores by",
+          path: "rubric",
+        },
+      ],
+    });
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+    await screen.findByRole("region", { name: "Publish gate" });
+    const publish = await screen.findByRole("button", { name: /^Publish v\d+$/ });
+    await waitFor(() => expectRefused(publish, "Resolve 1 error(s) to publish."));
+    const reason = screen.getByText("Resolve 1 error(s) to publish.");
+    expectRefusalWeight(publish, "hint", reason);
+    const before = refusalFacts(publish);
+
+    await userEvent.click(publish);
+    expectRefusalWeight(publish, "touched", reason);
+    expect(refusalFacts(publish)).toEqual(before);
+  });
 
   it("keeps the note out of the gate's findings and PublishReasons while those have something to say", async () => {
     connectionSource = "none";

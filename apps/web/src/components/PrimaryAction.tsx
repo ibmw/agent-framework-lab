@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
-import { blockedButtonClasses, buttonVariantClasses, validationMessageClasses } from "../lib/ui";
+import { blockedButtonClasses, buttonVariantClasses, refusalLineClasses } from "../lib/ui";
 
 /**
  * Why an action cannot proceed, and the id of the line on the page that says so.
@@ -45,6 +45,7 @@ export function PrimaryAction({
   variant,
   refusal,
   busy = false,
+  onRefusedPress,
   className,
   onClick,
   "aria-describedby": describedBy,
@@ -57,6 +58,13 @@ export function PrimaryAction({
   refusal?: Refusal | null;
   /** A press is in flight: unavailable, with nothing to explain, and still holding focus. */
   busy?: boolean;
+  /**
+   * Called when a press is swallowed because the action is refused — not while it is busy —
+   * so the form it belongs to counts as touched and its line turns to the validation weight
+   * (ADR 0078). Only needed where the action sits outside the element `useRefusalTouch`'s
+   * `watch` is spread on; inside it, the swallowed click bubbles there.
+   */
+  onRefusedPress?: () => void;
   ref?: Ref<HTMLButtonElement>;
   children: ReactNode;
 }) {
@@ -77,6 +85,9 @@ export function PrimaryAction({
       onClick={(event: MouseEvent<HTMLButtonElement>) => {
         if (refused || busy) {
           event.preventDefault();
+          if (refused) {
+            onRefusedPress?.();
+          }
           return;
         }
         onClick?.(event);
@@ -88,23 +99,30 @@ export function PrimaryAction({
 }
 
 /**
- * The inline half of a refusal: one sentence at the validation weight, under or beside the
- * action it refuses, named by that action's `aria-describedby`.
+ * The inline half of a refusal: one sentence under or beside the action it refuses, named by
+ * that action's `aria-describedby`.
+ *
+ * `touched` is required, so no surface can draw a reason without saying whose attempt it is:
+ * while the form is untouched the sentence is a hint, and once the operator has edited the form
+ * or pressed the refused action it is the validation message (ADR 0078, amending ADR 0063).
+ * Only the weight moves — the words, the id, and so the button's description, `title` and
+ * `aria-disabled`, are the same either way. `useRefusalTouch` is how a form knows.
  */
 export function RefusalLine({
   id,
+  touched,
   className,
   children,
 }: {
   id: string;
+  /** The operator has edited the form or pressed the refused action. */
+  touched: boolean;
   className?: string;
   children: ReactNode;
 }) {
+  const weight = refusalLineClasses(touched);
   return (
-    <p
-      id={id}
-      className={className ? `${validationMessageClasses} ${className}` : validationMessageClasses}
-    >
+    <p id={id} className={className ? `${weight} ${className}` : weight}>
       {children}
     </p>
   );

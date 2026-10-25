@@ -1,9 +1,17 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { BusyButton, PrimaryAction, RefusalLine } from "./components/PrimaryAction";
+import { useRefusalTouch } from "./lib/refusalTouch";
 import { blockedButtonClasses, buttonVariantClasses } from "./lib/ui";
-import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
+import {
+  expectBusy,
+  expectNotRefused,
+  expectRefusalWeight,
+  expectRefused,
+  refusalFacts,
+  submitWithoutPressing,
+} from "./test/refused";
 
 const REASON = "Name the thing first.";
 const refusal = { id: "why", reason: REASON };
@@ -36,7 +44,9 @@ describe("PrimaryAction, refused", () => {
         <PrimaryAction variant="accent" type="button" refusal={refusal}>
           Create
         </PrimaryAction>
-        <RefusalLine id="why">{REASON}</RefusalLine>
+        <RefusalLine id="why" touched>
+          {REASON}
+        </RefusalLine>
       </>,
     );
     const button = screen.getByRole("button", { name: "Create" });
@@ -53,7 +63,9 @@ describe("PrimaryAction, refused", () => {
         <PrimaryAction variant="ink" type="button" refusal={refusal} aria-describedby="more">
           Publish
         </PrimaryAction>
-        <RefusalLine id="why">{REASON}</RefusalLine>
+        <RefusalLine id="why" touched>
+          {REASON}
+        </RefusalLine>
         <p id="more">And something else.</p>
       </>,
     );
@@ -140,7 +152,9 @@ describe("PrimaryAction, refused", () => {
         <PrimaryAction variant="accent" type="button" refusal={refusal}>
           Save
         </PrimaryAction>
-        <RefusalLine id="why">{REASON}</RefusalLine>
+        <RefusalLine id="why" touched>
+          {REASON}
+        </RefusalLine>
       </>,
     );
     expect(screen.getByRole("button", { name: "Save" })).toBe(button);
@@ -157,7 +171,9 @@ describe("PrimaryAction, refused and busy at once", () => {
         <PrimaryAction variant="accent" type="button" busy refusal={refusal} onClick={onClick}>
           Creating…
         </PrimaryAction>
-        <RefusalLine id="why">{REASON}</RefusalLine>
+        <RefusalLine id="why" touched>
+          {REASON}
+        </RefusalLine>
       </>,
     );
     // The name was cleared while "Creating…" ran: the button says it is busy, and nothing else.
@@ -173,7 +189,9 @@ describe("PrimaryAction, refused and busy at once", () => {
         <PrimaryAction variant="accent" type="button" refusal={refusal} onClick={onClick}>
           Create
         </PrimaryAction>
-        <RefusalLine id="why">{REASON}</RefusalLine>
+        <RefusalLine id="why" touched>
+          {REASON}
+        </RefusalLine>
       </>,
     );
     expectRefused(screen.getByRole("button", { name: "Create" }), REASON);
@@ -311,5 +329,169 @@ describe("BusyButton", () => {
     );
     expect(button).toBeDisabled();
     expect(button).not.toHaveAttribute("aria-disabled");
+  });
+});
+
+/**
+ * A form as every adopter draws one (ADR 0078): `watch` on the form, a field, a chip, the
+ * refused submit, and the line it names.
+ */
+function TouchedForm({ onSubmit = () => {} }: { onSubmit?: () => void }) {
+  const touch = useRefusalTouch();
+  return (
+    <form
+      aria-label="Tag"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+      {...touch.watch}
+    >
+      <input aria-label="Tag name" />
+      <button type="button" aria-pressed={false}>
+        Pinned
+      </button>
+      <PrimaryAction variant="outline" type="submit" refusal={refusal}>
+        Add tag
+      </PrimaryAction>
+      <RefusalLine id="why" touched={touch.touched}>
+        {REASON}
+      </RefusalLine>
+      <button type="button" onClick={touch.reset}>
+        Start again
+      </button>
+    </form>
+  );
+}
+
+describe("RefusalLine, muted until touched (ADR 0078)", () => {
+  it("is a hint on a form nobody has touched, and the validation message after an edit", async () => {
+    const user = userEvent.setup();
+    render(<TouchedForm />);
+    const add = screen.getByRole("button", { name: "Add tag" });
+    expectRefused(add, REASON);
+    expectRefusalWeight(add, "hint");
+    const before = refusalFacts(add);
+
+    await user.type(screen.getByRole("textbox", { name: "Tag name" }), "x");
+    expectRefusalWeight(add, "touched");
+    // Only the weight moved: the button says the same thing to whoever reaches it.
+    expect(refusalFacts(add)).toEqual(before);
+    expectRefused(add, REASON);
+  });
+
+  it("turns at a press on the refused action, which still submits nothing", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<TouchedForm onSubmit={onSubmit} />);
+    const add = screen.getByRole("button", { name: "Add tag" });
+    const before = refusalFacts(add);
+
+    await user.click(add);
+    expectRefusalWeight(add, "touched");
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(refusalFacts(add)).toEqual(before);
+  });
+
+  it("turns at Enter on the focused action, and at Enter in a field", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<TouchedForm />);
+    screen.getByRole("button", { name: "Add tag" }).focus();
+    await user.keyboard("{Enter}");
+    expectRefusalWeight(screen.getByRole("button", { name: "Add tag" }), "touched");
+    unmount();
+
+    render(<TouchedForm />);
+    const add = screen.getByRole("button", { name: "Add tag" });
+    // The browser's implicit submission is a click on the default button, which is the press.
+    submitImplicitly(screen.getByRole("form", { name: "Tag" }) as HTMLFormElement, add);
+    expectRefusalWeight(add, "touched");
+  });
+
+  it("is not touched by a submission that arrives without a press", async () => {
+    const onSubmit = vi.fn();
+    render(<TouchedForm onSubmit={onSubmit} />);
+    const add = screen.getByRole("button", { name: "Add tag" });
+    // `requestSubmit` fires the form's submit with no click: no operator made it.
+    await submitWithoutPressing(add);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expectRefusalWeight(add, "hint");
+  });
+
+  it("counts a press on a control in the form, and not a click into a field", async () => {
+    const user = userEvent.setup();
+    render(<TouchedForm />);
+    const add = screen.getByRole("button", { name: "Add tag" });
+
+    await user.click(screen.getByRole("textbox", { name: "Tag name" }));
+    expectRefusalWeight(add, "hint");
+    await user.click(screen.getByRole("button", { name: "Pinned" }));
+    expectRefusalWeight(add, "touched");
+  });
+
+  it("is a hint again once the attempt starts over, and latches what the page knows was edited", () => {
+    const { result, rerender } = renderHook(({ edited }) => useRefusalTouch(edited), {
+      initialProps: { edited: false },
+    });
+    expect(result.current.touched).toBe(false);
+    act(() => result.current.touch());
+    expect(result.current.touched).toBe(true);
+    act(() => result.current.reset());
+    expect(result.current.touched).toBe(false);
+
+    // A draft made dirty is an edit; it stays one after the draft is saved.
+    rerender({ edited: true });
+    expect(result.current.touched).toBe(true);
+    rerender({ edited: false });
+    expect(result.current.touched).toBe(true);
+  });
+});
+
+describe("PrimaryAction's onRefusedPress", () => {
+  it("reports a press it swallowed for a refusal, and not one it ran or held for a press in flight", async () => {
+    const user = userEvent.setup();
+    const onRefusedPress = vi.fn();
+    const onClick = vi.fn();
+    const { rerender } = render(
+      <PrimaryAction
+        variant="accent"
+        type="button"
+        refusal={refusal}
+        onRefusedPress={onRefusedPress}
+        onClick={onClick}
+      >
+        Create
+      </PrimaryAction>,
+    );
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(onRefusedPress).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
+
+    rerender(
+      <PrimaryAction
+        variant="accent"
+        type="button"
+        refusal={refusal}
+        busy
+        onRefusedPress={onRefusedPress}
+        onClick={onClick}
+      >
+        Create
+      </PrimaryAction>,
+    );
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    rerender(
+      <PrimaryAction
+        variant="accent"
+        type="button"
+        onRefusedPress={onRefusedPress}
+        onClick={onClick}
+      >
+        Create
+      </PrimaryAction>,
+    );
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(onRefusedPress).toHaveBeenCalledTimes(1);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });

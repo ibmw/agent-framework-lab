@@ -49,7 +49,14 @@ import {
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
-import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import {
+  expectBusy,
+  expectNotRefused,
+  expectRefusalWeight,
+  expectRefused,
+  refusalFacts,
+  submitWithoutPressing,
+} from "./test/refused";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -3048,6 +3055,38 @@ describe("experiment setup and the provider the lab can reach", () => {
     });
   }
 
+  it("lists what Start waits for as a hint until the operator touches the form (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    const { unmount } = renderSetup();
+    await scenarioChosen();
+    let start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start).length).toBeGreaterThan(0));
+    // The scenario the page chose for the operator is not an edit of theirs.
+    expectRefusalWeight(start, "hint");
+    const before = refusalFacts(start);
+
+    // An edit that leaves every reason standing still makes the attempt the operator's.
+    const seed = screen.getByLabelText("Seed");
+    const typed = (seed as HTMLInputElement).value;
+    await user.clear(seed);
+    await user.type(seed, typed);
+    expectRefusalWeight(start, "touched");
+    expect(refusalFacts(start)).toEqual(before);
+    unmount();
+
+    renderSetup();
+    await scenarioChosen();
+    start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start).length).toBeGreaterThan(0));
+    expectRefusalWeight(start, "hint");
+    const again = refusalFacts(start);
+    await user.click(start);
+    expectRefusalWeight(start, "touched");
+    expect(refusalFacts(start)).toEqual(again);
+    expect(started).toHaveLength(0);
+  });
+
   it("refuses a Start submitted without a press, by the form's own handler", async () => {
     const user = userEvent.setup();
     connectionSource = "none";
@@ -3729,6 +3768,40 @@ describe("live bench", () => {
     await user.keyboard(" ");
     // Without the press, the composer's own handler refuses: no arm is left to deliver to.
     await submitWithoutPressing(send);
+    expect(delivered).toEqual([]);
+  });
+
+  it("says every arm has completed as a hint until the operator writes or presses Send (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    maxTurns = 1;
+    turns = [
+      ...OPENED,
+      turn(ARM_A, 1, "reply-1", "Any update?"),
+      turn(ARM_B, 1, "reply-1", "Any update?"),
+    ];
+    agentTurns = [agentTurn(ARM_A, 1), agentTurn(ARM_B, 1)];
+    const { unmount } = renderBench();
+
+    let composer = await screen.findByRole("region", { name: "Customer composer" });
+    await within(composer).findByRole("checkbox", { name: /Arm B/ });
+    let send = within(composer).getByRole("button", { name: "Send as the customer" });
+    // Nothing the operator can edit caused it, and nothing has been tried yet.
+    expectRefusalWeight(send, "hint");
+    const before = refusalFacts(send);
+    await user.type(within(composer).getByLabelText("Message"), "Hello?");
+    expectRefusalWeight(send, "touched");
+    expect(refusalFacts(send)).toEqual(before);
+    unmount();
+
+    renderBench();
+    composer = await screen.findByRole("region", { name: "Customer composer" });
+    await within(composer).findByRole("checkbox", { name: /Arm B/ });
+    send = within(composer).getByRole("button", { name: "Send as the customer" });
+    expectRefusalWeight(send, "hint");
+    const again = refusalFacts(send);
+    await user.click(send);
+    expectRefusalWeight(send, "touched");
+    expect(refusalFacts(send)).toEqual(again);
     expect(delivered).toEqual([]);
   });
 
@@ -6586,6 +6659,44 @@ describe("notes and tags", () => {
     expectNotRefused(addNote);
   });
 
+  it("says an empty tag and an empty note as hints until their form is touched (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    const strip = within(await screen.findByRole("region", { name: "Notes & tags" }));
+    const addTag = strip.getByRole("button", { name: "Add tag" });
+    const addNote = strip.getByRole("button", { name: "Add note" });
+    expectRefusalWeight(addTag, "hint");
+    expectRefusalWeight(addNote, "hint");
+    const tagBefore = refusalFacts(addTag);
+    const noteBefore = refusalFacts(addNote);
+
+    // Typed into, and still empty once stripped: the tag's line turns, the note's does not.
+    await user.type(strip.getByLabelText("Add a tag"), "   ");
+    expectRefusalWeight(addTag, "touched");
+    expectRefusalWeight(addNote, "hint");
+    expect(refusalFacts(addTag)).toEqual(tagBefore);
+
+    // Pressed while refused: the note's line turns, and nothing is sent.
+    await user.click(addNote);
+    expectRefusalWeight(addNote, "touched");
+    expect(refusalFacts(addNote)).toEqual(noteBefore);
+    expect(filed).toEqual([]);
+  });
+
+  it("says the tag's refusal as a hint again once a tag was added and the box emptied", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    const strip = within(await screen.findByRole("region", { name: "Notes & tags" }));
+    const addTag = strip.getByRole("button", { name: "Add tag" });
+    await user.click(addTag);
+    expectRefusalWeight(addTag, "touched");
+
+    await user.type(strip.getByLabelText("Add a tag"), "gap{Enter}");
+    await waitFor(() => expect(filed).toHaveLength(1));
+    await waitFor(() => expectRefused(addTag, "Type the tag to file this run under."));
+    expectRefusalWeight(addTag, "hint");
+  });
+
   it("sends one note for a press made again while the first is in flight", async () => {
     const user = userEvent.setup();
     let notes = 0;
@@ -6826,6 +6937,45 @@ describe("replay", () => {
     expectRefused(fork, "Change at least one arm: a fork that changes nothing is a replay.");
     await user.click(fork);
     expect(forked).toEqual([]);
+  });
+
+  it("says a fork that moves nothing as a hint until an arm is touched or Fork pressed (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    await user.click(await screen.findByRole("button", { name: "Fork…" }));
+    const panel = await screen.findByRole("region", { name: "Fork this experiment" });
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    // Opening the panel is not an attempt that failed.
+    expectRefusalWeight(fork, "hint");
+    const before = refusalFacts(fork);
+
+    await user.click(fork);
+    expectRefusalWeight(fork, "touched");
+    expect(refusalFacts(fork)).toEqual(before);
+    expect(forked).toEqual([]);
+  });
+
+  it("says a fork moved back to where it was at the refusal's weight: the arm was touched", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    await user.click(await screen.findByRole("button", { name: "Fork…" }));
+    const panel = await screen.findByRole("region", { name: "Fork this experiment" });
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    expectRefusalWeight(fork, "hint");
+    const before = refusalFacts(fork);
+    const version = within(panel).getAllByLabelText("Published version")[1] as HTMLSelectElement;
+    const pinned = version.value;
+    const other = Array.from(version.options).find((option) => option.value !== pinned);
+    expect(other, "the arm offers a version to move to").toBeDefined();
+
+    await user.selectOptions(version, other?.value ?? "");
+    await waitFor(() => expect(within(panel).queryByText(/Change at least one arm/)).toBeNull());
+    await user.selectOptions(version, pinned);
+    await waitFor(() => expectRefused(fork, "Change at least one arm"));
+    expectRefusalWeight(fork, "touched");
+    expect(refusalFacts(fork)).toEqual(before);
   });
 
   it("says which run a fork came from and what it changed", async () => {

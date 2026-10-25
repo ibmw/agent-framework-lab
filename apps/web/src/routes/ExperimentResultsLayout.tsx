@@ -40,6 +40,7 @@ import {
   MISSED_REQUIREMENT,
 } from "../lib/evidence";
 import { unreachableArmsNote } from "../lib/modelConnections";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import {
   depthTabRowClasses,
   depthTabStateClasses,
@@ -489,6 +490,9 @@ function ForkPanel({
     arm.version !== experiment.runs[position].agent_configuration_version;
   const moved = chosen.some(moves);
   const forkNoteId = useId();
+  // The panel's refusal is a hint until an arm is moved or *Fork this run* is pressed
+  // (ADR 0078): opening the panel is not an attempt that failed.
+  const forkTouch = useRefusalTouch();
 
   // What each chosen arm would run, as the choice stands. An arm left where it was runs the
   // version this run pinned, whose provider and published name the run already records; an
@@ -532,6 +536,7 @@ function ForkPanel({
       id={FORK_PANEL_ID}
       aria-label="Fork this experiment"
       className="mb-4 grid gap-3 rounded-lg border border-admin-border bg-admin-surface px-4 py-3"
+      {...forkTouch.watch}
     >
       {unreadable ? (
         <p role="alert" className="text-[13px] text-lab-error">
@@ -589,7 +594,7 @@ function ForkPanel({
           {deriving === "fork" ? "Forking…" : "Fork this run"}
         </PrimaryAction>
         {forkRefusal === null ? null : (
-          <RefusalLine id={forkNoteId} className="mt-1">
+          <RefusalLine id={forkNoteId} touched={forkTouch.touched} className="mt-1">
             {forkRefusal}
           </RefusalLine>
         )}

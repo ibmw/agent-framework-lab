@@ -365,3 +365,11 @@ grown since — the scenario's and the arms' with the versions they wait on (ADR
 with the padding Python's `str.strip()` reads and `trim()` does not — so `experimentStart.test.ts`
 now sweeps 4 · 16 · 4 · 3 · 3 · 2 · 2 = 9216 combinations of the same seven causes, and pins
 that count.
+
+## Amendment — 2026-10-25: a refusal on an untouched form is a hint
+
+*The reason line and the validation message are one weight* holds once the operator has edited
+the form or pressed the refused action. Before that, the refusal's own line — `RefusalLine`,
+`PublishReasons`, Start's list — is drawn at the README's hint, 13px 400 `#42474c`, with the
+same words; the button, its `aria-disabled`, its `title` and its description do not change.
+ADR 0078 records the rule, what touched means, and every surface it applies to.

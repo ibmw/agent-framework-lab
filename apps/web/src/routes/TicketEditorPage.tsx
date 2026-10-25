@@ -48,6 +48,7 @@ import {
 } from "../lib/fieldRules";
 import { fromLocalInput, fulfilmentLabel, paymentLabel, toLocalInput } from "../lib/orders";
 import { pythonStrip } from "../lib/pythonText";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import { consequenceOf, REMOVAL_FINDINGS, type Removal, useRemoval } from "../lib/removal";
 import {
   appendMessage,
@@ -227,6 +228,7 @@ function TicketEditorPage({ ticketId }: { ticketId: string }) {
               checking={editor.checking}
               publishing={editor.publishing}
               reasonsId={publishReasonsId}
+              onRefusedPress={editor.publishTouch.touch}
               onPublish={() => {
                 // The index prints the version a publish froze, off the shell's listing.
                 void editor.publish().then((version) => {
@@ -257,6 +259,7 @@ function TicketEditorPage({ ticketId }: { ticketId: string }) {
               preview={preview}
               dirty={editor.dirty}
               checking={editor.checking}
+              touched={editor.publishTouch.touched}
             />
           </>
         }
@@ -485,6 +488,9 @@ function Conversation({
   const [refused, setRefused] = useState<string | null>(null);
   const removal = useRemoval(scope);
   const addReasonId = useId();
+  // A hint until the operator writes, picks an author, moves the time or presses *Add to
+  // thread*, and again once a message has been added (ADR 0078).
+  const addTouch = useRefusalTouch();
   const instant = fromLocalInput(sentAt);
   // Why *Add to thread* will not go (ADR 0063): said beside it, not left to a press that
   // silently does nothing. Neither field can say it — an empty box and a cleared time are
@@ -505,6 +511,7 @@ function Conversation({
     setRefused(null);
     onEdit(addition.content);
     setBody("");
+    addTouch.reset();
   }
 
   return (
@@ -580,7 +587,12 @@ function Conversation({
       <RemovalNotice removal={removal} />
 
       {/* The composer is the card's add form, below the thread it adds to. */}
-      <form className={addFormClasses} aria-label="Add a message to the thread" onSubmit={add}>
+      <form
+        className={addFormClasses}
+        aria-label="Add a message to the thread"
+        onSubmit={add}
+        {...addTouch.watch}
+      >
         <div className="flex flex-wrap items-center gap-2">
           {(["customer", "support_agent"] as TicketAuthor[]).map((role) => (
             <button
@@ -636,7 +648,11 @@ function Conversation({
             customer becomes the trigger.
           </p>
         </div>
-        {addRefusal === null ? null : <RefusalLine id={addReasonId}>{addRefusal}</RefusalLine>}
+        {addRefusal === null ? null : (
+          <RefusalLine id={addReasonId} touched={addTouch.touched}>
+            {addRefusal}
+          </RefusalLine>
+        )}
       </form>
     </Card>
   );

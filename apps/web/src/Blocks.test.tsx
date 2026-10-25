@@ -11,11 +11,12 @@ import type {
   ShopListResponse,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { ParameterForm } from "./components/ParameterForm";
 import { MAX_PARAMETERS, PARAMETERS_FULL } from "./lib/blocks";
 import { PARAMETER_LABEL_RULE } from "./lib/fieldRules";
 import { TOURS } from "./lib/tours";
@@ -29,7 +30,9 @@ import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
   describedText,
   expectNotRefused,
+  expectRefusalWeight,
   expectRefused,
+  refusalFacts,
   submitWithoutPressing,
 } from "./test/refused";
 import { expectEditorOnRows, expectFieldRow } from "./test/rows";
@@ -1526,6 +1529,39 @@ describe("a template's parameters", () => {
     expect(within(itemOf("note_1")).getByText("A note.")).toBeVisible();
   });
 
+  it("says the add form's refusal as a hint until a field is edited or Add pressed (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    await openEditor();
+    const add = parameterForm("Add a parameter");
+    const button = add.getByRole("button", { name: "Add parameter" });
+    expectRefused(button, PARAMETER_LABEL_RULE);
+    expectRefusalWeight(button, "hint");
+    const before = refusalFacts(button);
+
+    // An edit that leaves the label empty: the reason stands, now at the refusal's weight.
+    await user.type(add.getByLabelText(DESCRIPTION), "Typed first.");
+    expectRefusalWeight(button, "touched");
+    expect(refusalFacts(button)).toEqual(before);
+  });
+
+  it("turns the add form's refusal at a press, and back to a hint when an entry is opened and put back", async () => {
+    const user = userEvent.setup();
+    await openEditor(full());
+    let button = parameterForm("Add a parameter").getByRole("button", { name: "Add parameter" });
+    expectRefused(button, PARAMETERS_FULL);
+    expectRefusalWeight(button, "hint");
+    const before = refusalFacts(button);
+    await user.click(button);
+    expectRefusalWeight(button, "touched");
+    expect(refusalFacts(button)).toEqual(before);
+
+    await user.click(screen.getByRole("button", { name: "Edit note_1" }));
+    await user.click(parameterForm("Edit note_1").getByRole("button", { name: "Cancel" }));
+    button = parameterForm("Add a parameter").getByRole("button", { name: "Add parameter" });
+    expectRefused(button, PARAMETERS_FULL);
+    expectRefusalWeight(button, "hint");
+  });
+
   it("saves a retyped parameter with exactly what the add form writes for the same kind", async () => {
     const user = userEvent.setup();
     await openEditor();
@@ -1757,5 +1793,31 @@ describe("a template's parameters", () => {
     const saved = savedPayloads[0].parameters as Array<Record<string, unknown>>;
     expect(saved.map((entry) => entry.name)).toEqual(["severity", "doc_ref"]);
     expect(saved[0].description).toBe("Whether missing the read fails the objective. Moved.");
+  });
+});
+
+/** The create page's parameter form at the template's cap (ADR 0063, ADR 0078). */
+describe("the create page's parameter form at the cap", () => {
+  it("says the cap as a hint until the operator types or presses Add parameter", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<ParameterForm taken={[]} full onAdd={() => {}} />);
+    let add = screen.getByRole("button", { name: "Add parameter" });
+    expectRefused(add, PARAMETERS_FULL);
+    expectRefusalWeight(add, "hint");
+    let before = refusalFacts(add);
+    await user.type(screen.getByRole("textbox"), "one more");
+    expectRefusalWeight(add, "touched");
+    expect(refusalFacts(add)).toEqual(before);
+    unmount();
+
+    const onAdd = vi.fn();
+    render(<ParameterForm taken={[]} full onAdd={onAdd} />);
+    add = screen.getByRole("button", { name: "Add parameter" });
+    expectRefusalWeight(add, "hint");
+    before = refusalFacts(add);
+    await user.click(add);
+    expectRefusalWeight(add, "touched");
+    expect(refusalFacts(add)).toEqual(before);
+    expect(onAdd).not.toHaveBeenCalled();
   });
 });

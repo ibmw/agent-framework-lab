@@ -23,7 +23,14 @@ import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
 import { expectPublicationPill } from "./test/indexes";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
-import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import {
+  expectBusy,
+  expectNotRefused,
+  expectRefusalWeight,
+  expectRefused,
+  refusalFacts,
+  submitWithoutPressing,
+} from "./test/refused";
 import { expectEditorOnRows, expectGroupRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -1266,6 +1273,38 @@ describe("the conversation", () => {
     expect(within(thread).getByText("We can still change it.")).toBeVisible();
     // The trigger is untouched: only a newer customer message can replace it.
     expect(within(thread).getByText("first message")).toBeVisible();
+  });
+
+  it("says why Add to thread is refused as a hint until the composer is touched (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const thread = within(await screen.findByRole("region", { name: "Conversation" }));
+    const add = thread.getByRole("button", { name: "Add to thread" });
+    expectRefusalWeight(add, "hint");
+    const before = refusalFacts(add);
+
+    // Choosing who wrote it is an edit of the form, and leaves the message as empty as it was.
+    await user.click(thread.getByRole("button", { name: "as past support" }));
+    expectRefusalWeight(add, "touched");
+    expect(refusalFacts(add)).toEqual(before);
+  });
+
+  it("says it at the refusal's weight once pressed, and as a hint again after a message is added", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const thread = within(await screen.findByRole("region", { name: "Conversation" }));
+    const add = thread.getByRole("button", { name: "Add to thread" });
+    const before = refusalFacts(add);
+
+    await user.click(add);
+    expectRefusalWeight(add, "touched");
+    expect(refusalFacts(add)).toEqual(before);
+
+    await user.type(thread.getByLabelText("Add a history message"), "Still there?");
+    await user.click(add);
+    expect(thread.getByText("Still there?")).toBeVisible();
+    expectRefused(add, "Write the message before adding it to the thread.");
+    expectRefusalWeight(add, "hint");
   });
 
   it("refuses to add an empty message, or one with no time, and says which", async () => {

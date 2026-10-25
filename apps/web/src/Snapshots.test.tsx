@@ -22,7 +22,14 @@ import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
 import { mainCards, panelCards, sidePanel } from "./test/panel";
-import { expectBusy, expectRefused, submitWithoutPressing } from "./test/refused";
+import {
+  expectBusy,
+  expectNotRefused,
+  expectRefusalWeight,
+  expectRefused,
+  refusalFacts,
+  submitWithoutPressing,
+} from "./test/refused";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -574,6 +581,16 @@ describe("starting states", () => {
     expect(materialized).toHaveLength(0);
   });
 
+  it("says a cleared seed at the refusal's weight: only an edit can clear it (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const materialize = await screen.findByRole("button", { name: "Freeze snapshot" });
+    expectNotRefused(materialize);
+    await user.clear(screen.getByLabelText("Seed"));
+    expectRefused(materialize, "Enter the seed this starting state should be fingerprinted with.");
+    expectRefusalWeight(materialize, "touched");
+  });
+
   it("says what it is freezing while it runs, holds the press, and says what it froze", async () => {
     const user = userEvent.setup();
     let release: () => void = () => {};
@@ -725,6 +742,28 @@ describe("sandbox arms", () => {
     answer();
     await waitFor(() => expect(cloned).toHaveLength(1));
     expect(clones).toBe(1);
+  });
+
+  it("says an unlabelled arm as a hint until the operator presses Clone, and again after a clone (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    stored = { snapshots: [SNAPSHOT] };
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /^[a-f0-9]{12}…$/ }));
+    const panel = await screen.findByRole("region", { name: "Sandbox arms" });
+    const clone = within(panel).getByRole("button", { name: "Clone sandbox" });
+    expectRefusalWeight(clone, "hint");
+    const before = refusalFacts(clone);
+
+    await user.click(clone);
+    expectRefusalWeight(clone, "touched");
+    expect(refusalFacts(clone)).toEqual(before);
+    expect(cloned).toHaveLength(0);
+
+    await user.type(within(panel).getByLabelText("Arm label"), "Arm A");
+    await user.click(clone);
+    await waitFor(() => expect(cloned).toHaveLength(1));
+    await waitFor(() => expectRefused(clone, "Name the arm"));
+    expectRefusalWeight(clone, "hint");
   });
 
   it("refuses to clone an arm with no label", async () => {

@@ -264,7 +264,13 @@ function UnsavedChangesPrompt({
             ))}
           </div>
         ) : null}
-        {savableHere ? null : <RefusalLine id={reasonId}>{unsavableReason}</RefusalLine>}
+        {/* Touched from the first frame (ADR 0078): this prompt opens only because the operator
+            edited the work it refuses to save, and tried to leave it — the attempt is theirs. */}
+        {savableHere ? null : (
+          <RefusalLine id={reasonId} touched>
+            {unsavableReason}
+          </RefusalLine>
+        )}
         <div className="flex flex-wrap items-center justify-end gap-2">
           <button className={outlineButtonClasses} type="button" onClick={onStay} disabled={busy}>
             Stay on this page

@@ -31,7 +31,14 @@ import { expectWayBack } from "./test/header";
 import { expectPublicationPill, indexCard } from "./test/indexes";
 import { expectRulesInFieldOrder } from "./test/itemForm";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
-import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import {
+  expectBusy,
+  expectNotRefused,
+  expectRefusalWeight,
+  expectRefused,
+  refusalFacts,
+  submitWithoutPressing,
+} from "./test/refused";
 import { expectEditorOnRows, expectFieldRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -580,6 +587,60 @@ describe("customer workspace", () => {
       expectRefused(screen.getByRole("button", { name: "Attach to this shop" }), reason),
     );
     expect(screen.getByText(reason)).toBeVisible();
+  });
+
+  it("says there is nothing to attach as a hint until Attach is pressed (ADR 0078)", async () => {
+    server.use(
+      http.get("*/api/v1/customer-profiles", () =>
+        HttpResponse.json({ profiles: [MAYA] } satisfies CustomerProfileListResponse),
+      ),
+    );
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers`);
+    await screen.findByRole("link", { name: "Maya Laurent" });
+    await user.click(screen.getByRole("button", { name: "Attach existing" }));
+    const attach = screen.getByRole("button", { name: "Attach to this shop" });
+    const reason = "Every profile in the lab is already attached to this shop.";
+    await waitFor(() => expectRefused(attach, reason));
+    expectRefusalWeight(attach, "hint");
+    const before = refusalFacts(attach);
+
+    await user.click(attach);
+    expectRefusalWeight(attach, "touched");
+    expect(refusalFacts(attach)).toEqual(before);
+
+    // Closed and opened again, the panel is a new attempt.
+    await user.click(screen.getByRole("button", { name: "Attach existing" }));
+    await user.click(screen.getByRole("button", { name: "Attach existing" }));
+    expectRefusalWeight(screen.getByRole("button", { name: "Attach to this shop" }), "hint");
+  });
+
+  it("says an unchosen profile at the refusal's weight once a choice was made and taken back", async () => {
+    const user = userEvent.setup();
+    server.use(
+      // Two profiles to attach, so which one is a choice the page leaves to the operator.
+      http.get("*/api/v1/customer-profiles", ({ request }) => {
+        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
+        return HttpResponse.json({
+          profiles: scoped ? [MAYA] : [MAYA, UNATTACHED, SECOND_UNATTACHED],
+        } satisfies CustomerProfileListResponse);
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/customers`);
+    await screen.findByRole("link", { name: "Maya Laurent" });
+    await user.click(screen.getByRole("button", { name: "Attach existing" }));
+    await screen.findByRole("option", { name: /Tomás Rivera/ });
+    const attach = screen.getByRole("button", { name: "Attach to this shop" });
+    expectRefused(attach, "Choose the profile to attach.");
+    expectRefusalWeight(attach, "hint");
+    const before = refusalFacts(attach);
+
+    const select = screen.getByLabelText("Profile to attach");
+    await user.selectOptions(select, UNATTACHED.profile_id);
+    await user.selectOptions(select, "");
+    expectRefused(attach, "Choose the profile to attach.");
+    expectRefusalWeight(attach, "touched");
+    expect(refusalFacts(attach)).toEqual(before);
   });
 });
 

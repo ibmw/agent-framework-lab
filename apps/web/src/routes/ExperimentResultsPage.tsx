@@ -30,6 +30,7 @@ import {
 } from "../lib/evidence";
 import { NOTE_MAX_LENGTH } from "../lib/fieldRules";
 import { pythonStrip } from "../lib/pythonText";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import {
   addFormClasses,
   fieldControlClasses,
@@ -314,6 +315,10 @@ function NotesAndTags({
   const noteReasonId = useId();
   const tagEmpty = pythonStrip(tag) === "";
   const noteEmpty = pythonStrip(note) === "";
+  // Each form's refusal is a hint until the operator types in it or presses its action, and
+  // again once an add has emptied it (ADR 0078).
+  const tagTouch = useRefusalTouch();
+  const noteTouch = useRefusalTouch();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -347,7 +352,10 @@ function NotesAndTags({
     void write(
       () => addExperimentNote(shopId, experimentId, { body: pythonStrip(note) }),
       "This note could not be saved.",
-      () => setNote(""),
+      () => {
+        setNote("");
+        noteTouch.reset();
+      },
     );
   };
 
@@ -369,7 +377,10 @@ function NotesAndTags({
     }
     // The whole set every time, because that is what the contract takes: the backend folds
     // what was typed, so a tag already on the run comes back as the one chip it always was.
-    void file([...annotations.tags, pythonStrip(tag)], () => setTag(""));
+    void file([...annotations.tags, pythonStrip(tag)], () => {
+      setTag("");
+      tagTouch.reset();
+    });
   };
 
   return (
@@ -414,7 +425,11 @@ function NotesAndTags({
             </span>
           ))
         )}
-        <form className="flex flex-wrap items-center gap-2" onSubmit={submitTag}>
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={submitTag}
+          {...tagTouch.watch}
+        >
           <label className="sr-only" htmlFor="experiment-tag">
             Add a tag
           </label>
@@ -442,7 +457,7 @@ function NotesAndTags({
             Add tag
           </PrimaryAction>
           {tagEmpty ? (
-            <RefusalLine id={tagReasonId} className="w-full">
+            <RefusalLine id={tagReasonId} touched={tagTouch.touched} className="w-full">
               {TAG_EMPTY}
             </RefusalLine>
           ) : null}
@@ -460,7 +475,7 @@ function NotesAndTags({
         </ul>
       ) : null}
 
-      <form className={addFormClasses} onSubmit={submitNote}>
+      <form className={addFormClasses} onSubmit={submitNote} {...noteTouch.watch}>
         <label className="sr-only" htmlFor="experiment-note">
           Add a note
         </label>
@@ -482,7 +497,11 @@ function NotesAndTags({
             <ButtonIcon verb="create" />
             Add note
           </PrimaryAction>
-          {noteEmpty ? <RefusalLine id={noteReasonId}>{NOTE_EMPTY}</RefusalLine> : null}
+          {noteEmpty ? (
+            <RefusalLine id={noteReasonId} touched={noteTouch.touched}>
+              {NOTE_EMPTY}
+            </RefusalLine>
+          ) : null}
         </div>
       </form>
     </Card>

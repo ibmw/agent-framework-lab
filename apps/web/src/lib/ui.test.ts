@@ -37,6 +37,8 @@ import {
   itemRemoveButtonClasses,
   readOnlyTextClasses,
   readOnlyValueClasses,
+  refusalHintClasses,
+  refusalLineClasses,
   searchFieldClasses,
   searchFieldIconClasses,
   searchFieldRowClasses,
@@ -221,6 +223,54 @@ describe("the validation message", () => {
       ["font-semibold", "text-[13px]", "text-lab-error"].sort(),
     );
     expect(themeSource).toMatch(/--color-lab-error:\s*#9d3028;/);
+  });
+});
+
+/** WCAG 2.2's relative luminance and contrast ratio, for two `#rrggbb` values. */
+function contrast(foreground: string, background: string): number {
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((at) => {
+      const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const [light, dark] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+  return (light + 0.05) / (dark + 0.05);
+}
+
+describe("a refusal's line (ADR 0078)", () => {
+  const token = (name: string) =>
+    new RegExp(`--color-${name}:\\s*(#[0-9a-f]{6})`).exec(themeSource)?.[1] ?? "";
+
+  it("is the handoff's hint while untouched — 13px, 400, #42474c — and the validation message after", () => {
+    expect(refusalHintClasses.split(" ").sort()).toEqual(
+      ["font-normal", "text-[13px]", "text-admin-ink-soft"].sort(),
+    );
+    expect(token("admin-ink-soft")).toBe("#42474c");
+    expect(refusalLineClasses(false)).toBe(refusalHintClasses);
+    expect(refusalLineClasses(true)).toBe(validationMessageClasses);
+  });
+
+  it("meets WCAG AA for 13px text on every ground a refusal is drawn on", () => {
+    // The card, the lab's paper and canvas, the admin canvas, and the ground a list item and
+    // the blocked weight are drawn on — read off `itemClasses`, which a refusal sits beside.
+    const itemGround = /bg-\[(#[0-9a-f]{6})\]/.exec(itemClasses(false))?.[1] ?? "";
+    expect(blockedButtonClasses).toContain(`bg-[${itemGround}]`);
+    const grounds = [
+      token("admin-surface"),
+      token("admin-canvas"),
+      token("lab-paper"),
+      token("lab-canvas"),
+      token("lab-canvas-bottom"),
+      itemGround,
+    ];
+    for (const ground of grounds) {
+      expect(ground).toMatch(/^#[0-9a-f]{6}$/);
+      expect(contrast(token("admin-ink-soft"), ground), ground).toBeGreaterThanOrEqual(4.5);
+    }
+    // Why not `admin-muted`: on the lab's canvas it falls under AA for text this size.
+    expect(contrast(token("admin-muted"), token("lab-canvas"))).toBeLessThan(4.5);
   });
 });
 

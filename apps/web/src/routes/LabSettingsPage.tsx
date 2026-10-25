@@ -52,6 +52,7 @@ import {
   writeTimestampFormat,
 } from "../lib/preferences";
 import { pythonStrip } from "../lib/pythonText";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import {
   cardTitleClasses,
   focusRingClasses,
@@ -530,6 +531,10 @@ function ConnectionCard({
   // a trailing slash, a shouted host or `:443` on the saved endpoint is nothing to save.
   const moves = !sameEndpoint(endpoint, saved?.base_url ?? "");
   const dirty = moves || key !== null;
+  // The connection's refusal is a hint until the operator has edited the card — a field, a
+  // preset, *Replace key* or *Keep the current key* — or pressed Save or Test while refused
+  // (ADR 0078). Save sits above the card, outside what `watch` hears, so it reports its press.
+  const connectionTouch = useRefusalTouch();
   /**
    * Where a key is about to go, when a saved connection points somewhere else. A key left
    * unsent is the saved one (ADR 0052: "falling back to the saved one"), so moving the endpoint
@@ -691,6 +696,7 @@ function ConnectionCard({
             type="button"
             variant="accent"
             refusal={blockedBy === null ? null : { id: reasonId, reason: blockedBy }}
+            onRefusedPress={connectionTouch.touch}
             busy={saving}
             onClick={save}
           >
@@ -702,163 +708,169 @@ function ConnectionCard({
 
       {/* No title and no label: the zone's own `h2` is the landmark, and a second named
           region inside it would give one place two names. */}
-      <Card>
-        <FieldRows>
-          <FieldGroup label="Endpoint preset" hint={preset.note}>
-            {/* Native radios under the prototype's chips, because *a closed set is named
+      <div {...connectionTouch.watch}>
+        <Card>
+          <FieldRows>
+            <FieldGroup label="Endpoint preset" hint={preset.note}>
+              {/* Native radios under the prototype's chips, because *a closed set is named
                 radios* and the prototype's own chips are `div`s with no role and no name.
                 They choose an endpoint rather than a provider: every one of them is saved
                 under the same provider id, which is the protocol this lab has proven it can
                 speak rather than the company (ADR 0052). */}
-            <div className="flex flex-wrap gap-[7px]">
-              {ENDPOINT_PRESETS.map((option) => (
-                <label
-                  key={option.id}
-                  className={
-                    option.id === preset.id ? chosenPresetChipClasses : offeredPresetChipClasses
-                  }
-                >
-                  <input
-                    type="radio"
-                    className="sr-only"
-                    name={`${presets}-endpoint`}
-                    checked={option.id === preset.id}
-                    disabled={saving}
-                    onChange={() => choosePreset(option.baseUrl)}
-                  />
-                  {option.id === preset.id ? <span aria-hidden>✓</span> : null}
-                  {option.label}
-                </label>
-              ))}
-            </div>
-          </FieldGroup>
-
-          <Field
-            label="Base URL"
-            hint="Must speak the OpenAI chat-completions API. A native Anthropic or Bedrock endpoint will not work here — those arms run through the frameworks the build already proves. Plain http reaches a loopback or private host only, so a key is never sent across the internet in the clear."
-          >
-            <input
-              type="url"
-              className={`${idControlClasses} w-full`}
-              placeholder="http://localhost:11434/v1"
-              value={baseUrl}
-              disabled={saving}
-              onChange={(event) => typeEndpoint(event.target.value)}
-            />
-          </Field>
-
-          {saved?.key_configured === true && typed === null ? (
-            <FieldGroup
-              label="API key"
-              hint={
-                unreadable
-                  ? "This API cannot open the stored key: AGENT_LAB_CREDENTIAL_KEY is unset, or is not the one the key was saved under. The lab reaches nothing and does not fall back to the environment. Set that variable if it is unset — a key cannot be saved without it — then replace the key with the one you mean and save the connection again."
-                  : "Stored encrypted and never served back — not the value, not a prefix or a suffix, not a length, not a hash. What this lab can say about it is that one is installed and when it was saved; to change it, save the one you mean."
-              }
-              extra={keyDestination}
-            >
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Weighted rather than red, as the read-out's own remedy line is: *the warm
-                    red is destructive and nothing else*, and this is an instruction. */}
-                <p
-                  className={`${readOnlyValueClasses} flex-1 ${unreadable ? "font-semibold" : ""}`}
-                >
-                  {unreadable
-                    ? "Stored, but this lab cannot read it"
-                    : saved.key_added_at === null
-                      ? "Configured"
-                      : `Configured ${formatTimestamp(saved.key_added_at)}`}
-                </p>
-                <button
-                  type="button"
-                  className={subtleButtonClasses}
-                  disabled={saving}
-                  onClick={() => typeKey("")}
-                >
-                  Replace
-                </button>
-              </div>
-            </FieldGroup>
-          ) : saved?.key_configured === true ? (
-            // Replace was pressed. A key is still installed and is still what a run uses, so
-            // the row says so and offers the way back to the read-out — without which an
-            // operator who changed their mind would be left with an empty optional field
-            // reading as though no key were stored, and nothing to press but Discard, which
-            // would also put back any endpoint they had typed.
-            <FieldGroup
-              label="API key"
-              hint={
-                unreadable
-                  ? "The stored key cannot be read, so leaving this empty keeps it and the lab stays offline. Type the key you mean and save the connection."
-                  : "The installed key is kept, and used, until you save another; leaving this empty keeps it too. Stored encrypted under AGENT_LAB_CREDENTIAL_KEY and never shown again."
-              }
-              extra={keyDestination}
-            >
-              <div className="flex flex-wrap items-center gap-3">
-                {keyInput("min-w-0 flex-1")}
-                <button
-                  type="button"
-                  className={subtleButtonClasses}
-                  disabled={saving}
-                  onClick={() => typeKey(null)}
-                >
-                  Keep the current key
-                </button>
-              </div>
-            </FieldGroup>
-          ) : (
-            <Field
-              label="API key"
-              optional
-              hint="Only if your endpoint asks for one: a local Ollama or vLLM does not, and an arm against one is the case this zone exists for. Stored encrypted under AGENT_LAB_CREDENTIAL_KEY and never shown again."
-              extra={keyDestination}
-            >
-              {keyInput()}
-            </Field>
-          )}
-
-          <FieldGroup
-            label="Connection"
-            hint="Asks the endpoint above for its model list, once, under a short timeout. Nothing is recorded and no experiment is touched, and the answer is true of the moment it was asked rather than a promise about the next run."
-          >
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* No glyph: the prototype's bolt is one of the two marks outside this
-                  workspace's verb vocabulary (`lib/ui.ts`, `buttonIcon`). */}
-              <PrimaryAction
-                type="button"
-                variant="outline"
-                refusal={blockedBy === null ? null : { id: reasonId, reason: blockedBy }}
-                busy={testing || saving}
-                onClick={test}
-              >
-                {testing ? "Reaching the endpoint…" : "Test connection"}
-              </PrimaryAction>
-              {/* Mounted whether or not it has anything to say, so an answer is announced
-                  rather than appearing as a new element. */}
-              <p role="status" className="text-[13px]">
-                {answered === null ? (
-                  ""
-                ) : (
-                  <span
-                    className={`${probeChipClasses} ${
-                      answered.tone === "good"
-                        ? "bg-admin-chip text-lab-primary"
-                        : "bg-lab-error-tint text-lab-error"
-                    }`}
+              <div className="flex flex-wrap gap-[7px]">
+                {ENDPOINT_PRESETS.map((option) => (
+                  <label
+                    key={option.id}
+                    className={
+                      option.id === preset.id ? chosenPresetChipClasses : offeredPresetChipClasses
+                    }
                   >
-                    <span aria-hidden>{answered.tone === "good" ? "●" : "○"}</span>
-                    {answered.sentence}
-                  </span>
-                )}
-              </p>
-            </div>
-          </FieldGroup>
-        </FieldRows>
-      </Card>
+                    <input
+                      type="radio"
+                      className="sr-only"
+                      name={`${presets}-endpoint`}
+                      checked={option.id === preset.id}
+                      disabled={saving}
+                      onChange={() => choosePreset(option.baseUrl)}
+                    />
+                    {option.id === preset.id ? <span aria-hidden>✓</span> : null}
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </FieldGroup>
+
+            <Field
+              label="Base URL"
+              hint="Must speak the OpenAI chat-completions API. A native Anthropic or Bedrock endpoint will not work here — those arms run through the frameworks the build already proves. Plain http reaches a loopback or private host only, so a key is never sent across the internet in the clear."
+            >
+              <input
+                type="url"
+                className={`${idControlClasses} w-full`}
+                placeholder="http://localhost:11434/v1"
+                value={baseUrl}
+                disabled={saving}
+                onChange={(event) => typeEndpoint(event.target.value)}
+              />
+            </Field>
+
+            {saved?.key_configured === true && typed === null ? (
+              <FieldGroup
+                label="API key"
+                hint={
+                  unreadable
+                    ? "This API cannot open the stored key: AGENT_LAB_CREDENTIAL_KEY is unset, or is not the one the key was saved under. The lab reaches nothing and does not fall back to the environment. Set that variable if it is unset — a key cannot be saved without it — then replace the key with the one you mean and save the connection again."
+                    : "Stored encrypted and never served back — not the value, not a prefix or a suffix, not a length, not a hash. What this lab can say about it is that one is installed and when it was saved; to change it, save the one you mean."
+                }
+                extra={keyDestination}
+              >
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Weighted rather than red, as the read-out's own remedy line is: *the warm
+                    red is destructive and nothing else*, and this is an instruction. */}
+                  <p
+                    className={`${readOnlyValueClasses} flex-1 ${unreadable ? "font-semibold" : ""}`}
+                  >
+                    {unreadable
+                      ? "Stored, but this lab cannot read it"
+                      : saved.key_added_at === null
+                        ? "Configured"
+                        : `Configured ${formatTimestamp(saved.key_added_at)}`}
+                  </p>
+                  <button
+                    type="button"
+                    className={subtleButtonClasses}
+                    disabled={saving}
+                    onClick={() => typeKey("")}
+                  >
+                    Replace
+                  </button>
+                </div>
+              </FieldGroup>
+            ) : saved?.key_configured === true ? (
+              // Replace was pressed. A key is still installed and is still what a run uses, so
+              // the row says so and offers the way back to the read-out — without which an
+              // operator who changed their mind would be left with an empty optional field
+              // reading as though no key were stored, and nothing to press but Discard, which
+              // would also put back any endpoint they had typed.
+              <FieldGroup
+                label="API key"
+                hint={
+                  unreadable
+                    ? "The stored key cannot be read, so leaving this empty keeps it and the lab stays offline. Type the key you mean and save the connection."
+                    : "The installed key is kept, and used, until you save another; leaving this empty keeps it too. Stored encrypted under AGENT_LAB_CREDENTIAL_KEY and never shown again."
+                }
+                extra={keyDestination}
+              >
+                <div className="flex flex-wrap items-center gap-3">
+                  {keyInput("min-w-0 flex-1")}
+                  <button
+                    type="button"
+                    className={subtleButtonClasses}
+                    disabled={saving}
+                    onClick={() => typeKey(null)}
+                  >
+                    Keep the current key
+                  </button>
+                </div>
+              </FieldGroup>
+            ) : (
+              <Field
+                label="API key"
+                optional
+                hint="Only if your endpoint asks for one: a local Ollama or vLLM does not, and an arm against one is the case this zone exists for. Stored encrypted under AGENT_LAB_CREDENTIAL_KEY and never shown again."
+                extra={keyDestination}
+              >
+                {keyInput()}
+              </Field>
+            )}
+
+            <FieldGroup
+              label="Connection"
+              hint="Asks the endpoint above for its model list, once, under a short timeout. Nothing is recorded and no experiment is touched, and the answer is true of the moment it was asked rather than a promise about the next run."
+            >
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* No glyph: the prototype's bolt is one of the two marks outside this
+                  workspace's verb vocabulary (`lib/ui.ts`, `buttonIcon`). */}
+                <PrimaryAction
+                  type="button"
+                  variant="outline"
+                  refusal={blockedBy === null ? null : { id: reasonId, reason: blockedBy }}
+                  busy={testing || saving}
+                  onClick={test}
+                >
+                  {testing ? "Reaching the endpoint…" : "Test connection"}
+                </PrimaryAction>
+                {/* Mounted whether or not it has anything to say, so an answer is announced
+                  rather than appearing as a new element. */}
+                <p role="status" className="text-[13px]">
+                  {answered === null ? (
+                    ""
+                  ) : (
+                    <span
+                      className={`${probeChipClasses} ${
+                        answered.tone === "good"
+                          ? "bg-admin-chip text-lab-primary"
+                          : "bg-lab-error-tint text-lab-error"
+                      }`}
+                    >
+                      <span aria-hidden>{answered.tone === "good" ? "●" : "○"}</span>
+                      {answered.sentence}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </FieldGroup>
+          </FieldRows>
+        </Card>
+      </div>
 
       {/* The one line both refused controls name (ADR 0063): a keyboard reader who lands on
           either is told it, and it is on screen for everyone else. */}
-      {blockedBy === null ? null : <RefusalLine id={reasonId}>{blockedBy}</RefusalLine>}
+      {blockedBy === null ? null : (
+        <RefusalLine id={reasonId} touched={connectionTouch.touched}>
+          {blockedBy}
+        </RefusalLine>
+      )}
       {refusal === null ? null : (
         <p role="alert" className="text-[13px] leading-relaxed text-lab-error">
           {refusal}

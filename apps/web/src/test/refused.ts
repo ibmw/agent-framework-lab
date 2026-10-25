@@ -1,5 +1,6 @@
 import { act } from "@testing-library/react";
 import { expect } from "vitest";
+import { refusalHintClasses, validationMessageClasses } from "../lib/ui";
 
 function literally(text: string): RegExp {
   return new RegExp(text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&"));
@@ -119,4 +120,43 @@ export async function submitWithoutPressing(button: HTMLElement) {
     form?.requestSubmit(button as HTMLButtonElement);
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+/**
+ * The weight a refused action's own line is drawn at (ADR 0078): the hint while its form is
+ * untouched, the validation message once the operator has edited it or pressed the action. The
+ * line is the one the button's refusal names, so this reads what the button points at rather
+ * than a sentence found by its text — or a sentence inside it, which must be inside it.
+ */
+export function expectRefusalWeight(
+  button: HTMLElement,
+  weight: "hint" | "touched",
+  /** One sentence of a block the refusal names, where the block holds several (`PublishReasons`). */
+  sentence?: HTMLElement,
+) {
+  const block = refusalElement(button);
+  const line = sentence ?? block;
+  expect(block.contains(line), "the sentence is inside the line the refusal names").toBe(true);
+  const wanted = (weight === "hint" ? refusalHintClasses : validationMessageClasses).split(" ");
+  const other = (weight === "hint" ? validationMessageClasses : refusalHintClasses).split(" ");
+  expect(line.className.split(/\s+/), `the refusal's line is the ${weight}`).toEqual(
+    expect.arrayContaining(wanted),
+  );
+  for (const utility of other.filter((entry) => !wanted.includes(entry))) {
+    expect(line, `the ${weight} does not wear ${utility}`).not.toHaveClass(utility);
+  }
+}
+
+/**
+ * What a refused action says to whoever reaches it — `aria-disabled`, `title`, the ids it is
+ * described by and their text — so a test can hold it unchanged while the line's weight moves.
+ */
+export function refusalFacts(button: HTMLElement) {
+  return {
+    ariaDisabled: button.getAttribute("aria-disabled"),
+    disabled: button.hasAttribute("disabled"),
+    title: button.getAttribute("title"),
+    describedBy: button.getAttribute("aria-describedby"),
+    description: describedText(button),
+  };
 }

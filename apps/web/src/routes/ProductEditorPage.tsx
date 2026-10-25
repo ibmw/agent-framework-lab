@@ -26,7 +26,7 @@ import {
 } from "../components/ItemList";
 import { MediaDropZone } from "../components/MediaDropZone";
 import { MediaLibrary } from "../components/MediaLibrary";
-import { PrimaryAction } from "../components/PrimaryAction";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { ProductDeleteConfirm } from "../components/ProductDeleteConfirm";
 import {
   Card,
@@ -116,6 +116,7 @@ import {
 } from "../lib/productEntries";
 import { type DraftProduct, productEntryState, productKeyIn } from "../lib/productKeys";
 import { pythonStrip } from "../lib/pythonText";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import {
   consequenceOf,
   findingClauses,
@@ -976,6 +977,10 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   const skuRuleId = useId();
   const skuRefusalId = useId();
   const editNoticeId = useId();
+  // The open row's refusal is a hint until the operator edits a cell of that row or presses
+  // its refused Save, and opening another row — or closing this one — starts a new attempt
+  // (ADR 0078).
+  const skuTouch = useRefusalTouch();
   // The prefix of each row's two gate lines — the unpriced variant under its price, the empty
   // in-stock variant under its stock — which are per row, so the SKU completes the id.
   const rowFindingId = useId();
@@ -1052,6 +1057,12 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   // the same constant the pattern is built from, so the edit path refuses exactly what the
   // add form's submit refuses rather than letting "NS ASJ_1" wait for the publish gate.
   const skuMisshapen = openSku !== "" && !isVariantSku(openSku);
+  const openRow = editor.open?.label ?? null;
+  const [attemptFor, setAttemptFor] = useState(openRow);
+  if (attemptFor !== openRow) {
+    setAttemptFor(openRow);
+    skuTouch.reset();
+  }
   const skuRefusal =
     editor.open === null
       ? null
@@ -1118,7 +1129,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
               const unpricedId = `${rowFindingId}-price-${variant.sku}`;
               const emptyInStockId = `${rowFindingId}-stock-${variant.sku}`;
               return (
-                <tr key={variant.sku}>
+                <tr key={variant.sku} {...(rowEdit ? skuTouch.watch : {})}>
                   <td className={tableCellClasses}>
                     {rowEdit ? (
                       <>
@@ -1354,11 +1365,16 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
       <p id={skuRuleId} className={editor.open ? "text-xs text-admin-muted" : "sr-only"}>
         {VARIANT_SKU_RENAME_RULE}
       </p>
-      {skuRefusal === null ? null : (
-        <p id={skuRefusalId} role="alert" className={validationMessageClasses}>
-          {skuRefusal}
-        </p>
-      )}
+      {/* Polite, and mounted while empty, as every form below a list's line is: a refusal that
+          appears as the operator types is heard without taking them out of the field, and a row
+          opened on a refused SKU is not announced over the press that opened it (ADR 0078). */}
+      <div aria-live="polite" aria-atomic="true">
+        {skuRefusal === null ? null : (
+          <RefusalLine id={skuRefusalId} touched={skuTouch.touched}>
+            {skuRefusal}
+          </RefusalLine>
+        )}
+      </div>
       <EntryEditNotice id={editNoticeId} label={editor.open?.label ?? null} />
       <RemovalNotice removal={removal} />
 

@@ -1,5 +1,6 @@
-import type { FormEvent, ReactNode } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import type { ItemRefusal } from "../lib/itemForm";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import type { Removal } from "../lib/removal";
 import {
   itemClasses,
@@ -285,12 +286,24 @@ export function ItemFormRow({
   onCancel: () => void;
   children: ReactNode;
 }) {
+  // The form's refusal is a hint until the operator edits a field or presses the refused action
+  // (ADR 0078). Opening an entry, putting it back, or an accepted submit starts a new attempt.
+  const touch = useRefusalTouch();
+  const [attemptFor, setAttemptFor] = useState(editing);
+  if (attemptFor !== editing) {
+    setAttemptFor(editing);
+    touch.reset();
+  }
   return (
     <form
       onSubmit={(event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         onSubmit();
+        if (refusal === null) {
+          touch.reset();
+        }
       }}
+      {...touch.watch}
     >
       <FieldGroup label={title} hint={hint}>
         <div className={itemFormGridClasses}>{children}</div>
@@ -311,7 +324,11 @@ export function ItemFormRow({
           {/* Polite, and mounted while empty, so a reason that appears as the operator types
               is heard without taking them out of the field they are in. */}
           <div aria-live="polite" aria-atomic="true">
-            {refusal ? <RefusalLine id={reasonId}>{refusal.reason}</RefusalLine> : null}
+            {refusal ? (
+              <RefusalLine id={reasonId} touched={touch.touched}>
+                {refusal.reason}
+              </RefusalLine>
+            ) : null}
           </div>
         </div>
       </FieldGroup>

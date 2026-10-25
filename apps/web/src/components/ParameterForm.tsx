@@ -2,6 +2,7 @@ import type { BlockParameterKind } from "@agent-lab/contracts";
 import { type FormEvent, useId, useState } from "react";
 import { PARAMETER_KINDS, PARAMETERS_FULL, toIdentifier, uniqueParameterName } from "../lib/blocks";
 import { savedAsPreview } from "../lib/fieldPreviews";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import { addFormClasses, fieldControlClasses, fieldLabelClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
 import { FieldHint } from "./FieldHint";
@@ -30,6 +31,9 @@ export function ParameterForm({
   full: boolean;
 }) {
   const reasonId = useId();
+  // The cap is a hint until the operator types, picks a kind or presses Add at it, and again
+  // after an add was taken (ADR 0078).
+  const capTouch = useRefusalTouch();
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<BlockParameterKind>("document_reference");
   const identifier = uniqueParameterName(toIdentifier(label), taken);
@@ -41,10 +45,16 @@ export function ParameterForm({
     }
     onAdd(label, kind);
     setLabel("");
+    capTouch.reset();
   }
 
   return (
-    <form className={addFormClasses} aria-label="Add a parameter" onSubmit={submit}>
+    <form
+      className={addFormClasses}
+      aria-label="Add a parameter"
+      onSubmit={submit}
+      {...capTouch.watch}
+    >
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-40 flex-1">
           <FieldHint
@@ -87,7 +97,11 @@ export function ParameterForm({
           Add parameter
         </PrimaryAction>
       </div>
-      {full ? <RefusalLine id={reasonId}>{PARAMETERS_FULL}</RefusalLine> : null}
+      {full ? (
+        <RefusalLine id={reasonId} touched={capTouch.touched}>
+          {PARAMETERS_FULL}
+        </RefusalLine>
+      ) : null}
     </form>
   );
 }

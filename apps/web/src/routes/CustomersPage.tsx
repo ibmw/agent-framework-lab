@@ -25,6 +25,7 @@ import {
 import { filterList } from "../lib/filters";
 import { todayInput } from "../lib/orders";
 import { pythonStrip } from "../lib/pythonText";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import { useArrivedRemoval, useRemoval } from "../lib/removal";
 import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import {
@@ -109,6 +110,9 @@ export function CustomersPage() {
   // What the disclosure's button controls, so a reader it tells "expanded" can be taken there.
   const attachPanelId = useId();
   const attachReasonId = useId();
+  // A hint until the operator chooses a profile or presses *Attach to this shop*; opening the
+  // panel and an attach that was taken each start a new attempt (ADR 0078).
+  const attachTouch = useRefusalTouch();
   const [attachId, setAttachId] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -149,6 +153,7 @@ export function CustomersPage() {
     try {
       await attachCustomerProfileToShop(attachId, shopId);
       setAttachId("");
+      attachTouch.reset();
     } catch (cause: unknown) {
       setAttachError(describeApiError(cause, "The profile could not be attached."));
       setAttaching(false);
@@ -203,7 +208,10 @@ export function CustomersPage() {
               type="button"
               aria-expanded={attachOpen}
               aria-controls={attachPanelId}
-              onClick={() => setAttachOpen((open) => !open)}
+              onClick={() => {
+                setAttachOpen((open) => !open);
+                attachTouch.reset();
+              }}
             >
               <ButtonIcon verb="create" />
               Attach existing
@@ -225,7 +233,11 @@ export function CustomersPage() {
       {attachOpen ? (
         <div className="mb-4" id={attachPanelId}>
           <Card title="Attach an existing profile">
-            <form className="flex flex-wrap items-end gap-3" onSubmit={attach}>
+            <form
+              className="flex flex-wrap items-end gap-3"
+              onSubmit={attach}
+              {...attachTouch.watch}
+            >
               <label className={`${fieldLabelClasses} min-w-[260px] flex-1`}>
                 Profile
                 <select
@@ -261,7 +273,7 @@ export function CustomersPage() {
                 Attach to this shop
               </PrimaryAction>
               {attachRefusal === null ? null : (
-                <RefusalLine id={attachReasonId} className="w-full">
+                <RefusalLine id={attachReasonId} touched={attachTouch.touched} className="w-full">
                   {attachRefusal}
                 </RefusalLine>
               )}

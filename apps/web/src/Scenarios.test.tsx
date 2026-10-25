@@ -29,7 +29,9 @@ import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
   describedText,
   expectNotRefused,
+  expectRefusalWeight,
   expectRefused,
+  refusalFacts,
   submitWithoutPressing,
 } from "./test/refused";
 import { expectEditorOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
@@ -1551,6 +1553,48 @@ describe("the scenario's caps, each read on its own card", () => {
       expectRefused(add, cap);
     });
   }
+
+  it("says the cap as a hint until the picker is touched or Add pressed (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    current = { ...EMPTY_CONTENT, mutations: mutationsUpTo(8) };
+    const { unmount } = renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    await screen.findByRole("heading", { name: /^Wrong shipping address/ });
+    let add = within(screen.getByRole("region", { name: "Mutations" })).getByRole("button", {
+      name: "Add",
+    });
+    expectRefused(add, MUTATIONS_CAP);
+    expectRefusalWeight(add, "hint");
+    let before = refusalFacts(add);
+    await user.selectOptions(screen.getByLabelText("Add mutation block"), MUTATION_BLOCK_ID);
+    expectRefusalWeight(add, "touched");
+    expect(refusalFacts(add)).toEqual(before);
+    unmount();
+
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    await screen.findByRole("heading", { name: /^Wrong shipping address/ });
+    add = within(screen.getByRole("region", { name: "Mutations" })).getByRole("button", {
+      name: "Add",
+    });
+    expectRefusalWeight(add, "hint");
+    before = refusalFacts(add);
+    await user.click(add);
+    expectRefusalWeight(add, "touched");
+    expect(refusalFacts(add)).toEqual(before);
+  });
+
+  it("says the cap an add has just reached as a hint: nothing was refused", async () => {
+    const user = userEvent.setup();
+    current = { ...EMPTY_CONTENT, mutations: mutationsUpTo(7) };
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    await screen.findByRole("heading", { name: /^Wrong shipping address/ });
+
+    await addBlock(user, "Mutations", "Add mutation block", MUTATION_BLOCK_ID);
+    const add = within(screen.getByRole("region", { name: "Mutations" })).getByRole("button", {
+      name: "Add",
+    });
+    expectRefused(add, MUTATIONS_CAP);
+    expectRefusalWeight(add, "hint");
+  });
 
   it("opens a picker on the library's one template, and on it again after an add", async () => {
     const user = userEvent.setup();

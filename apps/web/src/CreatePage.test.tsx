@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { CreatePage } from "./components/CreatePage";
 import { stickyHeaderClasses } from "./lib/stickyHeader";
 import { blockedButtonClasses, neutralPillClasses, outlineButtonClasses } from "./lib/ui";
-import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectNotRefused, expectRefusalWeight, expectRefused, refusalFacts } from "./test/refused";
 
 /**
  * The create layout itself, over a form of one field (PLAN-UX Slice 12).
@@ -44,6 +44,10 @@ function Harness({ blocked = true }: { blocked?: boolean }) {
       >
         <label htmlFor="thing-name">Name</label>
         <input id="thing-name" value={name} onChange={(event) => setName(event.target.value)} />
+        {/* A chip, as the scenario's compose chips are: a press that edits, through no field. */}
+        <button type="button" aria-pressed={false}>
+          Rush
+        </button>
         <p>{created.length} created</p>
       </form>
     </CreatePage>
@@ -174,6 +178,47 @@ describe("the create page's blocked state", () => {
     await user.click(screen.getByRole("button", { name: "Create thing" }));
 
     expect(screen.getByText("1 created")).toBeVisible();
+  });
+});
+
+describe("the create page's refusal, muted until touched (ADR 0078)", () => {
+  const REASON = "The thing needs a name before it can be created.";
+
+  it("is a hint on a page nobody has typed on, and the refusal once a field was edited", async () => {
+    const user = userEvent.setup();
+    renderPage(<Harness />);
+    const create = screen.getByRole("button", { name: "Create thing" });
+    expectRefused(create, REASON);
+    expectRefusalWeight(create, "hint");
+    const before = refusalFacts(create);
+
+    await user.type(screen.getByLabelText("Name"), "H");
+    await user.clear(screen.getByLabelText("Name"));
+    expectRefusalWeight(create, "touched");
+    expect(refusalFacts(create)).toEqual(before);
+  });
+
+  it("turns at a press on Create, which sits in the header outside the form it submits", async () => {
+    const user = userEvent.setup();
+    renderPage(<Harness />);
+    const create = screen.getByRole("button", { name: "Create thing" });
+    const before = refusalFacts(create);
+
+    await user.click(create);
+    expectRefusalWeight(create, "touched");
+    expect(refusalFacts(create)).toEqual(before);
+    expect(screen.getByText("0 created")).toBeVisible();
+  });
+
+  it("turns at a press on a control in the form, and not at a click into a field", async () => {
+    const user = userEvent.setup();
+    renderPage(<Harness />);
+    const create = screen.getByRole("button", { name: "Create thing" });
+
+    await user.click(screen.getByLabelText("Name"));
+    expectRefusalWeight(create, "hint");
+    await user.click(screen.getByRole("button", { name: "Rush" }));
+    expectRefusalWeight(create, "touched");
   });
 });
 

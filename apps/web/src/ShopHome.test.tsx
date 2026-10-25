@@ -15,7 +15,13 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
 import { expectCreateGlyph } from "./test/indexes";
-import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
+import {
+  expectBusy,
+  expectNotRefused,
+  expectRefusalWeight,
+  expectRefused,
+  refusalFacts,
+} from "./test/refused";
 import { shellListings } from "./test/shell";
 
 /**
@@ -513,6 +519,23 @@ describe("publishing in two steps", () => {
     );
     expect(versions.getByText("Resolve 2 error(s) to publish.")).toBeVisible();
     expect(versions.getByText("1 warning(s) do not block publication.")).toBeVisible();
+  });
+
+  it("says the gate's refusal as a hint until the review is pressed (ADR 0078)", async () => {
+    currentPreview = preview({ publishable: false });
+    await openOverview();
+
+    const versions = within(card("Versions of this shop"));
+    const review = versions.getByRole("button", { name: "Review 3 changes & publish" });
+    const reason = versions.getByText("Resolve 2 error(s) to publish.");
+    expectRefusalWeight(review, "hint", reason);
+    const before = refusalFacts(review);
+
+    await userEvent.click(review);
+    expectRefusalWeight(review, "touched", reason);
+    expect(refusalFacts(review)).toEqual(before);
+    // The press was swallowed: no review opened.
+    expect(versions.getByRole("button", { name: "Review 3 changes & publish" })).toBe(review);
   });
 
   it("offers nothing to review when the draft matches what is published", async () => {

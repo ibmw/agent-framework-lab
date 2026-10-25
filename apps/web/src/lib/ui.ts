@@ -554,6 +554,28 @@ export const blockedButtonClasses = `${buttonShapeClasses} ${focusRingClasses} c
 export const validationMessageClasses = "text-[13px] font-semibold text-lab-error";
 
 /**
+ * A refused action's reason while nobody has touched its form (ADR 0078): the handoff's hint —
+ * "13px/1.5; #42474c" (`tmp/design-frames/README.md`, *The form pattern*) — rather than its
+ * validation message. The words are the same and so is the button; the line only stops
+ * shouting about a press nobody has made. `admin-ink-soft` is `#42474c`, 7.8:1 or better on
+ * every ground a refusal is drawn on, where `admin-muted` falls to 4.4:1 on the lab canvas.
+ * `font-normal` is the README's 400, set rather than inherited, since a line can sit in a
+ * parent at another weight. The leading is left to the parent, as the validation message's is,
+ * so the line keeps its height when it turns and nothing below it moves.
+ */
+export const refusalHintClasses = "text-[13px] font-normal text-admin-ink-soft";
+
+/**
+ * The weight a refusal's own line reads at: the hint while its form is untouched, the
+ * validation message once the operator has edited the form or pressed the refused action
+ * (ADR 0078, amending ADR 0063). `RefusalLine` draws it; a reason drawn as more than one line —
+ * `PublishReasons`, Start's list — wears it too, so one rule reads one way everywhere.
+ */
+export function refusalLineClasses(touched: boolean): string {
+  return touched ? validationMessageClasses : refusalHintClasses;
+}
+
+/**
  * One entry of a list edited in the form below it (`ListItem`, ADR 0072, ADR 0074): 11px 14px
  * on a 9px radius, `admin-border` on `#fafbfb`, and the methods handoff's pine border and ground
  * (`#8fc3a5` on `#f1f8f3`) while the form holds it.

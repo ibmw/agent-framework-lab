@@ -44,6 +44,7 @@ import {
 } from "../lib/evidence";
 import { TEXT_MAX_LENGTH } from "../lib/fieldRules";
 import { pythonStrip } from "../lib/pythonText";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import {
   fieldLabelClasses,
   formatTimestamp,
@@ -111,6 +112,9 @@ export function ExperimentBenchPage() {
   const [action, setAction] = useState<BenchAction | null>(null);
   const running = action !== null && !action.settled;
   const sendReasonId = useId();
+  // Every arm having completed is nothing the operator can edit, so the composer's refusal is
+  // a hint until they type a message, tick an arm or press Send (ADR 0078).
+  const sendTouch = useRefusalTouch();
   const runNoteId = useId();
   const scoreNoteId = useId();
 
@@ -222,6 +226,7 @@ export function ExperimentBenchPage() {
       });
       delivered = true;
       setMessage("");
+      sendTouch.reset();
       // The message is in both threads before either arm answers it.
       await load().catch(() => setError(UNAVAILABLE));
       await runAgents(reached);
@@ -417,6 +422,7 @@ export function ExperimentBenchPage() {
               className="grid gap-3"
               hidden={experiment.participant_driver !== "human"}
               onSubmit={send}
+              {...sendTouch.watch}
             >
               <label className={fieldLabelClasses}>
                 Message
@@ -453,7 +459,9 @@ export function ExperimentBenchPage() {
                 {running ? "Running…" : "Send as the customer"}
               </PrimaryAction>
               {experiment.runs.some(driveable) ? null : (
-                <RefusalLine id={sendReasonId}>{EVERY_ARM_COMPLETED}</RefusalLine>
+                <RefusalLine id={sendReasonId} touched={sendTouch.touched}>
+                  {EVERY_ARM_COMPLETED}
+                </RefusalLine>
               )}
             </form>
           </Card>

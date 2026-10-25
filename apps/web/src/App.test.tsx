@@ -60,8 +60,10 @@ import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
   describedText,
   expectNotRefused,
+  expectRefusalWeight,
   expectRefused,
   refusalElement,
+  refusalFacts,
   submitWithoutPressing,
 } from "./test/refused";
 import { expectEditorOnRows, expectRunsOpenOnARow } from "./test/rows";
@@ -3163,6 +3165,65 @@ describe("editing a saved entry in place", () => {
     ]);
   });
 
+  it("says an open row's refused Save as a hint until the row is edited or Save pressed (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    // A SKU the lab stored before its shape was checked: the row opens refused, untouched.
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...READY_CONTENT.products[0],
+          variants: [{ ...READY_CONTENT.products[0].variants[0], sku: "NS ASJ ODD" }],
+        },
+      ],
+    };
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+
+    await user.click(variants.getByRole("button", { name: "Edit NS ASJ ODD" }));
+    let save = variants.getByRole("button", { name: "Save NS ASJ ODD" });
+    expectRefused(save, VARIANT_SKU_RENAME_RULE);
+    expectRefusalWeight(save, "hint");
+    const before = refusalFacts(save);
+    // An edit of another field of the open row leaves the SKU, and so the refusal, as it was.
+    await user.selectOptions(variants.getByLabelText("Size for NS ASJ ODD"), "L");
+    expectRefusalWeight(save, "touched");
+    expect(refusalFacts(save)).toEqual(before);
+
+    // Put back and opened again: a new attempt, then a press on the refused Save.
+    await user.click(variants.getByRole("button", { name: "Cancel editing NS ASJ ODD" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS ASJ ODD" }));
+    save = variants.getByRole("button", { name: "Save NS ASJ ODD" });
+    expectRefusalWeight(save, "hint");
+    const again = refusalFacts(save);
+    await user.click(save);
+    expectRefusalWeight(save, "touched");
+    expect(refusalFacts(save)).toEqual(again);
+  });
+
+  it("says a row's SKU refusal in a polite region that was already there, never an alert", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    const sku = variants.getByLabelText("SKU for NS-ASJ-OB-M");
+    // The rename rule describes the field; the region the refusal will be said in follows it,
+    // mounted and empty while the SKU is one the row can save.
+    const rule = document.getElementById(sku.getAttribute("aria-describedby") ?? "");
+    const region = rule?.nextElementSibling as HTMLElement;
+    expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).toHaveAttribute("aria-atomic", "true");
+    expect(region).toBeEmptyDOMElement();
+
+    await user.clear(sku);
+    const save = variants.getByRole("button", { name: "Save NS-ASJ-OB-M" });
+    expectRefused(save, "A variant needs a SKU.");
+    expect(refusalElement(save).parentElement).toBe(region);
+    expect(region).toHaveTextContent("A variant needs a SKU.");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("refuses a SKU another variant already holds, rather than merging two rows", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
@@ -6097,6 +6158,21 @@ describe("unsaved work is protected", () => {
 
     await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Lab settings" })).toBeVisible();
+  });
+
+  it("says why Save and leave is refused at the refusal's weight from the first frame (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.selectOptions(variants.getByLabelText("Size for NS-ASJ-OB-M"), "L");
+    await user.click(screen.getByRole("link", { name: "Settings" }));
+
+    // The prompt opens only on work the operator edited and tried to leave: it is theirs.
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    const save = within(prompt).getByRole("button", { name: "Save and leave" });
+    expectRefused(save, /Stay, then press the row's own Save or Cancel/);
+    expectRefusalWeight(save, "touched");
   });
 
   it("does nothing when the refused Save and leave is pressed: the page stays, and so does the row", async () => {

@@ -37,13 +37,14 @@ import {
 } from "../lib/experimentStart";
 import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
 import { unreachableArmsNote } from "../lib/modelConnections";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import {
   fieldControlClasses,
   formatTimestamp,
+  refusalLineClasses,
   tableCellClasses,
   tableHeadClasses,
-  validationMessageClasses,
 } from "../lib/ui";
 import { useReachability } from "../lib/useUnreachableProviders";
 import { newestVersion, versionOptionLabel } from "../lib/versions";
@@ -230,6 +231,9 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   const reachability = useReachability();
   const unreachable = reachability.status === "loaded" ? reachability.unreachable : null;
   const startNoteId = useId();
+  // What Start waits for is a hint list on a form nobody has filled in yet, and the validation
+  // message once the operator has changed a field, pressed a control or pressed Start (ADR 0078).
+  const startTouch = useRefusalTouch();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -641,7 +645,11 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
         </div>
       ) : null}
 
-      <form className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]" onSubmit={start}>
+      <form
+        className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]"
+        onSubmit={start}
+        {...startTouch.watch}
+      >
         <div className="grid min-w-0 content-start gap-4">
           <Card label="Experiment setup">
             <FieldRows>
@@ -842,7 +850,10 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
               {working ? "Starting…" : "Start experiment"}
             </PrimaryAction>
             {working || reasons.length === 0 ? null : (
-              <ul id={startNoteId} className={`${validationMessageClasses} grid gap-1`}>
+              <ul
+                id={startNoteId}
+                className={`${refusalLineClasses(startTouch.touched)} grid gap-1`}
+              >
                 {reasons.map((reason, index) => (
                   // Two arms can raise one finding in one sentence; the position tells them apart.
                   // biome-ignore lint/suspicious/noArrayIndexKey: the list is rebuilt, never reordered

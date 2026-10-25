@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import { clearStickyHeader, stickyHeaderClasses } from "../lib/stickyHeader";
 import { neutralPillClasses, outlineButtonClasses, validationMessageClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
@@ -93,6 +94,11 @@ export function CreatePage({
   const blocked = blockedBy !== undefined;
   const reasonId = "create-page-reason";
   const errorId = "create-page-error";
+  // Why Create is refused is a hint on a page nobody has typed on yet, and the validation
+  // message once a field has changed, a control in the form has been pressed, or Create has
+  // been pressed (ADR 0078). Create sits in the header, outside the form it submits, so it
+  // reports its own press.
+  const touch = useRefusalTouch();
 
   return (
     <>
@@ -115,6 +121,7 @@ export function CreatePage({
             type="submit"
             form={formId}
             refusal={blocked ? { id: reasonId, reason: blockedBy } : null}
+            onRefusedPress={touch.touch}
             busy={creating}
             aria-describedby={!blocked && error ? errorId : undefined}
           >
@@ -127,7 +134,7 @@ export function CreatePage({
             editor's is: the header holds or not without it (ADR 0066). */}
         <HeaderReport className="w-full">
           {blocked ? (
-            <RefusalLine id={reasonId} className="w-full text-right">
+            <RefusalLine id={reasonId} touched={touch.touched} className="w-full text-right">
               {blockedBy}
             </RefusalLine>
           ) : null}
@@ -144,7 +151,9 @@ export function CreatePage({
       </header>
 
       {/* 790px, the measure `form-decisions.md` 1.5 asks for and the prototype's own column. */}
-      <div className="grid max-w-[790px] gap-4">{children}</div>
+      <div className="grid max-w-[790px] gap-4" {...touch.watch}>
+        {children}
+      </div>
     </>
   );
 }

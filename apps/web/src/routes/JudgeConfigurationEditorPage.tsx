@@ -228,6 +228,7 @@ export function JudgeConfigurationEditorPage() {
               checking={editor.checking}
               publishing={editor.publishing}
               reasonsId={publishReasonsId}
+              onRefusedPress={editor.publishTouch.touch}
               onPublish={() => {
                 // A frozen version is printed by the index this editor was opened from, and
                 // that index renders the shell's listing (ADR 0056).
@@ -259,6 +260,7 @@ export function JudgeConfigurationEditorPage() {
               preview={preview}
               dirty={editor.dirty}
               checking={editor.checking}
+              touched={editor.publishTouch.touched}
             />
           </>
         }

@@ -401,6 +401,7 @@ export function AgentConfigurationEditorPage() {
               checking={editor.checking}
               publishing={editor.publishing}
               reasonsId={publishReasonsId}
+              onRefusedPress={editor.publishTouch.touch}
               onPublish={() => {
                 void publish().then((version) => setPublishedVersion(version));
               }}
@@ -424,6 +425,7 @@ export function AgentConfigurationEditorPage() {
               preview={preview}
               dirty={editor.dirty}
               checking={editor.checking}
+              touched={editor.publishTouch.touched}
             />
           </>
         }

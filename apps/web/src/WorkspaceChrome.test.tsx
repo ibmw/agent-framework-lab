@@ -15,10 +15,17 @@ import {
   VersionChips,
 } from "./components/WorkspaceChrome";
 import { PUBLISH_UNSAVED_REASON } from "./lib/definitionEditor";
+import { useRefusalTouch } from "./lib/refusalTouch";
 import { STICKY_REPORT_ATTRIBUTE, stickyHeaderClasses } from "./lib/stickyHeader";
 import { neutralPillClasses, publishedPillClasses } from "./lib/ui";
 import { expectOneLine } from "./test/header";
-import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
+import {
+  expectBusy,
+  expectNotRefused,
+  expectRefusalWeight,
+  expectRefused,
+  refusalFacts,
+} from "./test/refused";
 
 /**
  * The workspace's display type, measured.
@@ -525,6 +532,8 @@ describe("PublishButton", () => {
     checking?: boolean;
     onPublish?: () => void;
   }) {
+    // As `useDefinitionEditor` holds it: a draft made dirty latches, a refused press counts.
+    const touch = useRefusalTouch(dirty);
     return (
       <>
         <PublishButton
@@ -534,8 +543,15 @@ describe("PublishButton", () => {
           checking={checking}
           reasonsId="reasons"
           onPublish={onPublish}
+          onRefusedPress={touch.touch}
         />
-        <PublishReasons id="reasons" preview={preview} dirty={dirty} checking={checking} />
+        <PublishReasons
+          id="reasons"
+          preview={preview}
+          dirty={dirty}
+          checking={checking}
+          touched={touch.touched}
+        />
       </>
     );
   }
@@ -604,6 +620,36 @@ describe("PublishButton", () => {
     expect(onPublish).not.toHaveBeenCalled();
   });
 
+  it("says why as a hint on an editor nobody has touched, and as the refusal once Publish is pressed", async () => {
+    const onPublish = vi.fn();
+    render(
+      <Publish
+        preview={{
+          ...GATE,
+          latest_published_version: 1,
+          next_version: 2,
+          matches_latest_published: true,
+        }}
+        onPublish={onPublish}
+      />,
+    );
+    const publish = screen.getByRole("button", { name: "Publish v2" });
+    const identical = "The draft is identical to v1; there is nothing new to freeze.";
+    expectRefused(publish, identical);
+    expectRefusalWeight(publish, "hint", screen.getByText(identical));
+    const before = refusalFacts(publish);
+
+    await userEvent.click(publish);
+    expectRefusalWeight(publish, "touched", screen.getByText(identical));
+    expect(refusalFacts(publish)).toEqual(before);
+    expect(onPublish).not.toHaveBeenCalled();
+  });
+
+  it("never draws unsaved edits as a hint: they are the operator's own", () => {
+    render(<PublishReasons id="reasons" preview={GATE} dirty checking={false} touched={false} />);
+    expect(screen.getByText(PUBLISH_UNSAVED_REASON)).toHaveClass(...VALIDATION_WEIGHT);
+  });
+
   it("does not call an edited draft identical to the last version: that is the saved draft", () => {
     render(
       <Publish
@@ -628,7 +674,15 @@ describe("PublishButton", () => {
       <PageHeader
         title="Frontline A"
         actions={<Publish preview={GATE} />}
-        reasons={<PublishReasons id="reasons" preview={GATE} dirty={false} checking={false} />}
+        reasons={
+          <PublishReasons
+            id="reasons"
+            preview={GATE}
+            dirty={false}
+            checking={false}
+            touched={false}
+          />
+        }
         description="Shop-independent."
       />,
     );

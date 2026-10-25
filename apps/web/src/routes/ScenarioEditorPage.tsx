@@ -58,6 +58,7 @@ import {
   OBJECTIVES_CAP_RULE,
   TEXT_MAX_LENGTH,
 } from "../lib/fieldRules";
+import { useRefusalTouch } from "../lib/refusalTouch";
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
   addMutation,
@@ -278,6 +279,7 @@ export function ScenarioEditorPage() {
               checking={editor.checking}
               publishing={editor.publishing}
               reasonsId={publishReasonsId}
+              onRefusedPress={editor.publishTouch.touch}
               onPublish={() => {
                 // A frozen version is printed by the index this editor was opened from, and
                 // that index renders the shell's listing (ADR 0056).
@@ -313,6 +315,7 @@ export function ScenarioEditorPage() {
               preview={preview}
               dirty={editor.dirty}
               checking={editor.checking}
+              touched={editor.publishTouch.touched}
             />
           </>
         }
@@ -1229,6 +1232,9 @@ function TemplatePicker({
   const [blockId, setBlockId] = useState("");
   const capId = useId();
   const noteId = useId();
+  // The cap is a hint until the operator picks a template or presses Add at it, and again
+  // after an add was taken (ADR 0078).
+  const capTouch = useRefusalTouch();
   // One template in the library is not a choice (ADR 0064): the form opens on it, and goes
   // back to it after each add, since composing one leaves the library as it was.
   const candidates = options.map((option) => option.block_id);
@@ -1258,10 +1264,11 @@ function TemplatePicker({
     }
     onAdd(option);
     setBlockId(soleCandidate(candidates) ?? "");
+    capTouch.reset();
   }
 
   return (
-    <form className={addFormClasses} onSubmit={submit}>
+    <form className={addFormClasses} onSubmit={submit} {...capTouch.watch}>
       <div className="flex flex-wrap items-end gap-2">
         <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
           {label}
@@ -1298,7 +1305,11 @@ function TemplatePicker({
           Add
         </PrimaryAction>
       </div>
-      {full ? <RefusalLine id={capId}>{capRule}</RefusalLine> : null}
+      {full ? (
+        <RefusalLine id={capId} touched={capTouch.touched}>
+          {capRule}
+        </RefusalLine>
+      ) : null}
     </form>
   );
 }

@@ -18,7 +18,13 @@ import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./shell/AppShell";
 import { renderApp, wholeDescription } from "./test/app";
-import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
+import {
+  expectBusy,
+  expectNotRefused,
+  expectRefusalWeight,
+  expectRefused,
+  refusalFacts,
+} from "./test/refused";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -550,6 +556,67 @@ describe("the model provider zone", () => {
     // The field is gone rather than emptied: Discard puts back what the lab holds, which is
     // a key it will not show and a row that says only that one is installed.
     expect(card.queryByPlaceholderText("sk-…")).toBeNull();
+  });
+
+  it("says a connection with nothing to reach as a hint until the operator touches it (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings");
+    const card = await openZone();
+    const test = card.getByRole("button", { name: "Test connection" });
+    // A lab that has never been pointed anywhere: refused, and nobody has tried yet.
+    expectRefused(test, /No base URL to reach/);
+    expectRefusalWeight(test, "hint");
+    const before = refusalFacts(test);
+
+    await user.click(test);
+    expectRefusalWeight(test, "touched");
+    expect(refusalFacts(test)).toEqual(before);
+  });
+
+  it("says it at the refusal's weight once Replace is pressed, an edit that moves nothing saved", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+    const test = card.getByRole("button", { name: "Test connection" });
+    expectRefused(test, /No base URL to reach/);
+    expectRefusalWeight(test, "hint");
+    const before = refusalFacts(test);
+
+    await user.click(card.getByRole("button", { name: "Replace" }));
+    expectRefusalWeight(test, "touched");
+    expect(refusalFacts(test)).toEqual(before);
+  });
+
+  it("says it at the refusal's weight once spaces are typed as a key, which is no key", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings");
+    const card = await openZone();
+    const test = card.getByRole("button", { name: "Test connection" });
+    expectRefusalWeight(test, "hint");
+
+    await user.type(card.getByPlaceholderText("sk-…"), "   ");
+    // Nothing to save, so Save is not offered; the attempt is the operator's all the same.
+    expect(card.queryByRole("button", { name: "Save connection" })).toBeNull();
+    expectRefusalWeight(test, "touched");
+  });
+
+  it("says it at the refusal's weight once the operator has edited the form", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings");
+    const card = await openZone();
+    const test = card.getByRole("button", { name: "Test connection" });
+    const before = refusalFacts(test);
+
+    // Typed into and emptied again: back where the lab holds it, but the attempt is theirs.
+    await user.type(card.getByLabelText("Base URL"), "h");
+    await user.clear(card.getByLabelText("Base URL"));
+    expectRefused(test, /No base URL to reach/);
+    expectRefusalWeight(test, "touched");
+    expect(refusalFacts(test)).toEqual(before);
   });
 
   it("offers Save and Discard only once there is something to save", async () => {

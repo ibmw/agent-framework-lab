@@ -21,9 +21,9 @@ import {
   neutralPillClasses,
   outlineButtonClasses,
   publishedPillClasses,
+  refusalLineClasses,
   subtleButtonClasses,
   surfaceClasses,
-  validationMessageClasses,
 } from "../lib/ui";
 import { type PublicationRecord, publicationLabel } from "../lib/versions";
 import { ButtonIcon } from "./ButtonIcon";
@@ -874,6 +874,7 @@ export function PublishReasons({
   preview,
   dirty,
   checking,
+  touched,
 }: {
   id: string;
   className?: string;
@@ -881,6 +882,11 @@ export function PublishReasons({
   dirty: boolean;
   /** The gate has not answered for the saved draft yet (`DefinitionEditor.checking`). */
   checking: boolean;
+  /**
+   * The draft has been edited here or Publish pressed while refused (ADR 0078,
+   * `DefinitionEditor.publishTouch`): until then the reasons read as a hint.
+   */
+  touched: boolean;
 }) {
   const errors = preview?.issues.filter((issue) => issue.severity === "error") ?? [];
   const warnings = preview?.issues.filter((issue) => issue.severity === "warning") ?? [];
@@ -897,21 +903,22 @@ export function PublishReasons({
     // stands in, and its gap with it.
     return null;
   }
+  // Unsaved edits are the operator's by definition, so that reason is never a hint; the other
+  // two are a hint on an editor nobody has touched (ADR 0078).
+  const weight = refusalLineClasses(touched || dirty);
   return (
     <div id={id} className={className}>
-      {/* The three reasons Publish is refused for, at the validation weight every refusal reads
-          at (ADR 0063) — "identical to vN" among them, since it refuses the press as surely as
-          an error does. The warnings line refuses nothing and stays muted. */}
-      {dirty ? <p className={validationMessageClasses}>{PUBLISH_UNSAVED_REASON}</p> : null}
+      {/* The three reasons Publish is refused for, at the weight every refusal reads at
+          (ADR 0063, ADR 0078) — "identical to vN" among them, since it refuses the press as
+          surely as an error does. The warnings line refuses nothing and stays muted. */}
+      {dirty ? <p className={weight}>{PUBLISH_UNSAVED_REASON}</p> : null}
       {preview && !preview.publishable ? (
-        <p className={validationMessageClasses}>{publishErrorsReason(errors.length)}</p>
+        <p className={weight}>{publishErrorsReason(errors.length)}</p>
       ) : null}
       {/* Not while the draft is dirty: "identical" would describe the saved draft, and the
           operator is looking at edits that are not in it. */}
       {unchanged && preview ? (
-        <p className={validationMessageClasses}>
-          {publishUnchangedReason(preview.latest_published_version)}
-        </p>
+        <p className={weight}>{publishUnchangedReason(preview.latest_published_version)}</p>
       ) : null}
       {warnings.length > 0 ? (
         <p className="text-xs text-admin-muted">
@@ -937,6 +944,7 @@ export function PublishButton({
   checking,
   reasonsId,
   onPublish,
+  onRefusedPress,
   variant = "accent",
   className,
   ref,
@@ -950,6 +958,8 @@ export function PublishButton({
   /** The `id` given to this page's `PublishReasons`. */
   reasonsId: string;
   onPublish: () => void;
+  /** A press swallowed because Publish is refused (`DefinitionEditor.publishTouch.touch`). */
+  onRefusedPress: () => void;
   variant?: "accent" | "ink";
   className?: string;
   ref?: Ref<HTMLButtonElement>;
@@ -965,6 +975,7 @@ export function PublishButton({
       type="button"
       className={className}
       refusal={reason === null ? null : { id: reasonsId, reason }}
+      onRefusedPress={onRefusedPress}
       busy={publishing || waiting}
       aria-describedby={waiting ? reasonsId : undefined}
       onClick={onPublish}

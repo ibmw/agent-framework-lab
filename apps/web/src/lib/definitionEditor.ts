@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { describeApiError } from "../api/client";
 import type { PublishGate, VersionProvenance } from "../components/WorkspaceChrome";
+import { useRefusalTouch } from "./refusalTouch";
 import { useRegisterUnsavedWork } from "./unsavedWork";
 
 /**
@@ -77,6 +78,12 @@ export interface DefinitionEditor<ContentT, PreviewT> {
   /** Throws the local edits away by re-reading what the server holds. */
   discard: () => Promise<void>;
   publish: () => Promise<number | null>;
+  /**
+   * Whether Publish's refusal is the operator's (ADR 0078): once the draft has been edited
+   * here — which latches — or Publish pressed while refused, `PublishReasons` says why at the
+   * validation weight; before that, and again after a publish was taken, as a hint.
+   */
+  publishTouch: { touched: boolean; touch: () => void };
 }
 
 export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends VersionProvenance>(
@@ -226,6 +233,9 @@ export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends Version
       : null,
   );
 
+  const publishTouch = useRefusalTouch(dirty);
+  const resetPublishTouch = publishTouch.reset;
+
   const publish = useCallback(async (): Promise<number | null> => {
     // Publishing freezes what the server holds. Never let the button freeze an older
     // draft than the edits sitting in this editor.
@@ -238,6 +248,9 @@ export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends Version
     try {
       const published = await client.publish(id);
       setPreview(await client.previewDraft(id));
+      // The draft now matches what was just frozen, which refuses the next press; that is a
+      // fresh state, not a press the operator got wrong.
+      resetPublishTouch();
       return published.version;
     } catch (cause: unknown) {
       setError(describeApiError(cause, client.unavailable));
@@ -245,7 +258,7 @@ export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends Version
     } finally {
       setPublishing(false);
     }
-  }, [dirty, id, client]);
+  }, [dirty, id, client, resetPublishTouch]);
 
   return {
     content,
@@ -262,6 +275,7 @@ export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends Version
     save,
     discard,
     publish,
+    publishTouch: { touched: publishTouch.touched, touch: publishTouch.touch },
   };
 }
 
