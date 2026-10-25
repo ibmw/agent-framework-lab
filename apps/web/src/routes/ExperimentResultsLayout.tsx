@@ -43,12 +43,13 @@ import {
 } from "../lib/evidence";
 import { unreachableArmsNote } from "../lib/modelConnections";
 import {
+  depthTabRowClasses,
+  depthTabStateClasses,
   fieldControlClasses,
   fieldLabelClasses,
   focusRingClasses,
   formatTimestamp,
   outlineButtonClasses,
-  subtleButtonClasses,
 } from "../lib/ui";
 import { pinKey, publishedNameOf, usePinnedVersions } from "../lib/usePinnedVersions";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
@@ -425,7 +426,7 @@ export function ExperimentResultsLayout() {
         <Provenance shopId={shopId} experiment={experiment} />
       </div>
 
-      <nav aria-label="Results views" className="mb-4 flex flex-wrap items-center gap-1.5">
+      <nav aria-label="Results views" className={`mb-4 ${depthTabRowClasses}`}>
         <Tab to="." end label="General" />
         <Tab to="conversation" label="Conversation" />
         <Tab to="timeline" label="Execution timeline" />
@@ -746,7 +747,7 @@ function Tab({ to, end, label }: { to: string; end?: boolean; label: string }) {
       to={to}
       end={end}
       className={({ isActive }) =>
-        `${subtleButtonClasses} ${isActive ? "bg-admin-canvas text-admin-ink" : ""}`
+        isActive ? depthTabStateClasses.selected : depthTabStateClasses.idle
       }
     >
       {label}

@@ -9,6 +9,7 @@ import type {
   MutationEventSchema,
   ObjectiveResultSchema,
   ToolEventSchema,
+  ToolOutcome,
 } from "@agent-lab/contracts";
 import { CONTROL_JUDGE_PROVIDER } from "./agents";
 
@@ -29,6 +30,16 @@ export const OUTCOMES: Record<ObjectiveResultSchema["outcome"], { mark: string; 
   pending: { mark: "·", label: "pending" },
   deferred: { mark: "judge", label: "a judge scores this after the run" },
   undecidable: { mark: "—", label: "no evidence this lab reads decides this" },
+};
+
+/**
+ * Each tool outcome's glyph, beside its word, so a refusal is never the chip's text alone: the
+ * thread's call chips and the trace waterfall's tool rows draw the same three.
+ */
+export const TOOL_MARK: Readonly<Record<ToolOutcome, string>> = {
+  success: "✓",
+  refused: "✗",
+  failed: "!",
 };
 
 /** Why an attempt ended without a reply, in words an operator can act on. */

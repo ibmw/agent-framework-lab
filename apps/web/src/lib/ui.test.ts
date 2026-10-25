@@ -9,6 +9,8 @@ import {
   buttonVariantClasses,
   chipClasses,
   controlHeightClasses,
+  depthTabRowClasses,
+  depthTabStateClasses,
   destructiveButtonClasses,
   type FilterChipKind,
   fieldControlClasses,
@@ -759,6 +761,35 @@ describe("filter chip states", () => {
   it("keeps the count in one column width and quieter than the label", () => {
     expect(filterChipCountClasses).toContain("tabular-nums");
     expect(filterChipCountClasses).toContain("opacity-75");
+  });
+});
+
+const tabStates = Object.entries(depthTabStateClasses);
+
+describe("depth tab states", () => {
+  it.each(tabStates)("%s draws a ring for a keyboard reader", (_name, classes) => {
+    expect(classes).toMatch(/(^|\s)focus-visible:outline-2(\s|$)/);
+    expect(classes).toMatch(/(^|\s)focus-visible:outline-lab-primary(\s|$)/);
+  });
+
+  it("marks the selected tab by the prototype's clay underline and weight", () => {
+    expect(depthTabStateClasses.selected).toContain("border-lab-accent");
+    expect(depthTabStateClasses.selected).toContain("font-bold");
+    expect(depthTabStateClasses.idle).toContain("font-semibold");
+    expect(depthTabStateClasses.idle).toMatch(/(^|\s)hover:text-admin-ink(\s|$)/);
+  });
+
+  it("gives every tab an underline of one width, so choosing one moves nothing", () => {
+    expect(depthTabStateClasses.idle).toContain("border-transparent");
+    for (const [, classes] of tabStates) {
+      expect(classes).toMatch(/(^|\s)border-b-2(\s|$)/);
+      expect(classes).toMatch(/(^|\s)-mb-px(\s|$)/);
+    }
+  });
+
+  it("wraps the row and rules it off from the tab below", () => {
+    expect(depthTabRowClasses).toContain("flex-wrap");
+    expect(depthTabRowClasses).toContain("border-b");
   });
 });
 

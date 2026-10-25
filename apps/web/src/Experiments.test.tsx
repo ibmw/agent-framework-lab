@@ -4956,6 +4956,29 @@ describe("experiment results", () => {
     expect(within(tabs).getByRole("link", { name: "General" })).not.toHaveAttribute("aria-current");
   });
 
+  it("draws the open depth tab apart from the others, not only announces it", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    const tabs = await screen.findByRole("navigation", {
+      name: "Results views",
+    });
+    await user.click(within(tabs).getByRole("link", { name: "Traces" }));
+
+    // The prototype's mark: a clay underline under a heavier ink. Each assertion pairs the
+    // painted state with the announced one, so neither can stand in for the other.
+    const open = within(tabs).getByRole("link", { name: "Traces" });
+    expect(open).toHaveAttribute("aria-current", "page");
+    expect(open).toHaveClass("border-lab-accent", "font-bold");
+    for (const name of ["General", "Conversation", "Execution timeline"]) {
+      const idle = within(tabs).getByRole("link", { name });
+      expect(idle).not.toHaveAttribute("aria-current");
+      expect(idle).toHaveClass("border-transparent", "font-semibold");
+      expect(idle).not.toHaveClass("border-lab-accent");
+      expect(idle).not.toHaveClass("font-bold");
+    }
+  });
+
   it("says so when the experiment behind the results cannot be read", async () => {
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () =>
@@ -5836,6 +5859,58 @@ describe("execution timeline", () => {
     expect(within(stream).getAllByRole("listitem")).toHaveLength(5);
   });
 
+  it("draws the lenses that are on on the selected chip's ground, not only as pressed", async () => {
+    const user = userEvent.setup();
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", {
+      name: "Execution timeline",
+    });
+    const all = within(stream).getByRole("button", { name: "All events" });
+    const state = within(stream).getByRole("button", { name: "State" });
+    expect(all).toHaveAttribute("aria-pressed", "true");
+    expect(all).toHaveClass("bg-admin-chip", "text-lab-primary");
+    expect(state).toHaveAttribute("aria-pressed", "false");
+    expect(state).not.toHaveClass("bg-admin-chip");
+
+    await user.click(state);
+
+    expect(state).toHaveAttribute("aria-pressed", "true");
+    expect(state).toHaveClass("bg-admin-chip", "text-lab-primary");
+    expect(all).toHaveAttribute("aria-pressed", "false");
+    expect(all).not.toHaveClass("bg-admin-chip");
+  });
+
+  it("lets a project path wrap at its own joints, and reads it whole", async () => {
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", {
+      name: "Execution timeline",
+    });
+    const source = within(stream).getByText(/capability_lab\/application\/sandbox_actions\.py:311/);
+    // The text is the identifier, character for character; the breaks are offered after its
+    // separators and never inside a word.
+    expect(source).toHaveTextContent(
+      "capability_lab/application/sandbox_actions.py:311 · SandboxActionService._apply",
+      { normalizeWhitespace: false },
+    );
+    expect(source.innerHTML).toContain(
+      "capability_lab/<wbr>application/<wbr>sandbox_actions.<wbr>py:<wbr>311",
+    );
+    // `_` joins one name's words and is never a break point.
+    expect(source.innerHTML).not.toContain("_<wbr>");
+
+    const paths = await screen.findByRole("region", {
+      name: "Executed project code",
+    });
+    const rail = within(paths).getByText(/sandbox_actions\.py:311 · 1 call/);
+    expect(rail).toHaveTextContent("capability_lab/application/sandbox_actions.py:311 · 1 call");
+    expect(rail.innerHTML).toContain("sandbox_actions.<wbr>py:<wbr>311");
+    expect(rail.innerHTML).not.toContain("_<wbr>");
+    const symbol = within(paths).getByText("SandboxActionService._apply");
+    expect(symbol.innerHTML).toBe("SandboxActionService.<wbr>_apply");
+  });
+
   it("is a depth tab of the results screen, and leads back to the bench", async () => {
     const user = userEvent.setup();
     renderBench();
@@ -5855,19 +5930,125 @@ describe("execution timeline", () => {
   });
 });
 
+/**
+ * Both arms' attempts, arm B's first: the run began on arm B,
+ * so the first attempt recorded is not the first arm's, and the last is arm B's turn 2.
+ */
+function twoArmTraces(): ExperimentTracesResponse {
+  const base = TRACES.traces[0];
+  const of = (runId: string, label: string, ordinal: number, trace: string) => ({
+    ...base,
+    run_id: runId,
+    arm_label: label,
+    ordinal,
+    trace_id: trace.repeat(32),
+  });
+  return {
+    ...TRACES,
+    traces: [
+      of(ARM_B, "Arm B", 0, "b"),
+      // Out of order on purpose: the tab opens on the arm's first turn, not on the first of its
+      // entries the response happens to list.
+      of(ARM_A, "Arm A", 1, "e"),
+      of(ARM_A, "Arm A", 0, "c"),
+      of(ARM_B, "Arm B", 1, "f"),
+    ],
+  };
+}
+
 describe("traces", () => {
   it("draws one attempt as a waterfall, each call where inside the attempt it ran", async () => {
     renderTraces();
 
     const waterfall = await screen.findByRole("list", { name: "Span waterfall" });
 
+    // Each row's name keeps the span's name, its call's outcome and its duration apart.
     const rows = within(waterfall).getAllByRole("button");
-    expect(rows.map((row) => row.textContent)).toEqual([
-      "experiment.attempt3400 ms",
-      "agent.answer3310 ms",
-      "agent.tool · orders.read_order310 ms",
-      "agent.tool · orders.apply_address_change420 ms",
-    ]);
+    const names = [
+      "experiment.attempt · 3400 ms",
+      "agent.answer · 3310 ms",
+      "agent.tool · orders.read_order · Success · 310 ms",
+      "agent.tool · orders.apply_address_change · Refused · 420 ms",
+    ];
+    expect(rows).toHaveLength(names.length);
+    for (const [index, row] of rows.entries()) {
+      expect(row).toHaveAccessibleName(names[index]);
+    }
+    // The words beside each track take one fixed width whatever they say, so every track is
+    // the same length and the bars stay on one scale ("✗ Refused · 420 ms" beside "3400 ms").
+    for (const row of rows) {
+      expect(row.className).toMatch(/grid-cols-\[minmax\(0,14rem\)_minmax\(0,1fr\)_[\d.]+rem\]/);
+    }
+  });
+
+  it("lets a span's name wrap at its joints, and reads it whole", async () => {
+    renderTraces();
+
+    const waterfall = await screen.findByRole("list", { name: "Span waterfall" });
+    const row = within(waterfall).getByRole("button", { name: /apply_address_change/ });
+    const name = within(row).getByText("agent.tool · orders.apply_address_change");
+    expect(name.innerHTML).toBe("agent.<wbr>tool ·<wbr> orders.<wbr>apply_address_change");
+    expect(row).toHaveAccessibleName("agent.tool · orders.apply_address_change · Refused · 420 ms");
+  });
+
+  it("marks the selected span by a rule and weight, not by its ground alone", async () => {
+    const user = userEvent.setup();
+    renderTraces();
+
+    const waterfall = await screen.findByRole("list", { name: "Span waterfall" });
+    const chosen = within(waterfall).getByRole("button", { name: /apply_address_change/ });
+    await user.click(chosen);
+
+    expect(chosen).toHaveAttribute("aria-pressed", "true");
+    expect(chosen).toHaveClass("shadow-[inset_2px_0_0_var(--color-lab-accent)]");
+    // The weight is the name's alone: the row keeps its width and the duration its weight.
+    expect(chosen).not.toHaveClass("font-semibold");
+    expect(within(chosen).getByText("agent.tool · orders.apply_address_change")).toHaveClass(
+      "font-semibold",
+    );
+    expect(within(chosen).getByText(/420 ms/)).not.toHaveClass("font-semibold");
+    for (const other of within(waterfall).getAllByRole("button")) {
+      if (other !== chosen) {
+        expect(other).toHaveAttribute("aria-pressed", "false");
+        expect(other).not.toHaveClass("shadow-[inset_2px_0_0_var(--color-lab-accent)]");
+        expect(other.firstElementChild).not.toHaveClass("font-semibold");
+      }
+    }
+  });
+
+  it("says on the row what each tool call answered, a refusal included, glyph before the word", async () => {
+    renderTraces();
+
+    const waterfall = await screen.findByRole("list", {
+      name: "Span waterfall",
+    });
+    const refused = within(waterfall).getByRole("button", {
+      name: /apply_address_change/,
+    });
+    const word = within(refused).getByText("Refused");
+    expect(word).toBeVisible();
+    const glyph = word.previousElementSibling;
+    expect(glyph).toHaveTextContent("✗");
+    expect(glyph).toHaveAttribute("aria-hidden", "true");
+
+    const succeeded = within(waterfall).getByRole("button", {
+      name: /read_order/,
+    });
+    expect(within(succeeded).getByText("Success").previousElementSibling).toHaveTextContent("✓");
+    // The attempt and the framework's turn timed no call, so they say no outcome.
+    expect(within(waterfall).getAllByRole("button")[0]).not.toHaveTextContent(
+      /Success|Refused|Failed/,
+    );
+  });
+
+  it("wraps the trace identifier instead of clipping it at the card's edge", async () => {
+    renderTraces();
+
+    const panel = await screen.findByRole("region", { name: "Span" });
+    // A hex id has no joint to break at, so it alone may break anywhere.
+    const traceId = within(panel).getByText("a".repeat(32));
+    expect(traceId).toHaveClass("[overflow-wrap:anywhere]");
+    expect(traceId.querySelector("wbr")).toBeNull();
   });
 
   it("reads a span's tool and outcome off the record rather than off the span", async () => {
@@ -5880,7 +6061,10 @@ describe("traces", () => {
     );
 
     const panel = screen.getByRole("region", { name: "Span" });
-    expect(within(panel).getByText("orders.apply_address_change · v1")).toBeVisible();
+    const tool = within(panel).getByText("orders.apply_address_change · v1");
+    expect(tool).toBeVisible();
+    // The tool's name wraps at its joints rather than mid-word, and reads whole.
+    expect(tool.innerHTML).toBe("orders.<wbr>apply_address_change ·<wbr> v1");
     expect(within(panel).getByText("Refused")).toBeVisible();
     expect(within(panel).getByText("+2600 ms into the attempt")).toBeVisible();
     expect(within(panel).getByText("a".repeat(32))).toBeVisible();
@@ -5921,6 +6105,92 @@ describe("traces", () => {
         /the model provider rejected the request/,
       ),
     ).toBeVisible();
+  });
+
+  it("opens on the first attempt of the first arm, whichever arm ran first", async () => {
+    traced = twoArmTraces();
+    renderTraces();
+
+    const picker = await screen.findByRole("group", {
+      name: "Traced attempts",
+    });
+    const first = within(picker).getByRole("button", {
+      name: "Arm A · turn 1 · attempt 1",
+    });
+    expect(first).toHaveAttribute("aria-pressed", "true");
+    expect(first).toHaveClass("bg-admin-chip", "text-lab-primary");
+    for (const other of within(picker).getAllByRole("button")) {
+      if (other !== first) {
+        expect(other).toHaveAttribute("aria-pressed", "false");
+        expect(other).not.toHaveClass("bg-admin-chip");
+      }
+    }
+    expect(
+      within(screen.getByRole("region", { name: "Span" })).getByText("c".repeat(32)),
+    ).toBeVisible();
+  });
+
+  it("opens on the first attempt recorded when the first arm has none", async () => {
+    const both = twoArmTraces();
+    traced = { ...both, traces: both.traces.filter((entry) => entry.run_id === ARM_B) };
+    renderTraces();
+
+    const picker = await screen.findByRole("group", { name: "Traced attempts" });
+    expect(
+      within(picker).getByRole("button", { name: "Arm B · turn 1 · attempt 1" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(picker).getByRole("button", { name: "Arm B · turn 2 · attempt 1" }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("puts the chosen attempt in the address, replacing the entry, and reopens on it", async () => {
+    const user = userEvent.setup();
+    traced = twoArmTraces();
+    const { router, unmount } = renderTraces();
+
+    const picker = await screen.findByRole("group", {
+      name: "Traced attempts",
+    });
+    await user.click(
+      within(picker).getByRole("button", {
+        name: "Arm B · turn 2 · attempt 1",
+      }),
+    );
+
+    expect(router.state.historyAction).toBe("REPLACE");
+    expect(new URLSearchParams(router.state.location.search).get("attempt")).toBe(`${ARM_B}:1:1`);
+
+    // A reload is the same address read again from nothing.
+    const address = `${router.state.location.pathname}${router.state.location.search}`;
+    unmount();
+    renderApp(address);
+
+    const reopened = await screen.findByRole("group", {
+      name: "Traced attempts",
+    });
+    const chosen = within(reopened).getByRole("button", {
+      name: "Arm B · turn 2 · attempt 1",
+    });
+    expect(chosen).toHaveAttribute("aria-pressed", "true");
+    expect(chosen).toHaveClass("bg-admin-chip");
+    expect(
+      within(screen.getByRole("region", { name: "Span" })).getByText("f".repeat(32)),
+    ).toBeVisible();
+  });
+
+  it("opens on the first arm's first attempt when the address names no attempt it holds", async () => {
+    traced = twoArmTraces();
+    renderApp(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results/traces?attempt=nothing:9:9`);
+
+    const picker = await screen.findByRole("group", {
+      name: "Traced attempts",
+    });
+    expect(
+      within(picker).getByRole("button", {
+        name: "Arm A · turn 1 · attempt 1",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 
   it("says an attempt was never traced instead of reconstructing one", async () => {

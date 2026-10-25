@@ -5,10 +5,9 @@ import type {
   MutationEventSchema,
   ParticipantTurnSchema,
   ToolEventSchema,
-  ToolOutcome,
 } from "@agent-lab/contracts";
 import { labelOf, TOOL_OUTCOME } from "../lib/enumLabels";
-import { describeFailure } from "../lib/evidence";
+import { describeFailure, TOOL_MARK } from "../lib/evidence";
 import { chipClasses } from "../lib/ui";
 
 /**
@@ -22,13 +21,6 @@ import { chipClasses } from "../lib/ui";
  * The words are on screen and nowhere else: the timeline's stream carries no message body on
  * purpose (ADR 0027), and this reads the thread the experiment document already holds.
  */
-
-/** Each tool outcome's glyph, beside its word, so a refusal is never the chip's text alone. */
-const TOOL_MARK: Readonly<Record<ToolOutcome, string>> = {
-  success: "✓",
-  refused: "✗",
-  failed: "!",
-};
 
 /** One arm's thread: each customer turn followed by the attempts that answered it. */
 export function ArmThread({

@@ -761,6 +761,38 @@ export const filterChipStateClasses: Readonly<Record<FilterChipState, string>> =
 export const filterChipCountClasses = "tabular-nums opacity-75";
 
 /**
+ * The results' depth tabs, and the rule they sit on.
+ *
+ * The prototype's own declaration (`tmp/design-frames/Workspace.dc.html` :2595–2602):
+ *
+ * ```
+ * row:      display:flex; gap:2px; border-bottom:1px solid #e1e3e5
+ * selected: padding:10px 15px; 13px 700; colour #14352e; border-bottom:2px solid #c2532d;
+ *           margin-bottom:-1px
+ * idle:     padding:10px 15px; 13px 600; colour #6d7175; hover colour #202223
+ * ```
+ *
+ * The selected tab is told apart by its underline, its weight and its ink, never by
+ * `aria-current` alone. The idle tab carries a transparent underline of the same width so that
+ * moving between tabs moves nothing. `#14352e` is a literal for the reason the rail's active
+ * row writes it (`AppShell.tsx`): the prototype's ink where you are standing, which the
+ * README's token table does not name. The row wraps, as every row does.
+ */
+export const depthTabRowClasses = "flex flex-wrap items-end gap-0.5 border-b border-admin-border";
+
+const depthTabBaseClasses = `-mb-px inline-flex items-center border-b-2 px-[15px] py-2.5 text-[13px] transition ${focusRingClasses}`;
+
+const depthTabStates = {
+  selected: `${depthTabBaseClasses} border-lab-accent font-bold text-[#14352e]`,
+  idle: `${depthTabBaseClasses} border-transparent font-semibold text-admin-muted hover:text-admin-ink`,
+} as const;
+
+export type DepthTabState = keyof typeof depthTabStates;
+
+/** The table itself, for the test that holds both states to the same rules. */
+export const depthTabStateClasses: Readonly<Record<DepthTabState, string>> = depthTabStates;
+
+/**
  * What a filter chip's glyph may mean.
  *
  * A second closed vocabulary beside `ButtonVerb`, and deliberately not an extension of it: a

@@ -11,9 +11,10 @@ import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getExperimentTimeline } from "../api/experiments";
 import { Card } from "../components/WorkspaceChrome";
+import { breakable } from "../lib/breakable";
 import { labelOf as enumLabel, TOOL_OUTCOME } from "../lib/enumLabels";
 import { describeFailure } from "../lib/evidence";
-import { chipClasses, subtleButtonClasses } from "../lib/ui";
+import { chipClasses, filterChipStateClasses } from "../lib/ui";
 import { useExperimentResults } from "./useExperimentResults";
 
 const UNAVAILABLE = "This experiment's timeline is unavailable.";
@@ -163,7 +164,7 @@ function Lenses({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <button
-        className={`${subtleButtonClasses} ${selected.length === 0 ? "bg-admin-canvas text-admin-ink" : ""}`}
+        className={lensClasses(selected.length === 0)}
         type="button"
         aria-pressed={selected.length === 0}
         onClick={() => onChange([])}
@@ -175,7 +176,7 @@ function Lenses({
         return (
           <button
             key={lens.category}
-            className={`${subtleButtonClasses} ${active ? "bg-admin-canvas text-admin-ink" : ""}`}
+            className={lensClasses(active)}
             type="button"
             aria-pressed={active}
             onClick={() =>
@@ -192,6 +193,14 @@ function Lenses({
       })}
     </div>
   );
+}
+
+/**
+ * A lens is drawn as the workspace's filter chip: the selected one on the refresh's chip ground
+ * and the others plain, so which lenses are on is seen and not only announced.
+ */
+function lensClasses(active: boolean): string {
+  return active ? filterChipStateClasses.selected : filterChipStateClasses.unselected;
 }
 
 /** One event: which arms it belongs to, what it was, and where the lab's code ran. */
@@ -221,8 +230,8 @@ function Row({
 
 function Source({ location }: { location: SourceLocationSchema }) {
   return (
-    <p className="font-mono text-[11px] text-admin-muted">
-      {location.path}:{location.line} · {location.symbol}
+    <p className="font-mono text-[11px] [overflow-wrap:anywhere] text-admin-muted">
+      {breakable(`${location.path}:${location.line} · ${location.symbol}`)}
     </p>
   );
 }
@@ -260,9 +269,12 @@ function CodePaths({ entries }: { entries: TimelineEntrySchema[] }) {
         <ul className="grid gap-2 text-[13px]">
           {paths.map(({ location, calls }) => (
             <li key={`${location.path}:${location.symbol}`} className="grid gap-0.5">
-              <span className="font-semibold text-lab-ink">{location.symbol}</span>
-              <span className="font-mono text-[11px] text-admin-muted">
-                {location.path}:{location.line} · {calls} {calls === 1 ? "call" : "calls"}
+              <span className="font-semibold text-lab-ink [overflow-wrap:anywhere]">
+                {breakable(location.symbol)}
+              </span>
+              <span className="font-mono text-[11px] [overflow-wrap:anywhere] text-admin-muted">
+                {breakable(`${location.path}:${location.line}`)} · {calls}{" "}
+                {calls === 1 ? "call" : "calls"}
               </span>
             </li>
           ))}

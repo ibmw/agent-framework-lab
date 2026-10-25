@@ -113,29 +113,6 @@ each judgement's `provider`, and no contract moves. The covered journeys are
 `experiment-start.spec.ts` (the results at :640 and History's *Open results* at :818),
 `tour-anchors.spec.ts`, `sticky-header.spec.ts` (:684) and `workspace-shell.spec.ts`.
 
-### Slice 49 — The depth tabs show where the operator is
-
-- [ ] The selected tab, the selected timeline lens and the selected trace attempt are visibly
-  marked — the prototype's selected ground and weight — not by `aria-current` or `aria-pressed`
-  alone.
-- [ ] The selected attempt is in the URL (`?attempt=`) and defaults to the first attempt of the
-  first arm (`ExperimentTracesPage.tsx:66`).
-- [ ] A span row's name and duration are separate in its accessible name; a tool span carries
-  its outcome, *Refused* included; the trace identifier and the code rail's paths wrap instead of
-  clipping at 1280 and 1440.
-
-Frames: `DEPRECADED/ResultsTraces.dc.html`, `DEPRECADED/ResultsTimeline.dc.html`.
-
-Authority: ADR 0027, ADR 0037.
-
-Departures to record: none.
-
-Branch: `fix/results-depth-tabs`. Checks: Vitest — `Experiments.test.tsx` for the marks, the
-default and linked attempt, and the span names. `make check`, `pnpm build`; `pnpm test:e2e` for
-`tour-anchors.spec.ts`.
-
-Slice evidence: each tab at 1440 and 1280 with its selection visible, and no clipped text.
-
 ### Slice 50 — The timeline in two lanes, and the evidence links into it
 
 - [ ] The timeline draws each arm in its own lane on one clock, the turns as bands, a scenario

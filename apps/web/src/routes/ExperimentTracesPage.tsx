@@ -4,12 +4,14 @@ import type {
   RunTraceSpanSchema,
 } from "@agent-lab/contracts";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getExperimentTraces } from "../api/experiments";
 import { Card } from "../components/WorkspaceChrome";
+import { breakable } from "../lib/breakable";
 import { labelOf, TOOL_OUTCOME } from "../lib/enumLabels";
-import { describeFailure } from "../lib/evidence";
-import { subtleButtonClasses } from "../lib/ui";
+import { describeFailure, TOOL_MARK } from "../lib/evidence";
+import { filterChipStateClasses } from "../lib/ui";
 import { useExperimentResults } from "./useExperimentResults";
 
 const UNAVAILABLE = "This experiment's traces are unavailable.";
@@ -46,7 +48,8 @@ export function ExperimentTracesPage() {
   const { shopId, experimentId, experiment } = useExperimentResults();
   const [traces, setTraces] = useState<ExperimentTracesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const selected = params.get("attempt");
   const [span, setSpan] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,10 +65,29 @@ export function ExperimentTracesPage() {
   }, [shopId, experimentId]);
 
   const attempts = traces?.traces ?? [];
+  const firstArm = experiment.runs[0]?.run_id ?? null;
   const current = useMemo(
-    () => attempts.find((entry) => traceKey(entry) === selected) ?? attempts.at(-1) ?? null,
-    [attempts, selected],
+    () =>
+      attempts.find((entry) => traceKey(entry) === selected) ?? firstAttemptOf(attempts, firstArm),
+    [attempts, selected, firstArm],
   );
+
+  /**
+   * The attempt is in the address, so a trace an operator found can be shared or reopened at
+   * that attempt. Choosing one replaces the history entry rather than pushing one, as the
+   * Documents table's chips do: Back leaves the tab instead of walking the attempts read on it.
+   */
+  function select(entry: RunTraceSchema) {
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set("attempt", traceKey(entry));
+        return next;
+      },
+      { replace: true },
+    );
+    setSpan(null);
+  }
 
   if (traces === null) {
     return error ? (
@@ -99,14 +121,7 @@ export function ExperimentTracesPage() {
             </p>
           ) : (
             <div className="grid gap-3">
-              <Attempts
-                attempts={attempts}
-                selected={current}
-                onSelect={(entry) => {
-                  setSelected(traceKey(entry));
-                  setSpan(null);
-                }}
-              />
+              <Attempts attempts={attempts} selected={current} onSelect={select} />
               {current === null ? null : (
                 <Waterfall trace={current} selected={detail?.span_id ?? null} onSelect={setSpan} />
               )}
@@ -157,7 +172,12 @@ export function ExperimentTracesPage() {
   );
 }
 
-/** Every attempt both arms made, most recent last, as the frame's turn picker offers them. */
+/**
+ * Every attempt both arms made, most recent last, as the frame's turn picker offers them.
+ *
+ * The selected attempt is drawn as the workspace's selected filter chip, so which attempt the
+ * waterfall is of is seen and not only announced by `aria-pressed`.
+ */
 function Attempts({
   attempts,
   selected,
@@ -177,7 +197,7 @@ function Attempts({
         return (
           <button
             key={traceKey(trace)}
-            className={`${subtleButtonClasses} ${active ? "bg-admin-canvas text-admin-ink" : ""}`}
+            className={active ? filterChipStateClasses.selected : filterChipStateClasses.unselected}
             type="button"
             aria-pressed={active}
             onClick={() => onSelect(trace)}
@@ -224,16 +244,26 @@ function Waterfall({
             <button
               type="button"
               aria-pressed={active}
+              // Named explicitly: the name, the outcome and the duration are separate elements
+              // with a gap between them rather than a character, so the computed name ran them
+              // together ("agent.tool · orders.read_order310 ms").
+              aria-label={[describeSpan(span), outcomeOf(span), `${span.duration_ms} ms`]
+                .filter(Boolean)
+                .join(" · ")}
               onClick={() => onSelect(span.span_id)}
-              className={`grid w-full grid-cols-[minmax(0,14rem)_minmax(0,1fr)] items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-admin-canvas ${
-                active ? "bg-admin-canvas" : ""
+              className={`grid w-full grid-cols-[minmax(0,14rem)_minmax(0,1fr)_8.5rem] items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-admin-canvas ${
+                // The selected span is marked as the selected tab is, by a clay rule and a
+                // heavier name (below), and not by its ground alone.
+                active ? "bg-admin-canvas shadow-[inset_2px_0_0_var(--color-lab-accent)]" : ""
               }`}
             >
               <span
-                className="truncate font-mono text-[11.5px] text-admin-ink"
+                className={`font-mono text-[11.5px] [overflow-wrap:anywhere] text-admin-ink ${
+                  active ? "font-semibold" : ""
+                }`}
                 style={{ paddingLeft: `${depthOf(span) * 14}px` }}
               >
-                {describeSpan(span)}
+                {breakable(describeSpan(span))}
               </span>
               <span className="relative flex h-3 items-center rounded-sm bg-admin-border/40">
                 <span
@@ -244,9 +274,18 @@ function Waterfall({
                   // only the drawing has to fit inside the track.
                   style={bar(span.started_offset_ms, span.duration_ms, total)}
                 />
-                <span className="ml-auto pr-1 text-[10px] text-admin-muted">
-                  {span.duration_ms} ms
-                </span>
+              </span>
+              {/* Beside the track rather than on it, so no bar is ever drawn over the words; one
+                  width on every row, so every track is the same length and one scale. */}
+              <span className="whitespace-nowrap text-right text-[11px] text-admin-muted">
+                {span.tool_outcome === null ? null : (
+                  <>
+                    <span aria-hidden="true">{`${TOOL_MARK[span.tool_outcome]} `}</span>
+                    <span className="font-semibold text-admin-ink-soft">{outcomeOf(span)}</span>
+                    {" · "}
+                  </>
+                )}
+                {span.duration_ms} ms
               </span>
             </button>
           </li>
@@ -258,6 +297,8 @@ function Waterfall({
 
 /** What one span covered, read off the record it was joined to. */
 function Attributes({ trace, span }: { trace: RunTraceSchema; span: RunTraceSpanSchema }) {
+  // The identifiers are hex and have no joints to wrap at, so they alone break anywhere.
+  const hex = new Set(["span id", "trace id"]);
   const rows: [string, string][] = [
     ["span", describeSpan(span)],
     ["arm", trace.arm_label],
@@ -282,7 +323,9 @@ function Attributes({ trace, span }: { trace: RunTraceSchema; span: RunTraceSpan
       {rows.map(([term, value]) => (
         <div key={term} className="flex items-baseline gap-2">
           <dt className="w-24 shrink-0 text-admin-muted">{term}</dt>
-          <dd className="min-w-0 break-words font-mono text-[11.5px] text-admin-ink">{value}</dd>
+          <dd className="min-w-0 font-mono text-[11.5px] [overflow-wrap:anywhere] text-admin-ink">
+            {hex.has(term) ? value : breakable(value)}
+          </dd>
         </div>
       ))}
     </dl>
@@ -301,6 +344,22 @@ function bar(offset: number, duration: number, total: number): { left: string; w
 /** A tool span is named by the tool it timed; the other two are named by what they are. */
 function describeSpan(span: RunTraceSpanSchema): string {
   return span.tool === null ? KINDS[span.kind] : `${KINDS[span.kind]} · ${span.tool}`;
+}
+
+/** What the call a tool span timed answered, in words; nothing for the other two kinds. */
+function outcomeOf(span: RunTraceSpanSchema): string {
+  return span.tool_outcome === null ? "" : labelOf(TOOL_OUTCOME, span.tool_outcome);
+}
+
+/**
+ * Where the tab opens: the first attempt of the first arm, which is where the run began.
+ * Falls back to the first attempt recorded when that arm has none.
+ */
+function firstAttemptOf(attempts: RunTraceSchema[], runId: string | null): RunTraceSchema | null {
+  const ofArm = attempts
+    .filter((entry) => entry.run_id === runId)
+    .sort((left, right) => left.ordinal - right.ordinal || left.attempt - right.attempt);
+  return ofArm[0] ?? attempts[0] ?? null;
 }
 
 function describeAttempt(trace: RunTraceSchema): string {
