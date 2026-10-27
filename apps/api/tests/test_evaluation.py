@@ -703,6 +703,18 @@ def test_a_judged_row_names_no_call_even_when_the_judge_said_met() -> None:
     assert (scored.outcome, scored.decided_by) == (ObjectiveOutcome.MET, None)
 
 
+def test_an_unscored_judged_row_says_no_verdict_is_recorded_and_not_who_scores_it() -> None:
+    """The outcome's label says a judge scores the row; the detail says what it does not."""
+    template = publishable_objective(
+        assessment=ObjectiveAssessment.JUDGE, evidence=ObjectiveEvidence.DIMENSION
+    )
+
+    unscored = judge_objective(objective(), template, 1, evidence(policy_read()), settled=True)
+
+    assert unscored.outcome is ObjectiveOutcome.DEFERRED
+    assert unscored.detail == "no verdict is recorded for this arm yet"
+
+
 def test_a_judged_verdict_cannot_carry_a_deciding_call() -> None:
     """A judge read the whole thread; pinning its verdict on one call would misreport it."""
     verdict = Judgement(

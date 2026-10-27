@@ -27,7 +27,7 @@ export const GLOSSARY_TERMS = [
     id: "shop",
     term: "Shop",
     definition:
-      "Versioned synthetic commerce configuration and support knowledge — catalog, policies, FAQ, payment and fulfilment methods, and named tone-of-voice guidelines with one shop default.",
+      "Versioned synthetic commerce configuration and support knowledge — catalog, policies, FAQ, payment and fulfillment methods, and named tone-of-voice guidelines with one shop default.",
   },
   {
     id: "customer-profile",
@@ -39,7 +39,7 @@ export const GLOSSARY_TERMS = [
     id: "order",
     term: "Order fixture",
     definition:
-      "Shop-scoped authored commerce state with no version of its own: line items, payment and fulfilment status, authored events, and a shipping address chosen from the customer's address book. A scenario names it without freezing it — the copy is taken later, when a snapshot is frozen for an experiment, so an order edited after the scenario is published changes the starting state of the next run.",
+      "Shop-scoped authored commerce state with no version of its own: line items, payment and fulfillment status, authored events, and a shipping address chosen from the customer's address book. A scenario names it without freezing it — the copy is taken later, when a snapshot is frozen for an experiment, so an order edited after the scenario is published changes the starting state of the next run.",
   },
   {
     id: "support-identity",

@@ -82,10 +82,10 @@ test("an author publishes a shop with size and colour variants and reads the fro
   const payments = card(page, "Payment methods");
   await payments.getByLabel("Name", { exact: true }).fill("Visa");
   await payments.getByRole("button", { name: "Add payment method" }).click();
-  const fulfilment = card(page, "Fulfilment methods");
+  const fulfilment = card(page, "Fulfillment methods");
   await fulfilment.getByLabel("Name", { exact: true }).fill("Standard");
   await fulfilment.getByLabel("Carrier", { exact: true }).fill("Nordic Post");
-  await fulfilment.getByRole("button", { name: "Add fulfilment method" }).click();
+  await fulfilment.getByRole("button", { name: "Add fulfillment method" }).click();
   await saveDraft(page);
 
   await openSection(page, "Tone of voice", "Tone of voice");

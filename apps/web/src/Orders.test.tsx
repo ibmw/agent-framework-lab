@@ -1964,7 +1964,7 @@ describe("order editor", () => {
     renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
 
     expect(await screen.findByRole("heading", { name: "NS-10482" })).toBeVisible();
-    const shipping = card("Fulfilment & shipping");
+    const shipping = card("Fulfillment & shipping");
     // The label appears on the frozen card and as the selected address-book entry.
     expect(within(shipping).getAllByText("Bordeaux — previous flat")).toHaveLength(2);
     expect(within(shipping).getByText(/42 cours de la Marne/)).toBeVisible();
@@ -2025,7 +2025,7 @@ describe("order editor", () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
     await screen.findByRole("heading", { name: "NS-10482" });
-    const shipping = card("Fulfilment & shipping");
+    const shipping = card("Fulfillment & shipping");
 
     await user.selectOptions(within(shipping).getByLabelText("Ship to"), "home");
 
@@ -2054,7 +2054,7 @@ describe("order editor", () => {
     const findings = card("Findings");
     expect(within(findings).getByText(/no longer exists/)).toBeVisible();
     expect(within(findings).getByText("Warning")).toBeVisible();
-    expect(within(card("Fulfilment & shipping")).getByText(/42 cours de la Marne/)).toBeVisible();
+    expect(within(card("Fulfillment & shipping")).getByText(/42 cours de la Marne/)).toBeVisible();
   });
 
   /**
@@ -2655,8 +2655,8 @@ describe("the field pattern on the order editor", () => {
       );
     }
 
-    const shipping = card("Fulfilment & shipping");
-    for (const label of ["Fulfilment status", "Fulfilment method", "Shipped at"] as const) {
+    const shipping = card("Fulfillment & shipping");
+    for (const label of ["Fulfillment status", "Fulfillment method", "Shipped at"] as const) {
       expect(within(shipping).getByText(label).getAttribute("for")).toBe(
         within(shipping).getByLabelText(label).id,
       );
@@ -2678,8 +2678,8 @@ describe("the field pattern on the order editor", () => {
       /a pending or authorized order cannot record a capture time/i,
     );
 
-    const shipping = within(card("Fulfilment & shipping"));
-    expect(shipping.getByLabelText("Fulfilment status")).toHaveAccessibleDescription(
+    const shipping = within(card("Fulfillment & shipping"));
+    expect(shipping.getByLabelText("Fulfillment status")).toHaveAccessibleDescription(
       /once fulfilled, a run can no longer change the address/i,
     );
     expect(shipping.getByLabelText("Shipped at")).toHaveAccessibleDescription(
@@ -2689,7 +2689,7 @@ describe("the field pattern on the order editor", () => {
     // One rule, both method selects: `_method_name` freezes the name for each the same way.
     for (const method of [
       payment.getByLabelText("Payment method"),
-      shipping.getByLabelText("Fulfilment method"),
+      shipping.getByLabelText("Fulfillment method"),
     ]) {
       expect(method).toHaveAccessibleDescription(wholeDescription(ORDER_METHOD_RULE));
     }
@@ -2743,7 +2743,7 @@ describe("the field pattern on the order editor", () => {
     // and the events are left out by the sweep, and nothing else is excepted.
     expect(expectEditorOnRows(panel)).toEqual({
       "Line items & payment": 6,
-      "Fulfilment & shipping": 4,
+      "Fulfillment & shipping": 4,
       "Order events": 3,
     });
   });
@@ -2751,7 +2751,7 @@ describe("the field pattern on the order editor", () => {
   it("puts where the addresses come from in the Ship to select's description", async () => {
     renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
     await screen.findByRole("heading", { name: "NS-10482" });
-    const shipping = card("Fulfilment & shipping");
+    const shipping = card("Fulfillment & shipping");
 
     expect(within(shipping).getByLabelText("Ship to")).toHaveAccessibleDescription(
       /selected from the customer's address book — no free input/i,
@@ -2784,7 +2784,7 @@ describe("a status moves the time beside it", () => {
     await screen.findByRole("heading", { name: "NS-10482" });
     return {
       payment: within(card("Line items & payment")),
-      shipping: within(card("Fulfilment & shipping")),
+      shipping: within(card("Fulfillment & shipping")),
     };
   }
 
@@ -2853,14 +2853,14 @@ describe("a status moves the time beside it", () => {
     const { shipping } = await openEditor();
     expect(shipping.getByLabelText("Shipped at")).toHaveValue("");
 
-    await user.selectOptions(shipping.getByLabelText("Fulfilment status"), "partially_fulfilled");
+    await user.selectOptions(shipping.getByLabelText("Fulfillment status"), "partially_fulfilled");
     expect(shipping.getByLabelText("Shipped at")).toHaveValue(toLocalInput(PLACED_AT));
     // Between two shipped statuses the time is the operator's, and stays.
-    await user.selectOptions(shipping.getByLabelText("Fulfilment status"), "fulfilled");
+    await user.selectOptions(shipping.getByLabelText("Fulfillment status"), "fulfilled");
     expect(shipping.getByLabelText("Shipped at")).toHaveValue(toLocalInput(PLACED_AT));
-    await user.selectOptions(shipping.getByLabelText("Fulfilment status"), "unfulfilled");
+    await user.selectOptions(shipping.getByLabelText("Fulfillment status"), "unfulfilled");
     expect(shipping.getByLabelText("Shipped at")).toHaveValue("");
-    await user.selectOptions(shipping.getByLabelText("Fulfilment status"), "fulfilled");
+    await user.selectOptions(shipping.getByLabelText("Fulfillment status"), "fulfilled");
 
     expect((await saved()).fulfilment).toMatchObject({
       status: "fulfilled",
@@ -2983,7 +2983,7 @@ describe("order events", () => {
 
     // The order is dirty for another reason, so Save order is pressable while the form holds an edit.
     await user.selectOptions(
-      within(card("Fulfilment & shipping")).getByLabelText("Fulfilment method"),
+      within(card("Fulfillment & shipping")).getByLabelText("Fulfillment method"),
       "",
     );
     await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));

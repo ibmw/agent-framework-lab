@@ -154,7 +154,7 @@ export function attributionOf(comparison: readonly ComparisonVariableSchema[]): 
   if (differences === 1) {
     return {
       tone: "attributable",
-      text: "One difference, so the behaviour above is attributable to it.",
+      text: "One difference, so the behavior above is attributable to it.",
     };
   }
   return {

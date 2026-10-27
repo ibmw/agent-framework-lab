@@ -180,7 +180,7 @@ export function OrdersPage() {
                 <th className={tableHeadClasses}>Placed</th>
                 <th className={tableHeadClasses}>Customer</th>
                 <th className={tableHeadClasses}>Payment</th>
-                <th className={tableHeadClasses}>Fulfilment</th>
+                <th className={tableHeadClasses}>Fulfillment</th>
                 <th className={tableHeadClasses}>Total</th>
               </tr>
             </thead>

@@ -53,7 +53,7 @@ const SHOP_LINES: readonly {
       )} enabled`,
   },
   {
-    label: "A fulfilment method",
+    label: "A fulfillment method",
     codes: ["shop_without_fulfilment_method"],
     note: (content) => `${counted(content.fulfilment_methods.length, "method", "methods")} offered`,
   },

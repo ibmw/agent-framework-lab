@@ -281,7 +281,7 @@ export const REMOVAL_FINDINGS = {
   shop_without_product:
     "It is the shop's last product, and a shop that sells nothing is refused at publication.",
   shop_without_fulfilment_method:
-    "It is the shop's last fulfilment method, and a shop with none is refused at publication.",
+    "It is the shop's last fulfillment method, and a shop with none is refused at publication.",
   shop_without_policy:
     "It is the shop's last policy, and a shop with none is refused at publication.",
   shop_without_faq: "It is the shop's last FAQ entry, which the publish gate warns about.",
@@ -296,7 +296,7 @@ export const REMOVAL_FINDINGS = {
   payment_method_missing_from_shop:
     "An order that recorded it keeps the name it froze, and its findings warn that this shop no longer configures that payment method.",
   fulfilment_method_missing_from_shop:
-    "An order that recorded it keeps the name it froze, and its findings warn that this shop no longer configures that fulfilment method.",
+    "An order that recorded it keeps the name it froze, and its findings warn that this shop no longer configures that fulfillment method.",
   // domain/scenario.py (an error) and domain/ticket.py (a warning) read one document two ways.
   context_document_missing_from_shop:
     "A scenario that names it is refused at publication, because it names a document this shop no longer configures.",
@@ -326,7 +326,7 @@ export const REMOVAL_FINDINGS = {
   payment_status_without_event:
     "It is the event that explains the order's payment status, which the order's findings then warn about.",
   fulfilment_status_without_event:
-    "It is the event that explains the order's fulfilment status, which the order's findings then warn about.",
+    "It is the event that explains the order's fulfillment status, which the order's findings then warn about.",
   // domain/ticket.py, domain/scenario.py — an order or a customer they name leaves the shop
   linked_order_missing_from_shop:
     "A ticket that links it, or a scenario bound to it, is refused at publication, because it names an order this shop no longer has.",

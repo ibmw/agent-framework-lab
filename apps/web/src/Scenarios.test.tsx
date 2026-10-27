@@ -578,6 +578,24 @@ describe("scenario index", () => {
     expect(within(row as HTMLElement).getByText("v1 · 1 version")).toBeVisible();
   });
 
+  it("counts the turn a scenario completes by from one, the opening message being turn 1", async () => {
+    // The cap counts the turns after the opening message, so a cap of one completes on the
+    // second turn — the turn at which its arm reads "Completed — answered 2 of 2 turns".
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({
+          scenarios: [{ ...scenarioIndex.scenarios[0], max_turns: 1 }],
+        } satisfies ScenarioListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios`);
+
+    const row = (await screen.findByRole("link", { name: "Wrong shipping address" })).closest(
+      "tr",
+    ) as HTMLElement;
+    expect(within(row).getByText("2 context document(s) · completes by turn 2")).toBeVisible();
+  });
+
   it("says each scenario's publication in a pill: the version and how many, or Never published", async () => {
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
@@ -1825,6 +1843,15 @@ describe("the scenario editor's rows", () => {
     expect(shop).toHaveAccessibleDescription(
       /The shop's newest published version, which is what the scenario resolves against today\./,
     );
+  });
+
+  it("says the turn the resolved scenario completes by, counted from the opening message as turn 1", async () => {
+    current = { ...EMPTY_CONTENT, completion: { statement: "", max_turns: 1 } };
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+
+    const resolved = await screen.findByRole("region", { name: "Resolved-state preview" });
+    const completion = (await within(resolved).findByText("Completion")).closest("div");
+    expect(completion).toHaveTextContent(/^Completionby turn 2$/);
   });
 
   it("draws Completion's statement and turn cap on rows", async () => {

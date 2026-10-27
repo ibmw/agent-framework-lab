@@ -37,11 +37,11 @@ async function publishShop(page: Page, unique: string) {
   await payments.getByLabel("ID", { exact: true }).fill("card");
   await payments.getByLabel("Name", { exact: true }).fill("Card synthetic");
   await payments.getByRole("button", { name: "Add payment method" }).click();
-  const fulfilment = card(page, "Fulfilment methods");
+  const fulfilment = card(page, "Fulfillment methods");
   await fulfilment.getByLabel("ID", { exact: true }).fill("standard");
   await fulfilment.getByLabel("Name", { exact: true }).fill("Standard 3-5 days");
   await fulfilment.getByLabel("Carrier", { exact: true }).fill("Nordic Post");
-  await fulfilment.getByRole("button", { name: "Add fulfilment method" }).click();
+  await fulfilment.getByRole("button", { name: "Add fulfillment method" }).click();
   await saveDraft(page);
 
   await addDocument(page, {

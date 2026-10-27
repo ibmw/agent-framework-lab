@@ -718,7 +718,7 @@ describe("the shop logo (ADR 0070)", () => {
     await user.click(logo.getByRole("radio", { name: "Clay" }));
     await user.click(logo.getByRole("radio", { name: "Ink" }));
     // Ink on Clay is 2.96:1: said under Mark colour, and Create is not refused for it.
-    expect(logo.getByRole("group", { name: "Mark colour" })).toHaveAccessibleDescription(
+    expect(logo.getByRole("group", { name: "Mark color" })).toHaveAccessibleDescription(
       /Hard to read against that background\. Try the other one\./,
     );
     await user.click(page.getByRole("button", { name: "Create shop" }));
@@ -741,14 +741,14 @@ describe("the logo card's swatches (ADR 0070)", () => {
     expect(backgrounds.getByRole("radio", { name: "Brick" }).closest("label")).toHaveStyle({
       backgroundColor: "#9d3028",
     });
-    const colours = within(logo.getByRole("group", { name: "Mark colour" }));
+    const colours = within(logo.getByRole("group", { name: "Mark color" }));
     expect(colours.getByRole("radio", { name: "White" }).closest("label")).toHaveStyle({
       backgroundColor: "#ffffff",
     });
     expect(colours.getByRole("radio", { name: "Ink" }).closest("label")).toHaveStyle({
       backgroundColor: "#16332d",
     });
-    expect(logo.getByRole("group", { name: "Mark colour" })).toHaveAccessibleDescription(
+    expect(logo.getByRole("group", { name: "Mark color" })).toHaveAccessibleDescription(
       /^What the icon or the letters are drawn in\.\s*$/,
     );
   });

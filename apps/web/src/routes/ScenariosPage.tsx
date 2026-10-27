@@ -24,6 +24,7 @@ import {
   PublicationPill,
 } from "../components/WorkspaceChrome";
 import { useCreateThenComplete } from "../lib/createDefinition";
+import { turnNumber } from "../lib/evidence";
 import {
   CHIP_LABEL_MAX_LENGTH,
   hiddenFactsTooLongRule,
@@ -186,7 +187,7 @@ export function ScenariosPage() {
                       </Link>
                       <div className="text-admin-muted">
                         {scenario.context_document_count} context document(s) · completes by turn{" "}
-                        {scenario.max_turns}
+                        {turnNumber(scenario.max_turns)}
                       </div>
                     </td>
                     <td className={tableCellClasses}>

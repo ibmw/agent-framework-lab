@@ -55,11 +55,11 @@ async function buildIncident(page: Page, unique: string) {
   await payments.getByLabel("ID", { exact: true }).fill("card");
   await payments.getByLabel("Name", { exact: true }).fill("Card synthetic");
   await payments.getByRole("button", { name: "Add payment method" }).click();
-  const fulfilment = card(page, "Fulfilment methods");
+  const fulfilment = card(page, "Fulfillment methods");
   await fulfilment.getByLabel("ID", { exact: true }).fill("standard");
   await fulfilment.getByLabel("Name", { exact: true }).fill("Standard 3-5 days");
   await fulfilment.getByLabel("Carrier", { exact: true }).fill("Nordic Post");
-  await fulfilment.getByRole("button", { name: "Add fulfilment method" }).click();
+  await fulfilment.getByRole("button", { name: "Add fulfillment method" }).click();
   await saveDraft(page);
 
   await openSection(page, "Tone of voice", "Tone of voice");
@@ -145,8 +145,8 @@ async function buildIncident(page: Page, unique: string) {
   await lines.getByLabel("Payment status", { exact: true }).selectOption("paid");
   await lines.getByLabel("Payment method", { exact: true }).selectOption("card");
   await lines.getByLabel("Paid at", { exact: true }).fill("2026-08-21T13:12");
-  const shipping = card(page, "Fulfilment & shipping");
-  await shipping.getByLabel("Fulfilment method", { exact: true }).selectOption("standard");
+  const shipping = card(page, "Fulfillment & shipping");
+  await shipping.getByLabel("Fulfillment method", { exact: true }).selectOption("standard");
   // The frozen copy the create page already selected, read off the card rather than
   // re-chosen: the *Ship to* select offers the same label, so the street is what says
   // which entry this order actually froze.

@@ -191,7 +191,7 @@ export function backgroundHex(background: ShopLogoBackground): string {
 export function markColourHex(colour: ShopMarkColour): string {
   const entry = SHOP_MARK_COLOURS.find((candidate) => candidate.value === colour);
   if (entry === undefined) {
-    throw new Error(`Unknown mark colour ${colour}`);
+    throw new Error(`Unknown mark color ${colour}`);
   }
   return entry.hex;
 }

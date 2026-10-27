@@ -1,5 +1,6 @@
 import type {
   AgentConfigurationListResponse,
+  AgentConfigurationResourcesResponse,
   AgentConfigurationVersionListResponse,
   AgentConfigurationVersionResponse,
   AgentTurnSchema,
@@ -34,7 +35,7 @@ import type {
 } from "@agent-lab/contracts";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HttpResponse, http } from "msw";
+import { delay, HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -649,7 +650,7 @@ function judgeRow(): Pick<ObjectiveResultSchema, "outcome" | "detail" | "judgeme
   if (!scored) {
     return {
       outcome: "deferred",
-      detail: "a judge scores this dimension; none has",
+      detail: "no verdict is recorded for this arm yet",
       judgement: null,
     };
   }
@@ -1076,6 +1077,34 @@ function publishedVersion(
   };
 }
 
+/** The proven frameworks as the catalog serves them: the label is the catalog's, not the record's. */
+const FRAMEWORK_CATALOG: AgentConfigurationResourcesResponse = {
+  frameworks: [
+    {
+      framework_id: "pydantic-ai",
+      label: "Pydantic AI",
+      summary: "The lab's first support adapter.",
+      architectures: ["single_agent"],
+      providers: ["openai"],
+      models: ["gpt-5-mini"],
+      capabilities: ["tool_calls", "structured_output"],
+    },
+    {
+      framework_id: "fake",
+      label: "Deterministic fake",
+      summary: "Offline adapter with no model call.",
+      architectures: ["single_agent"],
+      providers: ["fake"],
+      models: ["deterministic"],
+      capabilities: ["tool_calls"],
+    },
+  ],
+  tools: [],
+  variables: [],
+  support_identities: [],
+  preview_shops: [],
+};
+
 const server = setupServer(
   // The lab resolves its current shop against this list rather than trusting the remembered
   // identifier, so the bench only composes for a shop the lab actually holds (ADR 0054).
@@ -1297,6 +1326,8 @@ const server = setupServer(
       return HttpResponse.json({ turns: written }, { status: 201 });
     },
   ),
+  // The proven-framework catalog, which the results' arm cards name a framework from.
+  http.get("*/api/v1/agent-configurations/resources", () => HttpResponse.json(FRAMEWORK_CATALOG)),
   // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
   // handler this suite declares for one of these routes still wins.
   ...shellListings(),
@@ -3658,9 +3689,13 @@ describe("live bench", () => {
 
     const objectives = await screen.findByRole("region", { name: "Objectives" });
 
-    expect(
-      within(objectives).getAllByText(/explain-the-outcome a judge scores this.*none has/),
-    ).toHaveLength(2);
+    // One cell, one statement of who scores it: the label says a judge does, and the detail
+    // says what the label does not — that no verdict is on the record for this arm yet.
+    const cells = within(objectives).getAllByText(/^explain-the-outcome a judge scores this/);
+    expect(cells.map((cell) => cell.textContent)).toEqual([
+      "explain-the-outcome a judge scores this after the run — no verdict is recorded for this arm yet",
+      "explain-the-outcome a judge scores this after the run — no verdict is recorded for this arm yet",
+    ]);
   });
 
   it("scores the judge's rows with a published judge and reads what it answered", async () => {
@@ -4777,6 +4812,126 @@ describe("experiment results", () => {
     expect(within(armB).queryByText(/missed a requirement/)).toBeNull();
   });
 
+  it("names each arm's framework by its label, as History does, and not by its id", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
+        const record = experiment(turns, agentTurns, toolEvents, mutationEvents);
+        const [first, second] = record.runs;
+        return HttpResponse.json({
+          ...record,
+          runs: [{ ...first, framework_id: "pydantic-ai", model_id: "gpt-5-mini" }, second],
+        } satisfies ExperimentResponse);
+      }),
+    );
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+    const armB = screen.getByRole("region", { name: "Arm B summary" });
+
+    expect(await within(armA).findByText("Pydantic AI · gpt-5-mini")).toBeVisible();
+    expect(within(armB).getByText("Deterministic fake · deterministic")).toBeVisible();
+    expect(screen.queryByText(/^(pydantic-ai|fake) · /)).toBeNull();
+  });
+
+  it("names a framework the catalog does not hold by the id its run recorded", async () => {
+    // History's own rule (`_framework_label`): a framework no longer proven keeps its id.
+    server.use(
+      http.get("*/api/v1/agent-configurations/resources", () =>
+        HttpResponse.json({
+          ...FRAMEWORK_CATALOG,
+          frameworks: FRAMEWORK_CATALOG.frameworks.filter((entry) => entry.framework_id !== "fake"),
+        } satisfies AgentConfigurationResourcesResponse),
+      ),
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
+        const record = experiment(turns, agentTurns, toolEvents, mutationEvents);
+        const [first, second] = record.runs;
+        return HttpResponse.json({
+          ...record,
+          runs: [{ ...first, framework_id: "pydantic-ai", model_id: "gpt-5-mini" }, second],
+        } satisfies ExperimentResponse);
+      }),
+    );
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+    const armB = screen.getByRole("region", { name: "Arm B summary" });
+
+    // Arm A's label says the catalog has answered; it holds nothing for arm B's framework.
+    expect(await within(armA).findByText("Pydantic AI · gpt-5-mini")).toBeVisible();
+    expect(within(armB).getByText("fake · deterministic")).toBeVisible();
+  });
+
+  it("does not name the framework again when the arm's label already ends with it", async () => {
+    // The seeded demo labels its arms "Arm A — Pydantic AI" (`seed/demo.py`): History's rule.
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
+        const record = experiment(turns, agentTurns, toolEvents, mutationEvents);
+        const [first, second] = record.runs;
+        return HttpResponse.json({
+          ...record,
+          runs: [
+            {
+              ...first,
+              label: "Arm A — Pydantic AI",
+              framework_id: "pydantic-ai",
+              model_id: "gpt-5-mini",
+            },
+            second,
+          ],
+        } satisfies ExperimentResponse);
+      }),
+    );
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A — Pydantic AI summary" });
+    const armB = screen.getByRole("region", { name: "Arm B summary" });
+
+    // Arm B's line says the catalog has answered; arm A's names the model alone.
+    expect(await within(armB).findByText("Deterministic fake · deterministic")).toBeVisible();
+    expect(within(armA).getByText("gpt-5-mini")).toBeVisible();
+    expect(within(armA).queryByText(/Pydantic AI · /)).toBeNull();
+  });
+
+  it("names the model alone while the catalog is still on its way", async () => {
+    // Held open: the card must not show the id now and swap it for the label later.
+    server.use(
+      http.get("*/api/v1/agent-configurations/resources", async () => {
+        await delay("infinite");
+        return HttpResponse.json(FRAMEWORK_CATALOG);
+      }),
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
+        const record = experiment(turns, agentTurns, toolEvents, mutationEvents);
+        const [first, second] = record.runs;
+        return HttpResponse.json({
+          ...record,
+          runs: [{ ...first, framework_id: "pydantic-ai", model_id: "gpt-5-mini" }, second],
+        } satisfies ExperimentResponse);
+      }),
+    );
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+
+    expect(within(armA).getByText("gpt-5-mini")).toBeVisible();
+    expect(within(armA).queryByText(/pydantic-ai · /)).toBeNull();
+  });
+
+  it("names the framework by the id its run recorded when the catalog cannot be read", async () => {
+    server.use(
+      http.get("*/api/v1/agent-configurations/resources", () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "The lab could not complete the request." },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+
+    expect(await within(armA).findByText("fake · deterministic")).toBeVisible();
+  });
+
   it("names an arm's configuration on its chip, never the arm's own label again", async () => {
     // The seeded run labels each arm with its configuration's name.
     server.use(
@@ -5137,7 +5292,7 @@ describe("experiment results", () => {
 
     // The order the customer quotes, and what about it moved, in one line: the scenario's
     // own fault moved the same world, so its group is in the same summary.
-    expect(moved).toHaveTextContent("NS-10482 · 2 groups changed: shipping address, fulfilment");
+    expect(moved).toHaveTextContent("NS-10482 · 2 groups changed: shipping address, fulfillment");
     // The claim the card makes, checked rather than assumed.
     expect(moved).toHaveTextContent("no other state changed");
     expect(untouched).toHaveTextContent(
@@ -5165,7 +5320,7 @@ describe("experiment results", () => {
     // entries it gained rather than by their eight fields.
     for (const arm of [armA, armB]) {
       expect(arm).toHaveTextContent(
-        "NS-10482 · 3 groups changed: shipping address, fulfilment, 2 events added",
+        "NS-10482 · 3 groups changed: shipping address, fulfillment, 2 events added",
       );
       expect(arm).not.toHaveTextContent("shipping_address.city");
     }
@@ -5203,7 +5358,7 @@ describe("experiment results", () => {
         .getAllByRole("rowheader")
         .filter((cell) => cell.getAttribute("scope") === "rowgroup")
         .map((cell) => cell.textContent),
-    ).toEqual(["shipping address", "fulfilment", "events"]);
+    ).toEqual(["shipping address", "fulfillment", "events"]);
     // Exhaustive (ADR 0035): every path the backend served is a row, and nothing else is.
     const paths = within(table)
       .getAllByRole("rowheader")
@@ -7406,7 +7561,7 @@ describe("what the arms differed on", () => {
     expect(cellsOf(card, /^Architecture/)).toEqual(["Single agent", "Same"]);
     expect(cellsOf(card, /^Tone of voice/)).toEqual(["shop default", "Same"]);
     expect(
-      within(card).getByText("One difference, so the behaviour above is attributable to it."),
+      within(card).getByText("One difference, so the behavior above is attributable to it."),
     ).toBeVisible();
     expect(within(card).queryByText(/cannot be attributed|can be attributed/)).toBeNull();
   });
@@ -7588,7 +7743,7 @@ describe("what the arms differed on", () => {
     // Only what differs is listed on the bench.
     expect(within(card).queryByText("Architecture")).toBeNull();
     expect(
-      within(card).getByText("One difference, so the behaviour above is attributable to it."),
+      within(card).getByText("One difference, so the behavior above is attributable to it."),
     ).toBeVisible();
   });
 });

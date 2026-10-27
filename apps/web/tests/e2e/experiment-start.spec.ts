@@ -81,11 +81,11 @@ async function buildIncident(page: Page, unique: string) {
   await payments.getByLabel("ID", { exact: true }).fill("card");
   await payments.getByLabel("Name", { exact: true }).fill("Card synthetic");
   await payments.getByRole("button", { name: "Add payment method" }).click();
-  const fulfilment = card(page, "Fulfilment methods");
+  const fulfilment = card(page, "Fulfillment methods");
   await fulfilment.getByLabel("ID", { exact: true }).fill("standard");
   await fulfilment.getByLabel("Name", { exact: true }).fill("Standard 3-5 days");
   await fulfilment.getByLabel("Carrier", { exact: true }).fill("Nordic Post");
-  await fulfilment.getByRole("button", { name: "Add fulfilment method" }).click();
+  await fulfilment.getByRole("button", { name: "Add fulfillment method" }).click();
   await saveDraft(page);
 
   await openSection(page, "Tone of voice", "Tone of voice");
@@ -176,8 +176,8 @@ async function buildIncident(page: Page, unique: string) {
   await lines.getByLabel("Payment status", { exact: true }).selectOption("paid");
   await lines.getByLabel("Payment method", { exact: true }).selectOption("card");
   await lines.getByLabel("Paid at", { exact: true }).fill("2026-08-21T13:12");
-  const shipping = card(page, "Fulfilment & shipping");
-  await shipping.getByLabel("Fulfilment method", { exact: true }).selectOption("standard");
+  const shipping = card(page, "Fulfillment & shipping");
+  await shipping.getByLabel("Fulfillment method", { exact: true }).selectOption("standard");
   // The frozen copy the create page already selected, read off the card rather than
   // re-chosen: the *Ship to* select offers the same label, so the street is what says
   // which entry this order actually froze.
@@ -572,9 +572,9 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   const objectivesMatrix = card(page, "Objectives");
   await expect(objectivesMatrix.getByText("Read document")).toBeVisible();
   await expect(objectivesMatrix.getByText(/ pending — /)).toHaveCount(2);
-  await expect(objectivesMatrix.getByText(/a judge scores this dimension; none has/)).toHaveCount(
-    2,
-  );
+  await expect(
+    objectivesMatrix.getByText(/a judge scores this after the run — no verdict is recorded/),
+  ).toHaveCount(2);
 
   // One composition, both arms: the customer says the same thing to each.
   const composer = card(page, "Customer composer");
@@ -626,9 +626,9 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(
     objectivesMatrix.getByRole("status", { name: "Where each arm's scoring stands" }),
   ).toContainText("Arm A has been scored · Arm B has been scored");
-  await expect(objectivesMatrix.getByText(/a judge scores this dimension; none has/)).toHaveCount(
-    0,
-  );
+  await expect(
+    objectivesMatrix.getByText(/a judge scores this after the run — no verdict is recorded/),
+  ).toHaveCount(0);
   await expect(
     objectivesMatrix.getByText(/judged by deterministic under judge version 1, attempt 1/),
   ).toHaveCount(2);
@@ -697,7 +697,7 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   // its fulfilment is in the same difference.
   await expect(
     businessState.getByText(
-      "NS-10482 · 3 groups changed: shipping address, fulfilment, 2 events added",
+      "NS-10482 · 3 groups changed: shipping address, fulfillment, 2 events added",
       { exact: true },
     ),
   ).toHaveCount(2);

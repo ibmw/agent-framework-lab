@@ -51,6 +51,7 @@ import {
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { type EntryEdit, entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { labelOf, OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
+import { turnNumber } from "../lib/evidence";
 import {
   CONTEXT_DOCUMENTS_CAP_RULE,
   LABEL_MAX_LENGTH,
@@ -850,7 +851,9 @@ function ResolvedState({ resolution }: { resolution: ScenarioResolutionSchema })
           ))}
         </ul>
       </Row>
-      <Row label="Completion">by turn {resolution.max_turns}</Row>
+      {/* The cap counts the turns after the opening message, which is turn 1 (`turnNumber`): a
+          scenario capped at one completes on its second, where its arm reads "answered 2 of 2". */}
+      <Row label="Completion">by turn {turnNumber(resolution.max_turns)}</Row>
     </dl>
   );
 }

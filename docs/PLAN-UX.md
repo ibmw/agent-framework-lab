@@ -106,39 +106,8 @@ named in the tests and the tokens are paid. The operator took the milestone's de
 - **A field's `aria-invalid` follows ADR 0078's touch**, the same as the line that names its
   refusal.
 
-Two slices touch the backend: Slice 54 changes the text of one detail, and Slice 55 changes
-the comparison. The covered journeys are `experiment-start.spec.ts`,
-`workspace-shell.spec.ts` and `sticky-header.spec.ts`.
-
-### Slice 54 — One spelling, and words that count as the operator counts
-
-- [ ] Every string an operator reads uses American spelling: the copy in `lib/comparison.ts`
-  (:157), `lib/tours.ts`, `lib/setupPath.ts`, `lib/glossary.ts`, the hints and field help. A
-  test asserts that no shipped string under `apps/web/src` other than a test holds *behaviour*,
-  *colour* or *labelled*. Identifiers, comments and `docs/` are out of scope.
-- [ ] The scenario editor's *Completion* row (`routes/ScenarioEditorPage.tsx:853`) and the
-  scenarios index (`routes/ScenariosPage.tsx:188`) count turns from one, with the opening message
-  as turn 1, through the helper Slice 45 added (`turnNumber`). A scenario capped at
-  `max_turns: 1` reads *by turn 2*, which is the turn at which its arm reads *Completed —
-  answered 2 of 2 turns*.
-- [ ] An unscored judged cell says one thing. The backend detail
-  (`application/evaluation.py:464`, "a judge scores this {evidence}; none has") stops repeating
-  the outcome's label ("a judge scores this after the run", `lib/evidence.ts:31`) and says what
-  the label does not: that no judgement is recorded yet for this arm. This changes the detail's
-  text and not its schema.
-- [ ] The results arm card (`routes/ExperimentResultsLayout.tsx:780`) names the framework by its
-  display label, as History does (`ExperimentHistoryPage.tsx:884–886`), not by `framework_id`.
-
-Frames: none; the copy is the lab's own.
-
-Authority: ADR 0030, ADR 0033, ADR 0050, `docs/design-direction.md`.
-
-Departures to record: none.
-
-Branch: `fix/copy-one-spelling`. Checks: Vitest for the spelling assertion, `Scenarios.test.tsx`
-for the turn count, `Experiments.test.tsx` for the unscored cell and the arm card's framework;
-pytest for the detail's text. `make check`, `pnpm build`; `pnpm test:e2e` for
-`experiment-start.spec.ts`.
+One slice touches the backend: Slice 55 changes the comparison. The covered journeys are
+`experiment-start.spec.ts`, `workspace-shell.spec.ts` and `sticky-header.spec.ts`.
 
 ### Slice 55 — Two versions of one support identity are a difference
 

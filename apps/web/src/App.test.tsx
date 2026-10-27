@@ -1558,7 +1558,7 @@ describe("shop workspace", () => {
   it("derives a fulfilment id from the name, and follows again once emptied", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
-    const fulfilment = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+    const fulfilment = within(await screen.findByRole("region", { name: "Fulfillment methods" }));
 
     await user.type(fulfilment.getByLabelText("Name"), "Express");
     expect(fulfilment.getByLabelText("ID")).toHaveValue("express");
@@ -1572,14 +1572,14 @@ describe("shop workspace", () => {
     expect(fulfilment.getByLabelText("ID")).toHaveValue("express-air-freight");
 
     await user.type(fulfilment.getByLabelText("Carrier"), "Nordic Post");
-    await user.click(fulfilment.getByRole("button", { name: "Add fulfilment method" }));
+    await user.click(fulfilment.getByRole("button", { name: "Add fulfillment method" }));
     expect(fulfilment.getByText("express-air-freight", { selector: "code" })).toBeVisible();
     await user.type(fulfilment.getByLabelText("Name"), "Express air freight");
     expect(fulfilment.getByLabelText("ID")).toHaveValue("express-air-freight-2");
     await user.clear(fulfilment.getByLabelText("ID"));
     await user.type(fulfilment.getByLabelText("ID"), "express-air-freight");
     expect(fulfilment.getByLabelText("ID")).toBeInvalid();
-    await user.click(fulfilment.getByRole("button", { name: "Add fulfilment method" }));
+    await user.click(fulfilment.getByRole("button", { name: "Add fulfillment method" }));
     expect(fulfilment.getAllByText("express-air-freight", { selector: "code" })).toHaveLength(1);
   });
 
@@ -1812,7 +1812,7 @@ describe("shop workspace", () => {
 
     // Beside the frozen catalog in the editor's grid: identity and methods in its 312px panel.
     const panel = sidePanel(identity);
-    expect(panelCards(panel)).toEqual(["Shop identity", "Payment methods", "Fulfilment methods"]);
+    expect(panelCards(panel)).toEqual(["Shop identity", "Payment methods", "Fulfillment methods"]);
     expect(panelFields(panel)).toEqual([]);
   });
 
@@ -2139,7 +2139,7 @@ describe("a shop's logo, on Shop details", () => {
     const logo = within(region);
     const marks = within(logo.getByRole("group", { name: "Mark" }));
     const backgrounds = within(logo.getByRole("group", { name: "Background" }));
-    const colours = within(logo.getByRole("group", { name: "Mark colour" }));
+    const colours = within(logo.getByRole("group", { name: "Mark color" }));
     expect(
       marks.getByRole("radio", { name: "Monogram — the first letters of the name" }),
     ).toBeChecked();
@@ -2160,14 +2160,14 @@ describe("a shop's logo, on Shop details", () => {
     // A mark lands on the prototype's Pine, in the colour that reads there.
     expect(backgrounds.getByRole("radio", { name: "Pine" })).toBeChecked();
     expect(colours.getByRole("radio", { name: "White" })).toBeChecked();
-    expect(logo.getByRole("group", { name: "Mark colour" })).not.toHaveAccessibleDescription(
+    expect(logo.getByRole("group", { name: "Mark color" })).not.toHaveAccessibleDescription(
       /Hard to read/,
     );
 
     await user.click(backgrounds.getByRole("radio", { name: "Stone" }));
     // The colour stays what it was; white on Stone is 1.16:1, so the group says so.
     expect(colours.getByRole("radio", { name: "White" })).toBeChecked();
-    expect(logo.getByRole("group", { name: "Mark colour" })).toHaveAccessibleDescription(
+    expect(logo.getByRole("group", { name: "Mark color" })).toHaveAccessibleDescription(
       "What the icon or the letters are drawn in. Hard to read against that background. Try the other one.",
     );
     expect(badgeOf(region)).toHaveStyle({ backgroundColor: "#eceef0", color: "#ffffff" });
@@ -2408,7 +2408,7 @@ describe("the setup checklist beside Shop details", () => {
     const labels = [
       "At least one product",
       "A payment method enabled",
-      "A fulfilment method",
+      "A fulfillment method",
       "A policy",
       "A tone of voice default",
       "An FAQ",
@@ -2421,7 +2421,7 @@ describe("the setup checklist beside Shop details", () => {
       "A payment method enabled": ["✓", "done"],
       // The fixture offers no fulfilment method, but its gate does not say so: the line is the
       // gate's answer, not a second reading of the draft.
-      "A fulfilment method": ["✓", "done"],
+      "A fulfillment method": ["✓", "done"],
       "A policy": ["✓", "done"],
       "A tone of voice default": ["✓", "done"],
       "An FAQ": ["!", "to do"],
@@ -2480,7 +2480,7 @@ describe("the setup checklist beside Shop details", () => {
       expect(row).toHaveTextContent(finding.severity === "error" ? "Error" : "Warning");
       expect(within(row).getByText(finding.path, { selector: "code" })).toBeInTheDocument();
     }
-    expect(line(panel, "A fulfilment method")).toHaveTextContent(
+    expect(line(panel, "A fulfillment method")).toHaveTextContent(
       "a published shop must offer at least one fulfilment method",
     );
     expect(line(panel, "A tone of voice default")).toHaveTextContent(
@@ -2569,7 +2569,7 @@ describe("the setup checklist beside Shop details", () => {
   it("draws every field of every card of Shop details on a row that names it", async () => {
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
     const identity = sidePanel(await screen.findByRole("region", { name: "Setup checklist" }));
-    await screen.findByRole("region", { name: "Fulfilment methods" });
+    await screen.findByRole("region", { name: "Fulfillment methods" });
 
     // Enumerated, so a card added to the column is swept too, and nothing is excepted.
     expect(expectEditorOnRows(identity)).toEqual({
@@ -2578,7 +2578,7 @@ describe("the setup checklist beside Shop details", () => {
       Commerce: 11,
       Channels: 3,
       "Payment methods": 4,
-      "Fulfilment methods": 5,
+      "Fulfillment methods": 5,
     });
   });
 
@@ -2874,7 +2874,7 @@ describe("editing a saved entry in place", () => {
     };
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
 
-    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+    const card = within(await screen.findByRole("region", { name: "Fulfillment methods" }));
     await user.click(card.getByRole("button", { name: "Edit Standard" }));
     const form = within(card.getByRole("group", { name: "Edit Standard" }));
     await user.clear(form.getByLabelText("Name"));
@@ -5683,7 +5683,7 @@ describe("the shop draft's refusals, said under their controls", () => {
   it("says why a maximum of 3 after a minimum of 5 is refused, and Add says it too", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
-    const fulfilment = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+    const fulfilment = within(await screen.findByRole("region", { name: "Fulfillment methods" }));
 
     await user.type(fulfilment.getByLabelText("Name"), "Express");
     await user.type(fulfilment.getByLabelText("Carrier"), "Nordic Post");
@@ -5704,7 +5704,7 @@ describe("the shop draft's refusals, said under their controls", () => {
 
     // Add is refused for that reason, names that one line, and writes nothing when pressed,
     // nor when its form is submitted without the press.
-    const add = fulfilment.getByRole("button", { name: "Add fulfilment method" });
+    const add = fulfilment.getByRole("button", { name: "Add fulfillment method" });
     expect(precedes(add, line)).toBe(true);
     expectRefused(add, TRANSIT_WINDOW_RULE);
     expect(add.getAttribute("aria-describedby")?.split(" ")[0]).toBe(line.id);
@@ -5733,7 +5733,7 @@ describe("the shop draft's refusals, said under their controls", () => {
     currentContent = { ...READY_CONTENT, fulfilment_methods: [STANDARD] };
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
 
-    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+    const card = within(await screen.findByRole("region", { name: "Fulfillment methods" }));
     await user.click(card.getByRole("button", { name: "Edit Standard" }));
     const form = within(card.getByRole("group", { name: "Edit Standard" }));
     await user.clear(form.getByLabelText("Min days"));
@@ -6415,7 +6415,7 @@ describe("the field pattern on the shop editors", () => {
       "Commerce",
       "Channels",
       "Payment methods",
-      "Fulfilment methods",
+      "Fulfillment methods",
       "Setup checklist",
     ]);
   });
@@ -6429,7 +6429,7 @@ describe("the field pattern on the shop editors", () => {
     const channels = within(screen.getByRole("region", { name: "Channels" }));
     expect(identity.getByLabelText("Name")).toHaveValue("Northstar Outfitters");
     expect(identity.getByLabelText("Slug")).toHaveValue("northstar");
-    for (const group of ["Mark", "Background", "Mark colour"]) {
+    for (const group of ["Mark", "Background", "Mark color"]) {
       expect(logo.getByRole("group", { name: group })).toBeInTheDocument();
     }
     expect(commerce.getByLabelText("Locale")).toHaveValue("en-GB");
@@ -6448,7 +6448,7 @@ describe("the field pattern on the shop editors", () => {
     const commerce = await screen.findByRole("region", { name: "Commerce" });
     const [locale] = expectRunsOpenOnARow(commerce);
     expect(locale).toContainElement(within(commerce).getByLabelText("Locale"));
-    for (const name of ["Identity", "Logo", "Channels", "Payment methods", "Fulfilment methods"]) {
+    for (const name of ["Identity", "Logo", "Channels", "Payment methods", "Fulfillment methods"]) {
       expectRunsOpenOnARow(screen.getByRole("region", { name }));
     }
   });
@@ -8596,7 +8596,7 @@ describe("payment and fulfilment methods, as the handoff draws them", () => {
     expect(accepted.getByRole("button", { name: "Edit Visa" })).toBeVisible();
     expect(accepted.getByRole("button", { name: "Remove Visa" })).toBeVisible();
 
-    const fulfilment = within(screen.getByRole("region", { name: "Fulfilment methods" }));
+    const fulfilment = within(screen.getByRole("region", { name: "Fulfillment methods" }));
     const offered = within(fulfilment.getByRole("group", { name: "Offered" }));
     expect(offered.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       "Standard deliverystandardNordic Post · 2–5 days",
@@ -8625,8 +8625,8 @@ describe("payment and fulfilment methods, as the handoff draws them", () => {
     const user = userEvent.setup();
     currentContent = { ...READY_CONTENT, fulfilment_methods: TWO_FULFILMENTS };
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
-    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
-    const add = card.getByRole("button", { name: "Add fulfilment method" });
+    const card = within(await screen.findByRole("region", { name: "Fulfillment methods" }));
+    const add = card.getByRole("button", { name: "Add fulfillment method" });
 
     // Blank, the name comes first; no field is marked wrong before anything is typed.
     expectRefused(add, "Give the method a name.");
@@ -8827,16 +8827,16 @@ describe("payment and fulfilment methods, as the handoff draws them", () => {
       fulfilment_methods: TWO_FULFILMENTS,
     };
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
-    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+    const card = within(await screen.findByRole("region", { name: "Fulfillment methods" }));
 
     await user.click(card.getByRole("button", { name: "Remove Express delivery" }));
     const confirm = card.getByRole("group", {
-      name: "Remove the fulfilment method “Express delivery”?",
+      name: "Remove the fulfillment method “Express delivery”?",
     });
     expect(confirm).toHaveFocus();
     await user.click(within(confirm).getByRole("button", { name: "Remove it" }));
     const notice = card.getByText(
-      "Removed the fulfilment method “Express delivery” from the draft.",
+      "Removed the fulfillment method “Express delivery” from the draft.",
     );
     expect(notice).toHaveFocus();
     expect(card.queryByText("express", { selector: "code" })).toBeNull();
@@ -8856,7 +8856,7 @@ describe("payment and fulfilment methods, as the handoff draws them", () => {
     window.localStorage.setItem(CONFIRM_KEY, "false");
     currentContent = { ...READY_CONTENT, fulfilment_methods: TWO_FULFILMENTS };
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
-    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+    const card = within(await screen.findByRole("region", { name: "Fulfillment methods" }));
 
     await user.click(card.getByRole("button", { name: "Edit Express delivery" }));
     await user.click(card.getByRole("button", { name: "Remove Express delivery" }));
@@ -8866,7 +8866,7 @@ describe("payment and fulfilment methods, as the handoff draws them", () => {
     // Nothing the form held for Express can be added back by a press on Add, and what is typed
     // next starts from a blank form.
     expectRefused(
-      card.getByRole("button", { name: "Add fulfilment method" }),
+      card.getByRole("button", { name: "Add fulfillment method" }),
       "Give the method a name.",
     );
     await user.type(card.getByLabelText("Name"), "Click");
@@ -8897,7 +8897,7 @@ describe("payment and fulfilment methods, as the handoff draws them", () => {
     const user = userEvent.setup();
     currentContent = { ...READY_CONTENT, fulfilment_methods: TWO_FULFILMENTS };
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
-    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+    const card = within(await screen.findByRole("region", { name: "Fulfillment methods" }));
 
     // Opened and unchanged, the form holds nothing the draft lacks.
     await user.click(card.getByRole("button", { name: "Edit Standard delivery" }));
@@ -8905,7 +8905,7 @@ describe("payment and fulfilment methods, as the handoff draws them", () => {
     await user.click(rail().getByRole("link", { name: "Orders" }));
     const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
     expect(prompt).toHaveTextContent(
-      "The Fulfilment methods form holds an edit to Standard delivery that has not reached the draft.",
+      "The Fulfillment methods form holds an edit to Standard delivery that has not reached the draft.",
     );
     await user.click(within(prompt).getByRole("button", { name: "Stay on this page" }));
 

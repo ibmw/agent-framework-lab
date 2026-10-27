@@ -294,7 +294,7 @@ export function ShopVersionPage() {
               ))}
             </ul>
           </Card>
-          <Card title="Fulfilment methods">
+          <Card title="Fulfillment methods">
             <ul className="grid gap-2 text-[13px]">
               {content.fulfilment_methods.map((method) => (
                 <EntryCard

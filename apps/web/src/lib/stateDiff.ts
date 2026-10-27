@@ -23,6 +23,12 @@ export interface DiffGroup {
 const FIRST_SEGMENT = /^([^.[]+)(\[\d+\])?/;
 
 /**
+ * A segment whose word an operator reads in American spelling (PLAN-UX Milestone 13) where the
+ * contract keeps its own: the group's `key` and every path stay as the record spells them.
+ */
+const GROUP_LABELS: Readonly<Record<string, string>> = { fulfilment: "fulfillment" };
+
+/**
  * An order's changes grouped by the first segment of their paths, the largest group first.
  *
  * Ordered by how many fields moved rather than alphabetically, so the group that carries the
@@ -43,7 +49,7 @@ export function groupChanges(changes: readonly FieldChangeSchema[]): DiffGroup[]
     const entries = group.list ? entriesOf(group.changes) : [];
     return {
       key,
-      label: key.replaceAll("_", " "),
+      label: GROUP_LABELS[key] ?? key.replaceAll("_", " "),
       list: group.list,
       changes: group.changes,
       added: entries.filter((entry) => entry.every((change) => change.before === null)).length,
@@ -76,7 +82,7 @@ function entriesOf(changes: readonly FieldChangeSchema[]): FieldChangeSchema[][]
   return [...entries.values()];
 }
 
-/** One group in the summary's words: "fulfilment", or "2 events added". */
+/** One group in the summary's words: "fulfillment", or "2 events added". */
 function groupPhrase(group: DiffGroup): string {
   if (!group.list) {
     return group.label;
@@ -99,7 +105,7 @@ function groupPhrase(group: DiffGroup): string {
     .join(", ");
 }
 
-/** The line an order's diff opens with: "3 groups changed: shipping address, fulfilment, 2 events added". */
+/** The line an order's diff opens with: "3 groups changed: shipping address, fulfillment, 2 events added". */
 export function summarizeGroups(groups: readonly DiffGroup[]): string {
   const noun = groups.length === 1 ? "group" : "groups";
   return `${groups.length} ${noun} changed: ${groups.map(groupPhrase).join(", ")}`;

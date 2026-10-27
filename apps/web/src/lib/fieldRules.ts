@@ -513,7 +513,7 @@ export const SHOP_SLUG_DETAIL_RULE =
  * id: `ContextDocumentSchema` is `{kind, document_id}`, which is why the two rows that carry
  * the address say they are fixed rather than pretending to be questions (ADR 0057).
  */
-export const DOCUMENT_TITLE_RULE = "What the tool result is labelled with when an agent reads it.";
+export const DOCUMENT_TITLE_RULE = "What the tool result is labeled with when an agent reads it.";
 
 export const DOCUMENT_KIND_RULE =
   "Policies state rules, guidelines state judgement, FAQ answers state one thing plainly. It decides which tool returns the document, and it is answered here because a scenario names a document by its kind and its slug together.";

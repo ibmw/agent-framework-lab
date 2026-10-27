@@ -86,7 +86,7 @@ export function ShopLogoCard({
       title="Logo"
       description={
         <>
-          How the shop is recognised in the switcher and the shop list. Publishing freezes it with
+          How the shop is recognized in the switcher and the shop list. Publishing freezes it with
           the rest of the shop.
         </>
       }
@@ -162,7 +162,7 @@ export function ShopLogoCard({
           </div>
         </FieldGroup>
         <FieldGroup
-          label="Mark colour"
+          label="Mark color"
           hint="What the icon or the letters are drawn in."
           extra={lowContrast ? LOW_CONTRAST_WARNING : null}
           extraTone="warning"

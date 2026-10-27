@@ -50,6 +50,7 @@ import {
   outlineButtonClasses,
   versionChipClasses,
 } from "../lib/ui";
+import { frameworkName, labelNamesFramework, useFrameworkLabels } from "../lib/useFrameworkLabels";
 import { pinKey, publishedNameOf, usePinnedVersions } from "../lib/usePinnedVersions";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 import { definitionPath } from "../lib/versionLinks";
@@ -123,6 +124,9 @@ export function ExperimentResultsLayout() {
   // lab cannot reach is refused there with 422 — said here first, as setup's Start says it
   // (ADR 0053). Read before the early return below, so the hooks keep their order.
   const unreachable = useUnreachableProviders();
+  // The arm cards name each framework by its label, as History does; read before the early
+  // return below for the same reason.
+  const frameworkLabels = useFrameworkLabels();
   const replayNoteId = useId();
   const aboutId = useId();
   const derivingNoteId = useId();
@@ -405,6 +409,7 @@ export function ExperimentResultsLayout() {
             key={run.run_id}
             shopId={shopId}
             run={run}
+            framework={frameworkName(frameworkLabels, run.framework_id)}
             arm={evaluation.arms.find((entry) => entry.run_id === run.run_id) ?? null}
           />
         ))}
@@ -745,10 +750,16 @@ function Tab({ to, end, label }: { to: string; end?: boolean; label: string }) {
 function ArmSummary({
   shopId,
   run,
+  framework,
   arm,
 }: {
   shopId: string;
   run: ExperimentRunSchema;
+  /**
+   * The framework as History names it: its display label, or its id where none is known; `null`
+   * while the catalog loads, when the card names the model alone.
+   */
+  framework: string | null;
   arm: ArmEvaluationSchema | null;
 }) {
   return (
@@ -777,7 +788,9 @@ function ArmSummary({
               )}
             </Link>
             <span>
-              {run.framework_id} · {run.model_id}
+              {framework === null || labelNamesFramework(run.label, framework)
+                ? run.model_id
+                : `${framework} · ${run.model_id}`}
             </span>
           </p>
         </div>

@@ -229,7 +229,7 @@ export const TOURS: Record<TourId, Tour> = {
         anchor: '[data-tour="block-index"]',
         title: "What a mutation block is",
         body: [
-          "A [[mutation-block|mutation block]] is a fault rather than a question: it moves the world in the middle of an incident instead of deciding anything about what the agent did. The one effect this build performs advances an order one step along its fulfilment graph, so an agent holding a proposal it computed a moment ago now holds a stale one.",
+          "A [[mutation-block|mutation block]] is a fault rather than a question: it moves the world in the middle of an incident instead of deciding anything about what the agent did. The one effect this build performs advances an order one step along its fulfillment graph, so an agent holding a proposal it computed a moment ago now holds a stale one.",
         ],
       },
       {
@@ -358,7 +358,7 @@ export const TOURS: Record<TourId, Tour> = {
         title: "What this run pinned",
         at: [""],
         body: [
-          "Everything in this card is something this run froze before it started — the starting state, the fingerprint of every input it resolved, the scenario version and the published inputs behind it, each block by its own name, and what each [[run|arm]] ran. A derived run names the run it came from and what it changed. What the arms differ along is under the evidence: behaviour can be attributed to a dimension only while exactly one differs, and with two nothing can say which of them moved the result.",
+          "Everything in this card is something this run froze before it started — the starting state, the fingerprint of every input it resolved, the scenario version and the published inputs behind it, each block by its own name, and what each [[run|arm]] ran. A derived run names the run it came from and what it changed. What the arms differ along is under the evidence: behavior can be attributed to a dimension only while exactly one differs, and with two nothing can say which of them moved the result.",
           "Who drove the customer matters as much: one send is one composition however many arms it reaches, and two compositions at the same turn are two questions even when the words match — from there the arms are answering different conversations, which the rail's input divergence lists turn by turn.",
         ],
       },
@@ -471,7 +471,7 @@ export const TOURS: Record<TourId, Tour> = {
         anchor: '[aria-label="Payment methods"]',
         title: "What an order could have been paid with",
         body: [
-          "Payment and fulfilment methods are the vocabulary an [[order]] draws on: an order fixture names one of each, and naming one this shop does not offer is refused when the order is saved rather than when it is run.",
+          "Payment and fulfillment methods are the vocabulary an [[order]] draws on: an order fixture names one of each, and naming one this shop does not offer is refused when the order is saved rather than when it is run.",
         ],
       },
       {

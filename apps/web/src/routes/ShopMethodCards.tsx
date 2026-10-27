@@ -61,7 +61,7 @@ const PAYMENT_WORDS: ItemFormWords = {
   record: "draft",
 };
 const FULFILMENT_WORDS: ItemFormWords = {
-  form: "Fulfilment methods",
+  form: "Fulfillment methods",
   entry: METHOD_ENTRY,
   record: "draft",
 };
@@ -484,7 +484,7 @@ export function FulfilmentMethodsCard() {
 
   return (
     <Card
-      title="Fulfilment methods"
+      title="Fulfillment methods"
       description="How an order reaches the customer. Delivery windows are what an agent promises."
     >
       <FieldRows>
@@ -496,13 +496,13 @@ export function FulfilmentMethodsCard() {
             {methods.length > 0 ? (
               <ul className="flex flex-col gap-2">
                 {methods.map((method) => {
-                  const notice = `Removed the fulfilment method “${method.name}” from the draft.`;
+                  const notice = `Removed the fulfillment method “${method.name}” from the draft.`;
                   if (removal.isArmed(method.id)) {
                     return (
                       <ConfirmRemove
                         key={method.id}
                         as="li"
-                        title={`Remove the fulfilment method “${method.name}”?`}
+                        title={`Remove the fulfillment method “${method.name}”?`}
                         consequence={consequenceOf(
                           "The shop stops offering it once the draft is saved and published.",
                           findingClauses(["fulfilment_method_missing_from_shop"]),
@@ -558,7 +558,7 @@ export function FulfilmentMethodsCard() {
           title={title}
           hint="Min and max days are the method's delivery window, in whole days."
           editing={form.editing !== null}
-          addLabel="Add fulfilment method"
+          addLabel="Add fulfillment method"
           refusal={refusal}
           reasonId={reasonId}
           onSubmit={submit}

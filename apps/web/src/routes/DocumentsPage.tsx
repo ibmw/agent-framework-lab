@@ -266,7 +266,7 @@ export function NewDocumentPage() {
 
   const blockedBy =
     pythonStrip(title) === ""
-      ? "The document needs a title: it is what the tool result is labelled with."
+      ? "The document needs a title: it is what the tool result is labeled with."
       : id === ""
         ? "The document needs a slug, which is how a scenario names the read."
         : taken.includes(id)

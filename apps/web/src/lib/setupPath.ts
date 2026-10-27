@@ -200,7 +200,7 @@ export interface StepCopy {
 export const SETUP_GUIDE_STEPS: Record<SetupStepId, StepCopy> = {
   shop: {
     body: [
-      "A [[shop]] is the synthetic commerce platform an incident happens inside: the catalog, the policies and FAQ the agent reaches through tools, the payment and fulfilment methods an order can use, and the named tone-of-voice guidelines it answers in. Nothing else in this chain exists outside one — every later step is either authored in a shop or published against one.",
+      "A [[shop]] is the synthetic commerce platform an incident happens inside: the catalog, the policies and FAQ the agent reaches through tools, the payment and fulfillment methods an order can use, and the named tone-of-voice guidelines it answers in. Nothing else in this chain exists outside one — every later step is either authored in a shop or published against one.",
       "The shop's overview lists whatever its publish gate is still refusing, and those words are the gate's own rather than a second opinion. Publishing freezes the draft as version 1; the draft stays yours to keep editing, and nothing that pinned v1 moves when you do.",
       "If you have no name in mind, the create form offers “Use an example shop”, which fills its four fields with a ready-made identity you can edit before creating. It is a convenience on the first step only: the shop it makes is the same empty draft as one you typed, and every gate below applies to it unchanged.",
     ],
@@ -208,14 +208,14 @@ export const SETUP_GUIDE_STEPS: Record<SetupStepId, StepCopy> = {
   },
   customer: {
     body: [
-      "A [[customer-profile|customer profile]] is a fictional person — identity, behaviour, account state, and a named address book with one default entry. Attach one to the shop and publish it.",
+      "A [[customer-profile|customer profile]] is a fictional person — identity, behavior, account state, and a named address book with one default entry. Attach one to the shop and publish it.",
       "Publication matters more here than it looks: a ticket pins the customer version it was written against, so the person who complained stays the person the record says complained, however the profile is edited afterwards.",
     ],
     gate: "A ticket can only name a profile that is attached to its shop and published.",
   },
   order: {
     body: [
-      "The [[order|order fixture]] is the commerce state the incident is about: line items, payment and fulfilment status, the authored events that got it there, and a shipping address selected from the customer's address book and stored as a frozen copy labelled with where it came from.",
+      "The [[order|order fixture]] is the commerce state the incident is about: line items, payment and fulfillment status, the authored events that got it there, and a shipping address selected from the customer's address book and stored as a frozen copy labeled with where it came from.",
       "It is the only definition in this chain with no version of its own. A scenario names the order rather than freezing it, and the copy is taken later, when a [[sandbox-snapshot|snapshot]] is frozen — so an order edited after the scenario is published changes the starting state of the next run.",
     ],
     gate: "A scenario binds its objectives to this shop's own orders, and a starting state copies the one the scenario named.",

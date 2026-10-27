@@ -498,9 +498,9 @@ export function OrderEditorPage() {
             </div>
           </Card>
 
-          <Card title="Fulfilment & shipping">
+          <Card title="Fulfillment & shipping">
             <FieldRows>
-              <Field label="Fulfilment status" hint={FULFILMENT_STATUS_RULE}>
+              <Field label="Fulfillment status" hint={FULFILMENT_STATUS_RULE}>
                 <select
                   className={`${fieldControlClasses} w-full`}
                   value={content.fulfilment.status}
@@ -520,7 +520,7 @@ export function OrderEditorPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Fulfilment method" hint={ORDER_METHOD_RULE}>
+              <Field label="Fulfillment method" hint={ORDER_METHOD_RULE}>
                 <select
                   className={`${fieldControlClasses} w-full`}
                   value={content.fulfilment.method_id ?? ""}

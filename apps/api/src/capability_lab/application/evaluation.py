@@ -461,7 +461,9 @@ def _judged(
             template,
             version,
             ObjectiveOutcome.DEFERRED,
-            f"a judge scores this {template.evidence.value}; none has",
+            # The outcome's own label already says a judge scores the row; the detail says
+            # what the label does not, and does not say it twice.
+            "no verdict is recorded for this arm yet",
         )
     if judgement.outcome is None:
         return _result(

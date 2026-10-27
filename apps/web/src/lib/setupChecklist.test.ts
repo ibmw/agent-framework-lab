@@ -88,7 +88,7 @@ describe("the setup checklist's reading of the gate", () => {
       ["shop_without_tone_of_voice", "A tone of voice default"],
       ["tone_of_voice_without_default", "A tone of voice default"],
       ["shop_without_payment_method", "A payment method enabled"],
-      ["shop_without_fulfilment_method", "A fulfilment method"],
+      ["shop_without_fulfilment_method", "A fulfillment method"],
       ["shop_without_policy", "A policy"],
       ["shop_without_faq", "An FAQ"],
       ["shop_without_support_guideline", "Support guidelines"],
@@ -143,7 +143,7 @@ describe("the setup checklist's reading of the gate", () => {
     expect(lines.map((line) => [line.label, line.done, line.note])).toEqual([
       ["At least one product", true, "0 products in the draft"],
       ["A payment method enabled", true, "1 method enabled"],
-      ["A fulfilment method", true, "1 method offered"],
+      ["A fulfillment method", true, "1 method offered"],
       ["A policy", true, "1 policy authored"],
       ["A tone of voice default", true, "Warm and precise"],
       ["An FAQ", true, "2 answers authored"],

@@ -261,7 +261,7 @@ const SHOP_GATE_MAP: Record<string, { path: string; entry: string; to: string }>
   },
   shop_without_fulfilment_method: {
     path: "fulfilment_methods",
-    entry: "Fulfilment methods",
+    entry: "Fulfillment methods",
     to: `/shops/${SHOP_ID}/setup/identity`,
   },
   // The three collections are one Documents table now, and the chip in the address is what

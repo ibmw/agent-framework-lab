@@ -87,7 +87,7 @@ const SHOP_SECTIONS: Readonly<Record<string, { label: string; path: string }>> =
   products: { label: "Catalog", path: "products" },
   tone_of_voice_guidelines: { label: "Tone of voice", path: "setup/tone" },
   payment_methods: { label: "Payment methods", path: "setup/identity" },
-  fulfilment_methods: { label: "Fulfilment methods", path: "setup/identity" },
+  fulfilment_methods: { label: "Fulfillment methods", path: "setup/identity" },
   policies: { label: "Policies", path: "setup/policies?kind=policies" },
   faq: { label: "FAQ", path: "setup/policies?kind=faq" },
   support_guidelines: { label: "Support guidelines", path: "setup/policies?kind=guidelines" },

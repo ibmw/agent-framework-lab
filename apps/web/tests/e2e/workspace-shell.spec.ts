@@ -58,11 +58,11 @@ test("the rail keeps its controls on screen in every section", async ({ page }) 
   await payments.getByLabel("ID", { exact: true }).fill("card");
   await payments.getByLabel("Name", { exact: true }).fill("Card synthetic");
   await payments.getByRole("button", { name: "Add payment method" }).click();
-  const fulfilment = page.getByRole("region", { name: "Fulfilment methods" });
+  const fulfilment = page.getByRole("region", { name: "Fulfillment methods" });
   await fulfilment.getByLabel("ID", { exact: true }).fill("standard");
   await fulfilment.getByLabel("Name", { exact: true }).fill("Standard 3-5 days");
   await fulfilment.getByLabel("Carrier", { exact: true }).fill("Nordic Post");
-  await fulfilment.getByRole("button", { name: "Add fulfilment method" }).click();
+  await fulfilment.getByRole("button", { name: "Add fulfillment method" }).click();
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
 
