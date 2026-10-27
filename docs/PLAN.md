@@ -129,6 +129,17 @@ consistently.
 | 11 — A product's images are files the shop holds | A product's images uploaded by drop, the operating system's picker or the shop's own library, named by their file, stored by their content and never overwritten, replaced on their item and drawn wherever they are listed; a shop that never published deleted with everything it holds; the seed shipping real images. | ADR 0076–0077, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-10-02.md` |
 | 12 — The results say why | Every mark on the results matrices says why, a judged one with the judge's reason and name; the arms' difference, a summarised state diff and the conversation as a read-only tab; visible selection and a two-lane timeline the evidence links into; the record each run froze in the rail; an untouched form's refusal muted; the rail folded by a phone's width. Frontend but for one move: the verdict's deciding call served in the v1 contract (ADR 0030's 2026-10-25 amendment). | ADR 0030, ADR 0078–0079, `docs/history/PLAN-UX-2026-10-22.md` |
 | 13 — What Milestone 12 left behind | The copy in American English and a scenario's turns counted from one; arms on two versions of one support identity compared as different; a field announced invalid only once its refusal is shown; the indexes' tables scrolled at a phone's width and a long shop name cut; the debts the reviews named paid — the selected ink a token, two tests made sound, the deciding call followed from a scrolled matrix cell. Frontend but for two moves: the arms compared on the version each pinned, which the v1 contract's descriptions say (ADR 0042's 2026-10-27 amendment), and one backend detail's text. | ADR 0042, ADR 0078–0079, `docs/history/PLAN-UX-2026-10-27.md` |
+| **14 — The results are one sheet, arm beside arm** | **Open.** The results as one comparison sheet with a column per arm and the arms named in a strip pinned as the page scrolls: outcome, with input divergence and attribution, first, then objectives, business state, configuration, usage, provenance and notes, what differs drawn first and never as a verdict; tags in the header; the conversation, the timeline and the traces under the same columns; one arm as one column, and the rows stacked at a phone's width. | slices in `docs/PLAN-UX.md` |
+
+## Milestone 14 — The results are one sheet, arm beside arm
+
+Rebuild the experiment results as one comparison sheet with the arms as columns, as the operator
+chose and approved on 27 October 2026, keeping every piece of information the page holds and
+changing only where it sits. It is built on the primitives the workspace already has, without a
+backend or contract change. `docs/PLAN-UX.md` is the authority for its scope, order and checks.
+Its first slice writes ADR 0080 with its code, recording the composition and amending ADR 0036,
+ADR 0068 and ADR 0079 and the two principles of `docs/design-direction.md` it touches.
+Acceptance is that plan's.
 
 ## Deferred decision triggers
 
