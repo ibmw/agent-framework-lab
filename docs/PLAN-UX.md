@@ -1,6 +1,6 @@
 # UX plan
 
-Status: no milestone open — 2026-10-26. Open slices only: a slice that lands is removed from this
+Status: Milestone 13 open — 2026-10-27. Open slices only: a slice that lands is removed from this
 file. Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
 `docs/history/PLAN-UX-2026-09-13.md`; the 20 September plan, whose delivered Milestone 8's goal
 and acceptance criteria are in `docs/history/PLAN-UX-2026-09-20.md`; the 28 September plan,
@@ -84,8 +84,157 @@ application, and the verdict on each slice of the 13 September plan — is
 Milestones 8, 9, 10, 11 and 12 are delivered. Their record is the commits and ADR 0052–0079;
 their goals and acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md`,
 `docs/history/PLAN-UX-2026-09-28.md`, `docs/history/PLAN-UX-2026-09-29.md`,
-`docs/history/PLAN-UX-2026-10-02.md` and `docs/history/PLAN-UX-2026-10-22.md`. No UX milestone
-is open: the next one is planned here, under the rules above, when the operator asks for it.
+`docs/history/PLAN-UX-2026-10-02.md` and `docs/history/PLAN-UX-2026-10-22.md`. Milestone 13
+is open. Its slices are independent of one another and land in the order they are numbered.
+
+## Milestone 13 — What Milestone 12 left behind
+
+### Goal
+
+What the reviews of Milestone 12 found and deliberately left unfixed, settled. The copy uses one
+spelling and counts turns as the operator does, arms that pinned two versions of one support
+identity are compared as different, a field is announced invalid only once its refusal is
+visible, the surfaces Milestone 12 did not reach work at 390 wide, and the debts the reviews
+named in the tests and the tokens are paid. The operator took the milestone's decisions on
+27 October 2026:
+
+- **The interface copy is American English**: *behavior*, *color*, *labeled*.
+- **The offline control judge stays as declared** (`infrastructure/judges/control.py`). It
+  scores engagement, not meaning, and the results already say so beside its mark.
+- **The support identity is compared by the version each arm pinned**, in this milestone, as a
+  backend slice.
+- **A field's `aria-invalid` follows ADR 0078's touch**, the same as the line that names its
+  refusal.
+
+Two slices touch the backend: Slice 54 changes the text of one detail, and Slice 55 changes
+the comparison. The covered journeys are `experiment-start.spec.ts`,
+`workspace-shell.spec.ts` and `sticky-header.spec.ts`.
+
+### Slice 54 — One spelling, and words that count as the operator counts
+
+- [ ] Every string an operator reads uses American spelling: the copy in `lib/comparison.ts`
+  (:157), `lib/tours.ts`, `lib/setupPath.ts`, `lib/glossary.ts`, the hints and field help. A
+  test asserts that no shipped string under `apps/web/src` other than a test holds *behaviour*,
+  *colour* or *labelled*. Identifiers, comments and `docs/` are out of scope.
+- [ ] The scenario editor's *Completion* row (`routes/ScenarioEditorPage.tsx:853`) and the
+  scenarios index (`routes/ScenariosPage.tsx:188`) count turns from one, with the opening message
+  as turn 1, through the helper Slice 45 added (`turnNumber`). A scenario capped at
+  `max_turns: 1` reads *by turn 2*, which is the turn at which its arm reads *Completed —
+  answered 2 of 2 turns*.
+- [ ] An unscored judged cell says one thing. The backend detail
+  (`application/evaluation.py:464`, "a judge scores this {evidence}; none has") stops repeating
+  the outcome's label ("a judge scores this after the run", `lib/evidence.ts:31`) and says what
+  the label does not: that no judgement is recorded yet for this arm. This changes the detail's
+  text and not its schema.
+- [ ] The results arm card (`routes/ExperimentResultsLayout.tsx:780`) names the framework by its
+  display label, as History does (`ExperimentHistoryPage.tsx:884–886`), not by `framework_id`.
+
+Frames: none; the copy is the lab's own.
+
+Authority: ADR 0030, ADR 0033, ADR 0050, `docs/design-direction.md`.
+
+Departures to record: none.
+
+Branch: `fix/copy-one-spelling`. Checks: Vitest for the spelling assertion, `Scenarios.test.tsx`
+for the turn count, `Experiments.test.tsx` for the unscored cell and the arm card's framework;
+pytest for the detail's text. `make check`, `pnpm build`; `pnpm test:e2e` for
+`experiment-start.spec.ts`.
+
+### Slice 55 — Two versions of one support identity are a difference
+
+- [ ] `compare_configurations` (`domain/experiment.py:504`) compares the support identity by
+  definition and pinned version, not by id alone (`:588–589`). The version is the one the
+  experiment's snapshot pins for each arm. A configuration names its identity
+  (`AgentConfigurationPayload.support_identity_id`) but not its version, so the comparison
+  takes the pins it needs from the caller's resolution (`application/experiments.py:552`,
+  `:605`, `:646`, `:1200`).
+- [ ] `derivation_variables` reads the same value, so a fork that moved only the identity's
+  version counts as having moved *support identity* (ADR 0039).
+- [ ] The v1 contract's description of the support identity's comparison value says what it
+  holds. The frontend already names each arm's pinned version (`lib/comparison.ts:85–102`) and
+  draws `differs` as the server sends it, so no consumer change is needed beyond what the tests
+  show. If a comparison is stored with an experiment, ADR 0042's amendment says what a run
+  recorded before this slice reads.
+
+Frames: none.
+
+Authority: ADR 0039, ADR 0042, ADR 0035.
+
+Departures to record: none.
+
+Branch: `fix/compare-identity-version`. Checks: pytest for the domain comparison (one id at v1
+and v2 differs, the same version agrees, two ids differ), the derivation, and the experiment
+endpoint's comparison; the contract check; Vitest `Experiments.test.tsx`, where *What the arms
+differed on* lists the identity for v1 against v2. `make check`, `pnpm build`; `pnpm test:e2e`
+for `experiment-start.spec.ts`.
+
+### Slice 56 — A field is invalid when its refusal is shown
+
+- [ ] A control that a refusal names carries `aria-invalid` only while the line naming that
+  refusal is drawn at the validation weight, so a screen reader is not told a field is invalid
+  while the screen still shows a hint. `refusedProps` (`lib/itemForm.ts:194`) takes the form's
+  `touched` from `useRefusalTouch`, and so do the field components that set `aria-invalid` from
+  a refusal: `DerivedIdField`, `ChipListField`, `ToggleChipGroup`, `MediaDropZone` and
+  `FieldHint`'s consumers. A refusal found on the field itself and not on the action (a
+  colliding id, a value too long) still says so as soon as it is typed.
+- [ ] ADR 0078 is amended: *What touched means* covers the field's `aria-invalid`, and the
+  Consequences line that recorded the two meanings goes.
+
+Frames: none.
+
+Authority: ADR 0063, ADR 0078.
+
+Departures to record: none.
+
+Branch: `fix/invalid-follows-touch`. Checks: Vitest, one adopter test per component: the
+control has no `aria-invalid` on an untouched form whose action is refused, gains it after an
+edit and after a press, and keeps it from the first keystroke for a collision. Every adopter
+test ADR 0078 lists still passes. `make check`, `pnpm build`.
+
+### Slice 57 — The surfaces Milestone 12 did not reach, at 390 wide
+
+- [ ] The shop indexes' tables (`routes/ProductsPage.tsx` and the other index pages on the same
+  template) scroll inside a scroller of their own, so the pane never scrolls sideways.
+- [ ] History's table moves its `sr-only` descriptions
+  (`routes/ExperimentHistoryPage.tsx:985`) inside a `relative` scroller, as the results
+  matrices did in Slice 53, so they no longer widen the pane.
+- [ ] A shop name too long for the switcher's row (`shell/ShopSwitcher.tsx`) is truncated with
+  an ellipsis, and its full name stays its accessible name and its `title`.
+- [ ] ADR 0079's Consequences no longer list these three as open.
+
+Frames: none; the prototype draws no phone width, and ADR 0079 governs.
+
+Authority: ADR 0055, ADR 0056, ADR 0079.
+
+Departures to record: none.
+
+Branch: `fix/narrow-indexes-history`. Checks: Vitest for the scroller classes and the switcher's
+truncation and name. `workspace-shell.spec.ts` at 390×844: Products, History and a long-named
+shop's switcher draw nothing past the viewport. `make check`, `pnpm build`; `pnpm test:e2e` for
+`workspace-shell.spec.ts`.
+
+### Slice 58 — The debts the reviews named
+
+- [ ] `#14352e`, the selected ink of the rail and the depth tabs (`shell/AppShell.tsx:299`,
+  `lib/ui.ts:815`), becomes a named colour token in `styles.css`. Both class sets use the token,
+  and `ui.test.ts` asserts the token's value.
+- [ ] `LabSettings.test.tsx:400–404` waits for the loaded settings with `findByRole` before
+  asserting them synchronously.
+- [ ] The tie-break between two attempts within one turn (`lib/timelineAnchors.ts`) has a test of
+  its own, with a mutation proof.
+- [ ] A Playwright journey follows a deciding-call link from a results cell that has to be
+  scrolled to inside the matrices' `relative` scroller. It runs on a run whose evidence carries
+  `decided_by`: the seeded demo's, or one the spec's fixture records.
+
+Frames: none.
+
+Authority: ADR 0030's 2026-10-25 amendment, ADR 0079.
+
+Departures to record: none.
+
+Branch: `test/results-review-debts`. Checks: Vitest `ui.test.ts`, `LabSettings.test.tsx`
+repeated twenty times under load, and the timeline anchors test. `make check`, `pnpm build`;
+`pnpm test:e2e` for `experiment-start.spec.ts`.
 
 ## Deliberately not here
 
@@ -109,8 +258,12 @@ is open: the next one is planned here, under the rules above, when the operator 
 - **Listing the runs derived from this one.** `derived_from` names a run's source, and nothing
   names its children; a listing narrowed by source is a backend slice in `docs/PLAN.md`.
 - **What the offline control judge decides.** Its rubric marks *Tell the customer what changed*
-  met when an arm answered every turn, which the seeded run's turn 2 shows is not a reading of the
-  reply; the results say so beside the mark, and changing the judge is `docs/PLAN.md`'s.
+  met when an arm answered every turn. It is a declared control that scores engagement, not
+  meaning (`infrastructure/judges/control.py`), and it stays one. The results say so beside the
+  mark, and a published judge is the one that reads the reply.
+- **Distinct accessible names for Traces' two *configuration v1* links.** Each sits inside its
+  own arm's region.
+- **Telling the operator when a lens hides the followed event.** The operator chose the lens.
 - **A component library or a new UI dependency.** The `CreatePage` layout, `ConfirmRemove` and
   `ActionStatus` are small components on the existing chrome, as the switcher's panel was.
 - **The product's variants, a scenario's composed blocks, the create pages' rows and a ticket's
