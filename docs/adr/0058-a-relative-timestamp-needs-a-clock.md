@@ -1,6 +1,6 @@
 # ADR 0058 — A relative timestamp needs a clock, and an authored instant has none
 
-Status: accepted — 2026-09-21
+Status: accepted — 2026-09-21; amended by ADR 0079 — 2026-10-26
 
 Settles the one preference in the settings zones that reaches every screen: how a timestamp is
 written. It is the fifth browser preference (ADR 0044, ADR 0054, ADR 0055), and the first that
@@ -123,6 +123,10 @@ where a browser has been rather than a statement of how it should behave. A rese
 them would make the control mean "forget where I was" as well as "undo what I picked" — and the
 first of those already has a control of its own, the *Forget* beside the last-visited shop, which
 is the prototype's own answer and the one the row names.
+
+> Amended by ADR 0079 (2026-10-26). Whether the rail starts collapsed applies from 48rem up:
+> below that width the rail starts as its strip whatever the preference says, the rail's own
+> control writes nothing, and Settings' row says so in its hint.
 
 The prototype's own reset re-points the remembered shop at the first shop in its list, which is a
 fixture's way of saying *undo*; there is no shop a real reset could pick, and picking one would be

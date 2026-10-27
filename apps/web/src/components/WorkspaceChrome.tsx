@@ -178,7 +178,12 @@ export function PageHeader({
             {chips}
           </>
         )}
-        {actions ? <div className="ml-auto flex items-center gap-2">{actions}</div> : null}
+        {/* The actions wrap among themselves once the row has already put them on a line of
+            their own and they are still wider than it — a phone's width — rather than run off
+            the pane's edge (ADR 0079). Wider than that, they are never alone and never wrap. */}
+        {actions ? (
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{actions}</div>
+        ) : null}
       </div>
       {reasons ? <HeaderReport>{reasons}</HeaderReport> : null}
       {description ? <p className="text-[13px] text-admin-muted">{description}</p> : null}

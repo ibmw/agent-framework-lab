@@ -13,7 +13,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { isValidElement } from "react";
 import type { RouteObject } from "react-router-dom";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ATTRIBUTE_LABEL_RULE,
   ATTRIBUTE_MEASUREMENT_RULE,
@@ -68,6 +68,7 @@ import {
 } from "./test/refused";
 import { expectEditorOnRows, expectRunsOpenOnARow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
+import { stubViewport } from "./test/viewport";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -8970,5 +8971,77 @@ describe("payment and fulfilment methods, as the handoff draws them", () => {
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     await waitFor(() => expect(card.getByRole("group", { name: "Edit Visa" })).toBeVisible());
     expect(card.getByLabelText("Name")).toHaveValue("Visa Renamed Debit");
+  });
+});
+
+/**
+ * The workspace at a phone's width (ADR 0079): the width folds the rail, the operator's
+ * remembered choice is left exactly as it was, and an editor's header keeps every action in
+ * reach. `AppShell.test.tsx` holds the shell's own cases; these are the same claims on the
+ * application as it ships, where the shell stays mounted while the routes under it move.
+ */
+describe("the workspace at a phone's width", () => {
+  const KEY = "agent-lab.navigation-collapsed";
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.localStorage.clear();
+  });
+
+  function shopRail() {
+    return screen.getByRole("navigation", { name: "Shop workspace" });
+  }
+
+  it.each([
+    ["expanded", "false"],
+    ["collapsed", "true"],
+  ])(
+    "draws the strip on an editor whatever was remembered (%s), and writes nothing",
+    async (_case, stored) => {
+      window.localStorage.setItem(KEY, stored);
+      stubViewport("narrow");
+      renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+      await screen.findByLabelText("Price for NS-ASJ-OB-L");
+      expect(shopRail().className).toContain("w-[52px]");
+      expect(screen.getByRole("button", { name: "Expand menu" })).toBeVisible();
+      expect(window.localStorage.getItem(KEY)).toBe(stored);
+    },
+  );
+
+  it("folds the rail opened at a phone's width once a destination is picked, and remembers none of it", async () => {
+    const user = userEvent.setup();
+    stubViewport("narrow");
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    await screen.findByLabelText("Price for NS-ASJ-OB-L");
+
+    await user.click(screen.getByRole("button", { name: "Expand menu" }));
+    await user.click(railEntry("Orders"));
+
+    await screen.findByRole("heading", { level: 1, name: "Orders" });
+    // Opened to pick a destination; once there, the page has its width back (ADR 0079). It is
+    // the same on every route, so no route folds the rail differently from another.
+    expect(shopRail().className).toContain("w-[52px]");
+    expect(screen.getByRole("button", { name: "Expand menu" })).toBeVisible();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("puts an editor's Save and Discard in the header group that wraps", async () => {
+    const user = userEvent.setup();
+    stubViewport("narrow");
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    await user.type(await screen.findByLabelText("Price for NS-ASJ-OB-L"), "249.00");
+
+    const header = screen.getByRole("heading", { level: 1 }).closest("header");
+    const save = screen.getByRole("button", { name: "Save draft" });
+    const discard = screen.getByRole("button", { name: "Discard changes" });
+    expect(header).toContainElement(save);
+    const group = save.parentElement;
+    expect(group).toContainElement(discard);
+    expect(group).toHaveClass("flex-wrap");
+    // In reach means pressable: the wrapped Save still saves.
+    await user.click(save);
+    await waitFor(() => expect(screen.getByText("All changes saved")).toBeInTheDocument());
   });
 });

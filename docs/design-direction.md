@@ -30,8 +30,9 @@ Carried forward from the brief; they outrank any measurement below.
 - **Status is never colour alone**: a glyph or a word always accompanies it. WCAG 2.2 AA
   contrast; every workflow keyboard-reachable.
 - **Desktop first, usable narrower.** Every row and card row wraps; nothing is fixed width except
-  the rail, the editor's side panel and the settings column cap. No
-  narrow-width treatment of the live comparison is drawn.
+  the rail, the editor's side panel and the settings column cap. Below a phone's width the rail
+  narrows to its strip and the top bar wraps (ADR 0079 decides the breakpoint and the control);
+  no other narrow-width treatment of the live comparison is drawn.
 - **Dense is fine, decorative is not.** No dashboard metrics for their own sake, no oversized
   status cards, realistic content rather than placeholder text.
 - **Every state is designed for**: empty, draft with findings, published and immutable, tool in
@@ -184,6 +185,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | A trace span's outcome and duration | on the track, just after the bar it labels — "0.31s · conflict", "0.42s · ok" (`DEPRECADED/ResultsTraces.dc.html` :88–110) | beside the track, in one fixed-width column on every row: a tool span's outcome glyph and word — ✓ Success, ✗ Refused, ! Failed — then the duration | the column is one width whatever it says, so every row's track is the same length and the bars share one scale, and no label is drawn over or under a bar |
 | The results' rail | three cards beside the General tab's evidence: *The finding*, a written sentence on what the arms did; *Provenance*, "scenario v1 · shop v3 · ticket T-204 v1 / customer maya v2 · frontline v1 / seed" and the snapshot; *Notes & tags* (`Workspace.dc.html` :2600–2622) | no finding; *Provenance* with the run a derived one came from, the starting state, the inputs' resolution fingerprint, the participant, each pin as a chip that opens it — the blocks by their published names, every other definition by its type and version — and each arm's own inputs; then *Notes & tags*, *Quantitative* and *Input divergence*; the seed stays in the header | the lab writes no conclusion of its own, and a sentence saying which arm did better is the aggregate the product refuses — the operator's is a note; the record carries a block's name only on its version, which the rail reads, while naming a shop, ticket, customer or identity would be a read per type for no comparison the rail makes; the two observation cards were already the rail's |
 | A refusal's line on a form nobody has touched | "Validation messages sit under the control: 13px 600 `#9d3028`" — the weight ADR 0063 gave every reason a refused action gives | that weight once the operator has edited the form or pressed the refused action; before that, the README's hint — 13px 400 `#42474c` (`refusalHintClasses`) — with the same words, the same button and the same description | a reason for a press nobody has made is a hint, not an error: opened unchanged, the results page read three red sentences about forms nobody had used. The README's validation colour is kept for a refusal the operator has caused (ADR 0078, which amends ADR 0063) |
+| The top bar at a phone's width | "**Top bar** — 56px" (README, *Chrome*), at no width in particular; the prototype draws no phone width | 56px and one row from 48rem up; below it the identity, the mode tabs and the two controls wrap onto rows of their own, 44px or more each, 144px in all at 390 | at 390 the one row needed 813px and ran *Settings* off an edge nothing scrolls back to; a wrapped bar keeps every control, named as before (ADR 0079) |
 
 Georgia on the results' stat numerals landed with the surface that first draws it, the arm cards
 under the results header (ADR 0068) — as the `open` button verb landed with the overview's
@@ -227,8 +229,11 @@ The values are in `shell/AppShell.tsx`; the rules are these.
   defaulting to the remembered shop.
 - **The rail** collapses to a strip whose rows keep their accessible names; the collapsed state
   is a browser preference and never a database row (ADR 0044), and it is one preference for both
-  rails. It is hidden on the shops index and on Settings. `nav[aria-label="Shop workspace"]` is
-  what every spec reaches it by and does not move; the lab's is
+  rails. No route folds it differently from another; below the narrow breakpoint the width
+  does, without writing the preference, and the strip's *Expand menu* opens the column to pick
+  a destination, folding again once the operator goes to another page (ADR 0079).
+  It is hidden on the shops index and on Settings. `nav[aria-label="Shop workspace"]` is what
+  every spec reaches it by and does not move; the lab's is
   `nav[aria-label="Experiment lab workspace"]`. The foot control's name, copy and tooltip are one
   string. **Each entry carries its listing's count** (ADR 0056), right-aligned and muted, under
   the rule *Lists and counts* states: the whole list, absent while the listing is in flight or
@@ -237,8 +242,9 @@ The values are in `shell/AppShell.tsx`; the rules are these.
   index that renders it, and a surface that changes what one holds reads it again. An entry's
   accessible name stays the label alone and the figure is its description; the collapsed strip
   draws no figure and still says one.
-- **The top bar** (ADR 0055) sits on a token of its own and carries four things. The identity at
-  the left is the shop switcher wherever there is a shop to name and the app title otherwise,
+- **The top bar** (ADR 0055) sits on a token of its own, wraps its groups onto rows below the
+  narrow breakpoint rather than clipping them (ADR 0079), and carries four things. The identity
+  at the left is the shop switcher wherever there is a shop to name and the app title otherwise,
   never both; the title returns to the shops index. The **switcher is a button opening a
   `menu`** — not a select — with roving focus, `Escape`, an outside press and a navigation all
   dismissing it, and the shop's badge is its logo, or its initials without one (ADR 0070).

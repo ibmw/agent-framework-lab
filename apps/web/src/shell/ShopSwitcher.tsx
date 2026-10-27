@@ -137,7 +137,7 @@ export function ShopSwitcher({ shops, current, onChoose }: ShopSwitcherProps) {
   return (
     <div
       ref={wrapper}
-      className="relative flex items-center border-r border-white/[0.14] py-2 pr-4 pl-3.5"
+      className="relative flex items-center border-r border-white/[0.14] py-2 pr-4 pl-3.5 narrow:border-r-0"
     >
       <button
         ref={button}

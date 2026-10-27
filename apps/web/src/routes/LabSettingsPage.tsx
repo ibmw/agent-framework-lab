@@ -343,7 +343,9 @@ function PreferencesZone({ surface }: { surface: LabSurfaceValue }) {
 
           <Field
             label="Start with the navigation rail collapsed"
-            hint="The rail's own collapse control writes this same preference."
+            // Below the narrow breakpoint the width folds the rail and nothing there writes this
+            // preference (ADR 0079), so the hint says where the two stop being one.
+            hint="The rail's own collapse control writes this same preference. On a phone-width screen the rail starts as its strip whatever this says, and opening it there is not remembered."
           >
             <input
               type="checkbox"

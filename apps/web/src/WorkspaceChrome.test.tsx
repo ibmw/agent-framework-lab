@@ -130,6 +130,20 @@ describe("an editor's header", () => {
     expect(screen.getByRole("region", { name: "What the actions report" })).toBe(row);
   });
 
+  it("wraps its actions among themselves rather than running them off a phone's edge", () => {
+    render(<EditorHeader sticky />);
+
+    // The one group that holds every action, and nothing but the actions.
+    const group = screen.getByRole("button", { name: "Save draft" }).parentElement;
+    expect(group).toContainElement(screen.getByRole("button", { name: "Publish v2" }));
+    expect(group).not.toContainElement(screen.getByRole("heading", { level: 1 }));
+    // ADR 0079: once the row has put the group on a line of its own and it is still wider
+    // than the pane, its buttons wrap, kept to the right edge they stand against.
+    expect(group).toHaveClass("flex", "flex-wrap", "justify-end", "ml-auto");
+    // And the row the title and the group share wraps first, as it always has (ADR 0066).
+    expect(group?.parentElement).toHaveClass("flex-wrap");
+  });
+
   it("is pinned with the create page's own classes, and only where it is asked to be", () => {
     const { unmount } = render(<EditorHeader sticky />);
     const pinned = screen.getByRole("heading", { level: 1 }).closest("header");

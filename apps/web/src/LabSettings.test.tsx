@@ -14,7 +14,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./shell/AppShell";
 import { renderApp, wholeDescription } from "./test/app";
@@ -320,6 +320,11 @@ describe("your preferences", () => {
       name: /Start with the navigation rail collapsed/,
     });
     expect(preference).not.toBeChecked();
+    // The row says where the rail's control and this preference are one, and where the width
+    // decides instead (ADR 0079): a phone neither reads this nor writes it.
+    expect(preference).toHaveAccessibleDescription(
+      /^The rail's own collapse control writes this same preference\. On a phone-width screen the rail starts as its strip whatever this says, and opening it there is not remembered\.\s*$/,
+    );
     await user.click(preference);
     first.unmount();
 
@@ -1697,13 +1702,18 @@ describe("the lab's other frameless surfaces", () => {
 });
 
 function renderShell(currentShopId?: string) {
-  return render(
-    <MemoryRouter>
-      <AppShell shops={shops.shops} currentShopId={currentShopId}>
-        <p>content</p>
-      </AppShell>
-    </MemoryRouter>,
-  );
+  // A data router, as the application ships on: the shell reads the matched route (ADR 0079).
+  const router = createMemoryRouter([
+    {
+      path: "*",
+      element: (
+        <AppShell shops={shops.shops} currentShopId={currentShopId}>
+          <p>content</p>
+        </AppShell>
+      ),
+    },
+  ]);
+  return render(<RouterProvider router={router} />);
 }
 
 describe("workspace shell", () => {

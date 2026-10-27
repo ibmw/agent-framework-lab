@@ -128,6 +128,13 @@
   --shadow-panel: 0 22px 70px rgb(31 56 49 / 8%);
 }
 
+/*
+ * A phone's width (ADR 0079): below it the rail is the strip and the top bar wraps. The query
+ * is `NARROW_VIEWPORT_QUERY` in `lib/viewport.ts`, which the shell reads through `matchMedia`;
+ * `viewport.test.ts` holds the two strings equal, so the class and the hook cannot disagree.
+ */
+@custom-variant narrow (@media (width < 48rem));
+
 @layer base {
   :root {
     color: var(--color-lab-ink);

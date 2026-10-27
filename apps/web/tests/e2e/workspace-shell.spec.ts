@@ -1,6 +1,12 @@
 import type { Page } from "@playwright/test";
 import { createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
+import {
+  COLLAPSED_KEY,
+  expectTopBarHoldsItsControls,
+  PHONE,
+  pastTheViewport,
+} from "./support/viewport";
 
 /**
  * The workspace shell owns the viewport: the rail and the content pane scroll independently,
@@ -86,6 +92,84 @@ test("the rail collapses only when the author asks, in every section", async ({ 
   await expect(page.getByRole("button", { name: "Expand menu" })).toBeVisible();
   await page.getByRole("button", { name: "Expand menu" }).click();
   await expect(page.getByRole("button", { name: "Collapse menu" })).toBeVisible();
+});
+
+async function railWidth(page: Page, name = "Shop workspace") {
+  const box = await page.getByRole("navigation", { name }).boundingBox();
+  return box?.width ?? null;
+}
+
+test("at a phone's width the rail is the strip, nothing passes the viewport, and the preference stays", async ({
+  page,
+}) => {
+  const unique = Date.now().toString(36);
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
+
+  // First paint at a phone's width, with nothing remembered: the strip from the first frame,
+  // and still nothing written once the page has settled.
+  const overview = page.url();
+  await page.evaluate((key) => window.localStorage.removeItem(key), COLLAPSED_KEY);
+  await page.setViewportSize(PHONE);
+  await page.goto(overview);
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Expand menu" })).toBeVisible();
+  expect(await railWidth(page)).toBe(52);
+  expect(await pastTheViewport(page)).toEqual([]);
+  await expectTopBarHoldsItsControls(page);
+  expect(await page.evaluate((key) => window.localStorage.getItem(key), COLLAPSED_KEY)).toBeNull();
+
+  for (const stored of ["false", "true"]) {
+    await page.setViewportSize({ width: 1280, height: 844 });
+    await page.evaluate(
+      ([key, value]) => window.localStorage.setItem(key, value),
+      [COLLAPSED_KEY, stored],
+    );
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+    expect(await railWidth(page)).toBe(stored === "true" ? 52 : 216);
+
+    await page.setViewportSize(PHONE);
+    await expect(page.getByRole("button", { name: "Expand menu" })).toBeVisible();
+    expect(await railWidth(page)).toBe(52);
+    expect(await pastTheViewport(page), `remembered ${stored}`).toEqual([]);
+    // The bar wraps rather than running Settings off the edge, and grows to hold what it wraps.
+    await expectTopBarHoldsItsControls(page);
+
+    // Opened to pick a destination: the column, and nothing written. Once there, the page has
+    // its width back and the rail is the strip again.
+    await page.getByRole("button", { name: "Expand menu" }).click();
+    expect(await railWidth(page)).toBe(216);
+    await page.getByLabel("Shop workspace").getByRole("link", { name: "Orders" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Expand menu" })).toBeVisible();
+    expect(await railWidth(page)).toBe(52);
+    expect(await pastTheViewport(page), `remembered ${stored}, on Orders`).toEqual([]);
+    // Opened again, so the widening below starts from an opening it has to drop.
+    await page.getByRole("button", { name: "Expand menu" }).click();
+    expect(await railWidth(page)).toBe(216);
+    expect(await page.evaluate((key) => window.localStorage.getItem(key), COLLAPSED_KEY)).toBe(
+      stored,
+    );
+
+    // Wide again, the remembered choice is back, whatever was opened narrow.
+    await page.setViewportSize({ width: 1280, height: 844 });
+    await expect(
+      page.getByRole("button", { name: stored === "true" ? "Expand menu" : "Collapse menu" }),
+    ).toBeVisible();
+    expect(await railWidth(page)).toBe(stored === "true" ? 52 : 216);
+    await page.getByLabel("Shop workspace").getByRole("link", { name: "Overview" }).click();
+  }
+
+  // The lab's rail, on the bench, folds at the same width.
+  await page.goto("/lab/bench");
+  await page.setViewportSize(PHONE);
+  await expect(page.getByRole("heading", { level: 1, name: "New experiment" })).toBeVisible();
+  expect(await railWidth(page, "Experiment lab workspace")).toBe(52);
+  expect(await pastTheViewport(page)).toEqual([]);
+  expect(await page.evaluate((key) => window.localStorage.getItem(key), COLLAPSED_KEY)).toBe(
+    "true",
+  );
 });
 
 /**

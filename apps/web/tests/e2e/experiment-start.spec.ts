@@ -11,6 +11,7 @@ import {
 } from "./support/authoring";
 import { expect as baseExpect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
+import { expectTopBarHoldsItsControls, PHONE, pastTheViewport } from "./support/viewport";
 
 /**
  * The page's publication notice. Every editor header now reports "All changes saved" as a
@@ -675,6 +676,18 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
       `Judged by experiment-resolution-quality-${unique}, version 1, on the deterministic control — attempt 1.`,
     ),
   ).toHaveCount(1);
+
+  // The same results at a phone's width (ADR 0079): the rail is the strip, the matrices scroll
+  // inside their cards, and nothing — not a cell's screen-reader line, not the bar — passes the
+  // viewport or sets the pane scrolling sideways.
+  const wide = page.viewportSize();
+  await page.setViewportSize(PHONE);
+  await expect(page.getByRole("button", { name: "Expand menu" })).toBeVisible();
+  expect(await pastTheViewport(page)).toEqual([]);
+  await expectTopBarHoldsItsControls(page);
+  if (wide !== null) {
+    await page.setViewportSize(wide);
+  }
 
   // What actually moved each arm, read off its revisions rather than off what it answered.
   const businessState = card(page, "Business state — verified, not claimed");

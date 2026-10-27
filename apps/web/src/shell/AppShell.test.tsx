@@ -1,8 +1,9 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { stubViewport } from "../test/viewport";
 import { AppShell, type RailCounts } from "./AppShell";
 
 /**
@@ -94,6 +95,32 @@ function renderShell(
   return { router, ...render(<RouterProvider router={router} />) };
 }
 
+/**
+ * The shop's shell as the application mounts it: a layout route around the pages, so the shell
+ * stays mounted while the route under it changes, and each page is a route of its own.
+ */
+function renderRoutedShell(at: string) {
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/shops/:shopId",
+        element: (
+          <AppShell shops={SHOPS} currentShopId={SHOP_ID} mode="shop">
+            <Outlet />
+          </AppShell>
+        ),
+        children: [
+          { index: true, id: "overview", element: <h1>Overview</h1> },
+          { path: "orders", id: "orders", element: <h1>Orders</h1> },
+          { path: "products/:handle", id: "product", element: <h1>Product</h1> },
+        ],
+      },
+    ],
+    { initialEntries: [at] },
+  );
+  return { router, ...render(<RouterProvider router={router} />) };
+}
+
 /** The bar's switcher, which is a button and not a select (ADR 0055). */
 function switcher() {
   return screen.getByRole("button", { name: /^Switch shop/ });
@@ -109,6 +136,8 @@ function toggle() {
 
 afterEach(() => {
   window.localStorage.clear();
+  // A case that stubs the viewport never leaks it into the next one, even when it fails.
+  vi.unstubAllGlobals();
 });
 
 describe("the navigation rail's metrics", () => {
@@ -213,6 +242,276 @@ describe("the rail's collapse control", () => {
     // Arriving again finds the rail as it was left, without anything having navigated.
     expect(rail().className).toContain("w-[52px]");
     expect(toggle()).toHaveAccessibleName("Expand menu");
+  });
+});
+
+/**
+ * The width, and only the width, folds the rail (ADR 0079). Below the narrow breakpoint the rail
+ * is the strip whatever this browser remembers, and nothing done at that width writes the
+ * preference: a phone did not choose it, so a phone does not change it.
+ */
+describe("the rail at a phone's width", () => {
+  const KEY = "agent-lab.navigation-collapsed";
+
+  function expectStrip() {
+    expect(rail().className).toContain("w-[52px]");
+    expect(rail().className).not.toContain("w-[216px]");
+    expect(toggle()).toHaveAccessibleName("Expand menu");
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+  }
+
+  function expectColumn() {
+    expect(rail().className).toContain("w-[216px]");
+    expect(rail().className).not.toContain("w-[52px]");
+    expect(toggle()).toHaveAccessibleName("Collapse menu");
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+  }
+
+  it.each([
+    ["nothing remembered", null],
+    ["expanded remembered", "false"],
+    ["collapsed remembered", "true"],
+  ])("draws the strip with %s, and leaves the preference as it was", (_case, stored) => {
+    if (stored !== null) {
+      window.localStorage.setItem(KEY, stored);
+    }
+    stubViewport("narrow");
+    renderShell("shop");
+
+    expectStrip();
+    expect(window.localStorage.getItem(KEY)).toBe(stored);
+  });
+
+  it("folds the lab's rail too, since it is one preference for both", () => {
+    window.localStorage.setItem(KEY, "false");
+    stubViewport("narrow");
+    renderShell("lab");
+
+    expect(rail("Experiment lab workspace").className).toContain("w-[52px]");
+  });
+
+  it.each([
+    ["nothing remembered", null],
+    ["expanded remembered", "false"],
+    ["collapsed remembered", "true"],
+  ])("opens the column when expanded, with %s, and writes nothing", async (_case, stored) => {
+    if (stored !== null) {
+      window.localStorage.setItem(KEY, stored);
+    }
+    stubViewport("narrow");
+    renderShell("shop");
+
+    await userEvent.click(toggle());
+    expectColumn();
+    expect(window.localStorage.getItem(KEY)).toBe(stored);
+
+    await userEvent.click(toggle());
+    expectStrip();
+    expect(window.localStorage.getItem(KEY)).toBe(stored);
+  });
+
+  it.each([
+    ["nothing remembered", null],
+    ["expanded remembered", "false"],
+    ["collapsed remembered", "true"],
+  ])(
+    "folds an opening once the operator has gone somewhere, with %s, and writes nothing",
+    async (_case, stored) => {
+      if (stored !== null) {
+        window.localStorage.setItem(KEY, stored);
+      }
+      stubViewport("narrow");
+      const { router } = renderShell("shop");
+      await userEvent.click(toggle());
+      expectColumn();
+
+      await act(() => router.navigate(`/shops/${SHOP_ID}/orders`));
+
+      expectStrip();
+      expect(window.localStorage.getItem(KEY)).toBe(stored);
+    },
+  );
+
+  it("folds an opening on a step back through history to another page", async () => {
+    stubViewport("narrow");
+    const { router } = renderShell("shop");
+    await act(() => router.navigate(`/shops/${SHOP_ID}/orders`));
+    await userEvent.click(toggle());
+    expectColumn();
+
+    await act(() => router.navigate(-1));
+
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}`);
+    expectStrip();
+  });
+
+  it("keeps an opening on the same page: a query, a fragment, or the page moving its own address", async () => {
+    stubViewport("narrow");
+    const { router } = renderShell("shop", { at: `/shops/${SHOP_ID}/products/alpine` });
+    await userEvent.click(toggle());
+    expectColumn();
+
+    await act(() => router.navigate(`/shops/${SHOP_ID}/products/alpine?attempt=2`));
+    expectColumn();
+    await act(() => router.navigate(`/shops/${SHOP_ID}/products/alpine?attempt=2#event-3`));
+    expectColumn();
+    // A replace is the page re-addressing itself — a product's handle following its title.
+    await act(() => router.navigate(`/shops/${SHOP_ID}/products/alpine-shell`, { replace: true }));
+    expectColumn();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("folds an opening on a replace that lands on another page, as a removal landing on its index does", async () => {
+    stubViewport("narrow");
+    const { router } = renderRoutedShell(`/shops/${SHOP_ID}/products/alpine`);
+    await userEvent.click(toggle());
+    expectColumn();
+
+    await act(() => router.navigate(`/shops/${SHOP_ID}/orders`, { replace: true }));
+
+    expect(screen.getByRole("heading", { name: "Orders" })).toBeVisible();
+    expectStrip();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("keeps an opening on a replace that stays on its page, as a product's handle following its title does", async () => {
+    stubViewport("narrow");
+    const { router } = renderRoutedShell(`/shops/${SHOP_ID}/products/alpine`);
+    await userEvent.click(toggle());
+    expectColumn();
+
+    await act(() => router.navigate(`/shops/${SHOP_ID}/products/alpine-shell`, { replace: true }));
+
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/products/alpine-shell`);
+    expectColumn();
+  });
+
+  it("leaves a wide rail as the author left it across a navigation", async () => {
+    window.localStorage.setItem(KEY, "false");
+    stubViewport("wide");
+    const { router } = renderShell("shop");
+
+    await act(() => router.navigate(`/shops/${SHOP_ID}/orders`));
+
+    expectColumn();
+  });
+
+  it("gives back the remembered column when the viewport widens", () => {
+    window.localStorage.setItem(KEY, "false");
+    const viewport = stubViewport("narrow");
+    renderShell("shop");
+    expectStrip();
+
+    viewport.resize("wide");
+
+    expectColumn();
+    expect(window.localStorage.getItem(KEY)).toBe("false");
+  });
+
+  it("gives back the remembered strip when the viewport widens, whatever was opened narrow", async () => {
+    window.localStorage.setItem(KEY, "true");
+    const viewport = stubViewport("narrow");
+    renderShell("shop");
+    await userEvent.click(toggle());
+    expectColumn();
+
+    viewport.resize("wide");
+
+    expectStrip();
+    expect(window.localStorage.getItem(KEY)).toBe("true");
+  });
+
+  it("forgets what was opened narrow once the viewport has been wide", async () => {
+    const viewport = stubViewport("narrow");
+    renderShell("shop");
+    await userEvent.click(toggle());
+    expectColumn();
+
+    viewport.resize("wide");
+    viewport.resize("narrow");
+
+    expectStrip();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("folds a remembered column when a wide viewport narrows, and still writes nothing", () => {
+    window.localStorage.setItem(KEY, "false");
+    const viewport = stubViewport("wide");
+    renderShell("shop");
+    expectColumn();
+
+    viewport.resize("narrow");
+
+    expectStrip();
+    expect(window.localStorage.getItem(KEY)).toBe("false");
+  });
+
+  it("is still the author's control on a wide viewport, which writes the choice", async () => {
+    stubViewport("wide");
+    renderShell("shop");
+
+    await userEvent.click(toggle());
+
+    expectStrip();
+    expect(window.localStorage.getItem(KEY)).toBe("true");
+  });
+});
+
+/**
+ * Below the narrow breakpoint the bar's three groups wrap onto rows of their own rather than run
+ * off the edge, where a phone has nothing to scroll them back with (ADR 0079). jsdom draws no
+ * rows, so the classes that make them are read, and the reach is read as the keyboard's: every
+ * control the bar draws is still in it, in order.
+ */
+describe("the top bar at a phone's width", () => {
+  function bar() {
+    return screen.getByRole("navigation", { name: "Workspace mode" }).closest("header");
+  }
+
+  it("wraps its groups below the breakpoint and keeps its 56px above it", () => {
+    renderShell("shop");
+    const header = bar();
+
+    expect(header).not.toBeNull();
+    const classes = header?.className.split(" ") ?? [];
+    // The wide bar is the README's 56px on one line, unchanged.
+    expect(classes).toContain("h-14");
+    expect(classes).not.toContain("flex-wrap");
+    // Narrow, it grows to what its rows hold and wraps them.
+    expect(classes).toEqual(
+      expect.arrayContaining(["narrow:h-auto", "narrow:min-h-14", "narrow:flex-wrap"]),
+    );
+    // A wrapped tab row and a wrapped control row each keep a press-sized height.
+    expect(screen.getByRole("navigation", { name: "Workspace mode" }).className).toContain(
+      "narrow:min-h-11",
+    );
+    const controls = screen.getByRole("link", { name: "Settings" }).parentElement;
+    expect(controls?.className).toContain("narrow:min-h-11");
+    // The switcher's divider separates it from the tabs beside it; on a row of its own it would
+    // stand mid-row with nothing after it, so it is dropped below the breakpoint.
+    const identity = switcher().parentElement;
+    expect(identity?.className.split(" ")).toEqual(
+      expect.arrayContaining(["border-r", "narrow:border-r-0"]),
+    );
+  });
+
+  it("keeps every control in the keyboard's reach, in order, at a phone's width", async () => {
+    stubViewport("narrow");
+    renderShell("shop");
+
+    const reached: string[] = [];
+    for (let press = 0; press < 5; press += 1) {
+      await userEvent.tab();
+      reached.push(document.activeElement?.textContent?.trim() ?? "");
+    }
+
+    expect(reached).toEqual([
+      expect.stringContaining("Northstar Outfitters"),
+      "Shop fixture",
+      "Experiment lab",
+      "Show me around",
+      "Settings",
+    ]);
   });
 });
 

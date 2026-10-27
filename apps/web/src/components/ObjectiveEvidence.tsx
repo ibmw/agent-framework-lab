@@ -160,13 +160,17 @@ function EvidenceMatrix({
 }) {
   return (
     // A phone's width is narrower than two arms' sentences; the table scrolls inside its card
-    // rather than pushing the page sideways.
-    <div className="overflow-x-auto">
+    // rather than pushing the page sideways. `relative`, so the `sr-only` lines a cell carries
+    // are laid out in this scroller and not against the pane, which they would otherwise
+    // widen past the viewport by however far the table runs (ADR 0079).
+    <div className="relative overflow-x-auto">
       <table className="w-full text-left text-[13px]">
         <caption className="sr-only">{caption}</caption>
         <thead>
           <tr>
-            <th scope="col" className={tableHeadClasses}>
+            {/* The objective keeps a reading width of its own at a phone's width; the arms'
+                columns are fixed, and the scroller takes what is left over. */}
+            <th scope="col" className={`${tableHeadClasses} min-w-[10rem]`}>
               Objective
             </th>
             {runs.map((run) => (

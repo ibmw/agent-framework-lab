@@ -1,6 +1,6 @@
 # ADR 0055 — The top bar carries the workspace: a switcher, the tour and a Settings toggle
 
-Status: accepted — 2026-09-20; amended 2026-10-25
+Status: accepted — 2026-09-20; amended 2026-10-25 and 2026-10-26
 
 Finishes the chrome ADR 0054 left half-drawn. The mode tabs take the prototype's glyph, underline
 and inactive ink; the shop switcher stops being a `<select>` and becomes a button opening a panel;
@@ -352,3 +352,11 @@ launch control walks only the steps in scope where the reader stands, and the an
 visits every address a surface declares and holds each in-scope step to exactly one visible
 element there. A step is never skipped because its anchor is absent: that is the silent
 staleness ADR 0045 exists to catch.
+
+## Amendment — 2026-10-26, the bar at a phone's width
+
+*The bar is one row* holds from 48rem up. Below that breakpoint the bar wraps its three groups —
+the identity, the mode tabs, and *Show me around* with *Settings* — onto rows of their own, at
+least 56px in all and 44px for a row the tabs or the controls land on, rather than running them off
+an edge a phone cannot scroll back to. Nothing is hidden, shortened or renamed, and above the
+breakpoint the bar is unchanged. ADR 0079 records the breakpoint and why.

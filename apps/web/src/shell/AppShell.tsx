@@ -24,7 +24,7 @@ import {
   Zap,
 } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useMatches, useNavigate, useNavigationType } from "react-router-dom";
 import { TourLaunch } from "../components/TourLaunch";
 import {
   readNavigationCollapsed,
@@ -40,6 +40,7 @@ import {
   topBarControlLitClasses,
   topBarInsetFocusRingClasses,
 } from "../lib/ui";
+import { useNarrowViewport } from "../lib/viewport";
 import { ShopSwitcher } from "./ShopSwitcher";
 
 interface NavEntry {
@@ -444,14 +445,52 @@ export function AppShell({
       : currentShopId
         ? shopSections(currentShopId, counts)
         : null;
-  // One rail for every section, collapsed only when the author says so. Routes deliberately
-  // do not override this: a navigation that folded the menu on its own would make the same
-  // control mean different things depending on where you happened to be standing. What the
-  // author says is now remembered between visits rather than reset by every reload.
-  const [collapsed, setCollapsed] = useState(readNavigationCollapsed);
+  // One rail for every section. Routes deliberately do not fold it: a navigation that folded
+  // the menu on its own would make the same control mean different things depending on where
+  // you happened to be standing. What the author says is remembered between visits rather than
+  // reset by every reload.
+  //
+  // The width is the one thing that overrides it (ADR 0079). Below the narrow breakpoint the
+  // 216px column would leave a phone's page a sliver, so the rail is the strip whatever was
+  // remembered. Expanding it there is for picking a destination: it opens the rail, writes
+  // nothing, and folds again once the operator has gone somewhere — on every route alike — or
+  // when the width crosses the breakpoint in either direction. The preference is a statement
+  // about a desktop's room, and a phone did not make it.
+  const narrow = useNarrowViewport();
+  const navigationType = useNavigationType();
+  // The route the location resolved to, by its id: what tells a page moving its own address
+  // apart from a move to another page when both arrive as a replace.
+  const matches = useMatches();
+  const leaf = matches[matches.length - 1]?.id ?? "";
+  const [remembered, setRemembered] = useState(readNavigationCollapsed);
+  const [openedNarrow, setOpenedNarrow] = useState(false);
+  const [narrowSeen, setNarrowSeen] = useState(narrow);
+  const [placeSeen, setPlaceSeen] = useState({ path: location.pathname, leaf });
+  if (narrowSeen !== narrow) {
+    // Crossing the breakpoint drops what was opened on the other side of it, during the render
+    // that noticed rather than in an effect, so no frame draws the old width's choice.
+    setNarrowSeen(narrow);
+    setOpenedNarrow(false);
+  }
+  if (placeSeen.path !== location.pathname) {
+    setPlaceSeen({ path: location.pathname, leaf });
+    // Going somewhere gives the page its width back: a push or a step through history to
+    // another path, and a replace that lands on another route — a removal landing on its index,
+    // a redirect. A query or a fragment (`?attempt=`, `#event-…`) is the same page, and a
+    // replace that stays on the same route is a page moving its own address (a product's handle
+    // following its title), so neither folds an opening.
+    if (navigationType !== "REPLACE" || placeSeen.leaf !== leaf) {
+      setOpenedNarrow(false);
+    }
+  }
+  const collapsed = narrow ? !openedNarrow : remembered;
 
   function chooseCollapsed(next: boolean) {
-    setCollapsed(next);
+    if (narrow) {
+      setOpenedNarrow(!next);
+      return;
+    }
+    setRemembered(next);
     writeNavigationCollapsed(next);
   }
 
@@ -481,8 +520,10 @@ export function AppShell({
     <div className="flex h-screen flex-col overflow-hidden bg-admin-canvas text-admin-ink">
       {/* 56px on the bar's own ground, which is the README's height and the README's colour
           (ADR 0055). `items-stretch`, because the mode tabs carry their underline along the
-          bar's bottom edge rather than under their own words. */}
-      <header className="relative z-20 flex h-14 flex-none items-stretch bg-lab-bar pr-[18px] text-lab-paper">
+          bar's bottom edge rather than under their own words. Below the narrow breakpoint the
+          three groups — identity, tabs, the two controls — wrap onto rows of their own rather
+          than run off a phone's edge with nothing to scroll them back (ADR 0079). */}
+      <header className="relative z-20 flex h-14 flex-none items-stretch bg-lab-bar pr-[18px] text-lab-paper narrow:h-auto narrow:min-h-14 narrow:flex-wrap">
         {switcher ? (
           <ShopSwitcher
             shops={shops}
@@ -504,7 +545,10 @@ export function AppShell({
         )}
 
         {mode ? (
-          <nav aria-label="Workspace mode" className="flex items-stretch gap-[26px] px-6">
+          <nav
+            aria-label="Workspace mode"
+            className="flex items-stretch gap-[26px] px-6 narrow:min-h-11"
+          >
             {(
               [
                 // With no current shop, *Shop fixture* can only offer the index — there is no
@@ -533,7 +577,7 @@ export function AppShell({
         ) : null}
 
         {/* The prototype separates the two by 14px and 4px (`Workspace.dc.html` :88, :94). */}
-        <div className="ml-auto flex items-center gap-[18px]">
+        <div className="ml-auto flex items-center gap-[18px] narrow:min-h-11">
           {/* One mount for the whole application. Which tour it offers — and whether there is
               one to offer at all — it reads from the route (ADR 0055). */}
           <TourLaunch />

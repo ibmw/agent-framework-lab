@@ -19,8 +19,10 @@ import { webOrigin } from "./support/stack";
  * Fixed, because the header's steady height follows how its title wraps, and the chain's own
  * names carry a timestamp: at 390×844 one name in six wrapped the title and its chips 2px under
  * the pane's third, and the header pinned. This one is measured in the middle of a run of
- * lengths that wrap alike: 350px at 390×844, against a third of 262.67px, and 131px at 960×540,
- * against a third of 161.33px. Those figures were measured in Chromium on macOS, where the title
+ * lengths that wrap alike: 261px at 390×844, against a third of 235.33px, and 131px at 960×540,
+ * against a third of 161.33px. The 390 figures are those of the rail's strip and the wrapped
+ * top bar (ADR 0079): a 338px pane, 706px tall; with the 216px column it was 350px against
+ * 262.67px. Those figures were measured in Chromium on macOS, where the title
  * is set in Georgia; on CI's Ubuntu runner the title's Georgia and the fingerprint's monospace
  * fall back to other fonts, so the wrap there is the margins' to absorb.
  *

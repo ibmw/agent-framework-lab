@@ -1,6 +1,7 @@
 # ADR 0016 — Tickets: the first shop-scoped definition, and the trigger every arm receives
 
-Status: accepted, partially superseded by ADR 0073 (*The helpdesk workspace*) — 2026-08-24
+Status: accepted, partially superseded by ADR 0073 (*The helpdesk workspace*), amended by ADR 0079
+(the rail at a phone's width) — 2026-08-24
 
 Implements the ticket half of `docs/PLAN.md` Milestone 2's second outcome under ADR 0011, the
 lifecycle fixed by ADR 0012, and the payload pattern established by ADR 0013 and generalized by
@@ -245,6 +246,13 @@ on which section you had navigated to, and an author who had never collapsed the
 it collapsed. The rail is one component for every section, it starts expanded everywhere, and the
 toggle is the only thing that changes it. The collapsed state stays first-class: every label survives
 as an accessible name.
+
+> Amended by ADR 0079 (2026-10-26). Below a phone's width — 48rem — the width folds the rail to its
+> strip whatever the author chose, and nothing done at that width writes the choice; above it the
+> toggle is again the only thing that changes the rail. Below it, a column the author opens is
+> folded again once they go to another page, on every route alike (decided 2026-10-27 — see
+> ADR 0079). The objection above was to the same control meaning different things by section,
+> and at a given width it means the same thing on every route.
 
 ## Deliberately not here
 

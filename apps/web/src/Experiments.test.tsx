@@ -4627,6 +4627,27 @@ describe("experiment results", () => {
     expect(within(judged).getByRole("table", { name: "Objectives a judge scored" })).toBeVisible();
   });
 
+  it("scrolls each matrix in its card at a phone's width, keeping the objective and the arms readable", async () => {
+    renderResults();
+
+    await screen.findByRole("region", { name: "Deterministic evidence" });
+    for (const name of ["Objectives decided from the record", "Objectives a judge scored"]) {
+      const table = screen.getByRole("table", { name });
+      const scroller = table.parentElement;
+      // The card scrolls, not the pane (ADR 0079). `relative`, because a cell's `sr-only`
+      // line is absolutely placed: against the pane it would widen the pane past a phone's
+      // viewport by however far the table runs, and the whole page would scroll sideways.
+      expect(scroller).toHaveClass("overflow-x-auto", "relative");
+      const [objective, ...arms] = within(table).getAllByRole("columnheader");
+      // Neither the objective nor an arm's head gives its width up to the other at 390.
+      expect(objective).toHaveClass("min-w-[10rem]");
+      expect(arms.length).toBeGreaterThan(0);
+      for (const arm of arms) {
+        expect(arm).toHaveClass("w-[220px]");
+      }
+    }
+  });
+
   it("shows a judge's first sentence, and opens the whole of it with the judge by its name", async () => {
     scored = true;
     judgeRationale =
