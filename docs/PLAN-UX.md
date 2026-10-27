@@ -1,14 +1,16 @@
 # UX plan
 
-Status: Milestone 13 open — 2026-10-27. Open slices only: a slice that lands is removed from this
+Status: no milestone open — 2026-10-27. Open slices only: a slice that lands is removed from this
 file. Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
 `docs/history/PLAN-UX-2026-09-13.md`; the 20 September plan, whose delivered Milestone 8's goal
 and acceptance criteria are in `docs/history/PLAN-UX-2026-09-20.md`; the 28 September plan,
 whose delivered Milestone 9's are in `docs/history/PLAN-UX-2026-09-28.md`; the 29 September
 plan, whose delivered Milestone 10's are in `docs/history/PLAN-UX-2026-09-29.md`; the
 2 October plan, whose delivered Milestone 11's decisions, goal and acceptance criteria are in
-`docs/history/PLAN-UX-2026-10-02.md`; and the 22 October plan, whose delivered Milestone 12's
-goal, decisions and acceptance criteria are in `docs/history/PLAN-UX-2026-10-22.md`.
+`docs/history/PLAN-UX-2026-10-02.md`; the 22 October plan, whose delivered Milestone 12's
+goal, decisions and acceptance criteria are in `docs/history/PLAN-UX-2026-10-22.md`; and the
+27 October plan, whose delivered Milestone 13's goal and decisions are in
+`docs/history/PLAN-UX-2026-10-27.md`.
 
 ## Purpose and authority
 
@@ -81,33 +83,12 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Milestones 8, 9, 10, 11 and 12 are delivered. Their record is the commits and ADR 0052–0079;
-their goals and acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md`,
+Milestones 8, 9, 10, 11, 12 and 13 are delivered. Their record is the commits and ADR
+0052–0079; their goals and acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md`,
 `docs/history/PLAN-UX-2026-09-28.md`, `docs/history/PLAN-UX-2026-09-29.md`,
-`docs/history/PLAN-UX-2026-10-02.md` and `docs/history/PLAN-UX-2026-10-22.md`. Milestone 13
-is open. Its slices are independent of one another and land in the order they are numbered.
-
-## Milestone 13 — What Milestone 12 left behind
-
-### Goal
-
-What the reviews of Milestone 12 found and deliberately left unfixed, settled. The copy uses one
-spelling and counts turns as the operator does, arms that pinned two versions of one support
-identity are compared as different, a field is announced invalid only once its refusal is
-visible, the surfaces Milestone 12 did not reach work at 390 wide, and the debts the reviews
-named in the tests and the tokens are paid. The operator took the milestone's decisions on
-27 October 2026:
-
-- **The interface copy is American English**: *behavior*, *color*, *labeled*.
-- **The offline control judge stays as declared** (`infrastructure/judges/control.py`). It
-  scores engagement, not meaning, and the results already say so beside its mark.
-- **The support identity is compared by the version each arm pinned**, in this milestone, as a
-  backend slice.
-- **A field's `aria-invalid` follows ADR 0078's touch**, the same as the line that names its
-  refusal.
-
-No open slice touches the backend. The covered journeys are
-`experiment-start.spec.ts`, `workspace-shell.spec.ts` and `sticky-header.spec.ts`.
+`docs/history/PLAN-UX-2026-10-02.md`, `docs/history/PLAN-UX-2026-10-22.md` and
+`docs/history/PLAN-UX-2026-10-27.md`. No UX milestone is open: the next one is planned here,
+under the rules above, when the operator asks for it.
 
 ## Deliberately not here
 
