@@ -949,6 +949,14 @@ export const searchFieldIconClasses =
 export const searchFieldClasses =
   "box-border min-h-[38px] w-full appearance-none rounded-lg border border-[#bdc7cf] bg-admin-surface py-2 pr-3 pl-9 text-[13px] text-admin-ink outline-none transition [&::-webkit-search-cancel-button]:appearance-none focus:border-lab-primary focus:ring-[3px] focus:ring-lab-primary/20";
 
+/**
+ * What a table that can be wider than its card is drawn in: it scrolls sideways inside the card
+ * rather than pushing the pane past a phone's viewport, where nothing could scroll it back
+ * (ADR 0079). `relative`, because a cell's `sr-only` line is absolutely placed: laid out against
+ * the pane instead of this scroller, it would widen the pane by however far the table runs.
+ */
+export const tableScrollerClasses = "relative overflow-x-auto";
+
 export const tableHeadClasses =
   "border-b border-admin-border px-4 py-2.5 text-left text-xs font-semibold text-admin-muted";
 

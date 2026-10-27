@@ -16,7 +16,7 @@ import { GUIDANCE_BODY_RULE, GUIDANCE_TITLE_RULE } from "./lib/fieldRules";
 import { itemFormReason } from "./lib/unsavedWork";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
-import { expectPublicationPill } from "./test/indexes";
+import { expectIndexTableScrolls, expectPublicationPill } from "./test/indexes";
 import { expectRulesInFieldOrder } from "./test/itemForm";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
@@ -197,6 +197,11 @@ describe("support identity workspace", () => {
     const box = await screen.findByRole("searchbox", { name: "Search identities" });
     const title = screen.getByRole("heading", { level: 2, name: "Shared by every shop" });
     expect(title.parentElement).toContainElement(box);
+  });
+
+  it("scrolls its table inside its card, so a phone's pane never scrolls sideways", async () => {
+    renderAt("/lab/support-identities");
+    await expectIndexTableScrolls("Shared by every shop");
   });
 
   it("lists identities with their permission and publication state", async () => {

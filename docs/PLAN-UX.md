@@ -109,28 +109,6 @@ named in the tests and the tokens are paid. The operator took the milestone's de
 No open slice touches the backend. The covered journeys are
 `experiment-start.spec.ts`, `workspace-shell.spec.ts` and `sticky-header.spec.ts`.
 
-### Slice 57 — The surfaces Milestone 12 did not reach, at 390 wide
-
-- [ ] The shop indexes' tables (`routes/ProductsPage.tsx` and the other index pages on the same
-  template) scroll inside a scroller of their own, so the pane never scrolls sideways.
-- [ ] History's table moves its `sr-only` descriptions
-  (`routes/ExperimentHistoryPage.tsx:985`) inside a `relative` scroller, as the results
-  matrices did in Slice 53, so they no longer widen the pane.
-- [ ] A shop name too long for the switcher's row (`shell/ShopSwitcher.tsx`) is truncated with
-  an ellipsis, and its full name stays its accessible name and its `title`.
-- [ ] ADR 0079's Consequences no longer list these three as open.
-
-Frames: none; the prototype draws no phone width, and ADR 0079 governs.
-
-Authority: ADR 0055, ADR 0056, ADR 0079.
-
-Departures to record: none.
-
-Branch: `fix/narrow-indexes-history`. Checks: Vitest for the scroller classes and the switcher's
-truncation and name. `workspace-shell.spec.ts` at 390×844: Products, History and a long-named
-shop's switcher draw nothing past the viewport. `make check`, `pnpm build`; `pnpm test:e2e` for
-`workspace-shell.spec.ts`.
-
 ### Slice 58 — The debts the reviews named
 
 - [ ] `#14352e`, the selected ink of the rail and the depth tabs (`shell/AppShell.tsx:299`,

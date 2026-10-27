@@ -19,6 +19,7 @@ import {
   outlineButtonClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
 } from "../lib/ui";
 import { BusyButton } from "./PrimaryAction";
 
@@ -163,7 +164,7 @@ function EvidenceMatrix({
     // rather than pushing the page sideways. `relative`, so the `sr-only` lines a cell carries
     // are laid out in this scroller and not against the pane, which they would otherwise
     // widen past the viewport by however far the table runs (ADR 0079).
-    <div className="relative overflow-x-auto">
+    <div className={tableScrollerClasses}>
       <table className="w-full text-left text-[13px]">
         <caption className="sr-only">{caption}</caption>
         <thead>

@@ -33,6 +33,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
 } from "../lib/ui";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
 
@@ -141,39 +142,43 @@ export function AgentConfigurationsPage() {
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No configuration matches this view.</p>
         ) : (
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr>
-                <th className={tableHeadClasses}>Configuration</th>
-                <th className={tableHeadClasses}>Framework</th>
-                <th className={tableHeadClasses}>Model</th>
-                <th className={tableHeadClasses}>Tools</th>
-                <th className={tableHeadClasses}>Published</th>
-                <th className={tableHeadClasses}>Draft updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((configuration) => (
-                <tr key={configuration.configuration_id}>
-                  <td className={tableCellClasses}>
-                    <Link
-                      className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                      to={configuration.configuration_id}
-                    >
-                      {configuration.name}
-                    </Link>
-                  </td>
-                  <td className={tableCellClasses}>{configuration.framework_label}</td>
-                  <td className={tableCellClasses}>{configuration.model_id}</td>
-                  <td className={tableCellClasses}>{configuration.tool_count} enabled</td>
-                  <td className={tableCellClasses}>
-                    <PublicationPill record={configuration} />
-                  </td>
-                  <td className={tableCellClasses}>{formatTimestamp(configuration.updated_at)}</td>
+          <div className={tableScrollerClasses}>
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tableHeadClasses}>Configuration</th>
+                  <th className={tableHeadClasses}>Framework</th>
+                  <th className={tableHeadClasses}>Model</th>
+                  <th className={tableHeadClasses}>Tools</th>
+                  <th className={tableHeadClasses}>Published</th>
+                  <th className={tableHeadClasses}>Draft updated</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.map((configuration) => (
+                  <tr key={configuration.configuration_id}>
+                    <td className={tableCellClasses}>
+                      <Link
+                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                        to={configuration.configuration_id}
+                      >
+                        {configuration.name}
+                      </Link>
+                    </td>
+                    <td className={tableCellClasses}>{configuration.framework_label}</td>
+                    <td className={tableCellClasses}>{configuration.model_id}</td>
+                    <td className={tableCellClasses}>{configuration.tool_count} enabled</td>
+                    <td className={tableCellClasses}>
+                      <PublicationPill record={configuration} />
+                    </td>
+                    <td className={tableCellClasses}>
+                      {formatTimestamp(configuration.updated_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </>

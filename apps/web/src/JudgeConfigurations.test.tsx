@@ -19,7 +19,7 @@ import { JUDGE_EVIDENCE_SCOPE } from "./lib/enumLabels";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
 import { expectWayBack } from "./test/header";
-import { expectPublicationPill } from "./test/indexes";
+import { expectIndexTableScrolls, expectPublicationPill } from "./test/indexes";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefusalWeight, expectRefused, refusalFacts } from "./test/refused";
 import { expectEditorOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
@@ -327,6 +327,11 @@ describe("judge workspace", () => {
       name: "What a scenario leaves to a judge",
     });
     expect(title.parentElement).toContainElement(box);
+  });
+
+  it("scrolls its table inside its card, so a phone's pane never scrolls sideways", async () => {
+    renderAt("/lab/judges");
+    await expectIndexTableScrolls("What a scenario leaves to a judge");
   });
 
   it("lists judges with the model that scores and their publication state", async () => {

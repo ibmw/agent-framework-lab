@@ -18,7 +18,7 @@ import { fieldRowWideControlClasses, readOnlyTextClasses } from "./lib/ui";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
 import { expectWayBack } from "./test/header";
-import { expectPublicationPill, indexCard } from "./test/indexes";
+import { expectIndexTableScrolls, expectPublicationPill, indexCard } from "./test/indexes";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { expectEditorOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
@@ -504,6 +504,11 @@ describe("agent configuration workspace", () => {
     const box = await screen.findByRole("searchbox", { name: "Search configurations" });
     const title = screen.getByRole("heading", { level: 2, name: "Agents under test" });
     expect(title.parentElement).toContainElement(box);
+  });
+
+  it("scrolls its table inside its card, so a phone's pane never scrolls sideways", async () => {
+    renderAt("/lab/agent-configurations");
+    await expectIndexTableScrolls("Agents under test");
   });
 
   it("lists configurations with their framework, model, and publication state", async () => {

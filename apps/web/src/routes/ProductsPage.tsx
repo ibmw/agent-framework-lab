@@ -34,6 +34,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 import { useDuplicateProduct } from "./useDuplicateProduct";
@@ -225,99 +226,104 @@ export function ProductsPage() {
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No product matches this view.</p>
         ) : (
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr>
-                <th className={tableHeadClasses}>Product</th>
-                <th className={tableHeadClasses}>Status</th>
-                <th className={tableHeadClasses}>Variants</th>
-                <th className={tableHeadClasses}>Ratings</th>
-                <th className={tableHeadClasses}>Findings</th>
-                <th className={tableHeadClasses}>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((product) => {
-                const findings = issuesForProduct(preview?.issues ?? [], product.handle);
-                const errors = findings.filter((issue) => issue.severity === "error").length;
-                const deletedNotice = `Deleted “${productTitle(product)}” from the draft.`;
-                if (removal.isArmed(product.key)) {
+          <div className={tableScrollerClasses}>
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tableHeadClasses}>Product</th>
+                  <th className={tableHeadClasses}>Status</th>
+                  <th className={tableHeadClasses}>Variants</th>
+                  <th className={tableHeadClasses}>Ratings</th>
+                  <th className={tableHeadClasses}>Findings</th>
+                  <th className={tableHeadClasses}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((product) => {
+                  const findings = issuesForProduct(preview?.issues ?? [], product.handle);
+                  const errors = findings.filter((issue) => issue.severity === "error").length;
+                  const deletedNotice = `Deleted “${productTitle(product)}” from the draft.`;
+                  if (removal.isArmed(product.key)) {
+                    return (
+                      <ProductDeleteConfirm
+                        key={product.key}
+                        product={product}
+                        as="tr"
+                        columns={6}
+                        onConfirm={removal.confirm(
+                          () => edit(removeProduct(content, product.key)),
+                          deletedNotice,
+                        )}
+                        onKeep={removal.keep}
+                      />
+                    );
+                  }
                   return (
-                    <ProductDeleteConfirm
-                      key={product.key}
-                      product={product}
-                      as="tr"
-                      columns={6}
-                      onConfirm={removal.confirm(
-                        () => edit(removeProduct(content, product.key)),
-                        deletedNotice,
-                      )}
-                      onKeep={removal.keep}
-                    />
-                  );
-                }
-                return (
-                  <tr key={product.key}>
-                    <td className={tableCellClasses}>
-                      <div className="flex min-w-0 items-center gap-[11px]">
-                        <CatalogImage shopId={shopId} product={product} />
-                        <div className="min-w-0">
-                          <Link
-                            className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                            to={encodeURIComponent(product.handle)}
-                            state={productEntryState(product.key)}
-                          >
-                            {productTitle(product)}
-                          </Link>
-                          <div className="text-admin-muted">{product.category}</div>
+                    <tr key={product.key}>
+                      <td className={tableCellClasses}>
+                        <div className="flex min-w-0 items-center gap-[11px]">
+                          <CatalogImage shopId={shopId} product={product} />
+                          <div className="min-w-0">
+                            <Link
+                              className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                              to={encodeURIComponent(product.handle)}
+                              state={productEntryState(product.key)}
+                            >
+                              {productTitle(product)}
+                            </Link>
+                            <div className="text-admin-muted">{product.category}</div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className={tableCellClasses}>
-                      <StatusPill tone="product" label={labelOf(PRODUCT_STATUS, product.status)} />
-                    </td>
-                    <td className={tableCellClasses}>{product.variants.length}</td>
-                    <td className={tableCellClasses}>{ratingLabel(product)}</td>
-                    <td className={tableCellClasses}>
-                      {errors > 0 ? (
-                        <span className="font-semibold text-lab-error">
-                          {errors} error{errors === 1 ? "" : "s"}
-                        </span>
-                      ) : findings.length > 0 ? (
-                        <span className="text-admin-draft-ink">
-                          {findings.length} warning{findings.length === 1 ? "" : "s"}
-                        </span>
-                      ) : (
-                        <span className="text-lab-success">Clear</span>
-                      )}
-                    </td>
-                    <td className={tableCellClasses}>
-                      <span className="flex items-center justify-end gap-[11px]">
-                        <button
-                          className={subtleButtonClasses}
-                          type="button"
-                          aria-label={`Duplicate ${productTitle(product)}`}
-                          onClick={duplicate(product.key)}
-                        >
-                          Duplicate
-                        </button>
-                        <RemoveButton
-                          name={productTitle(product)}
-                          label={`Delete ${productTitle(product)}`}
-                          entryKey={product.key}
-                          removal={removal}
-                          notice={deletedNotice}
-                          onRemove={() => edit(removeProduct(content, product.key))}
+                      </td>
+                      <td className={tableCellClasses}>
+                        <StatusPill
+                          tone="product"
+                          label={labelOf(PRODUCT_STATUS, product.status)}
                         />
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className={tableCellClasses}>{product.variants.length}</td>
+                      <td className={tableCellClasses}>{ratingLabel(product)}</td>
+                      <td className={tableCellClasses}>
+                        {errors > 0 ? (
+                          <span className="font-semibold text-lab-error">
+                            {errors} error{errors === 1 ? "" : "s"}
+                          </span>
+                        ) : findings.length > 0 ? (
+                          <span className="text-admin-draft-ink">
+                            {findings.length} warning{findings.length === 1 ? "" : "s"}
+                          </span>
+                        ) : (
+                          <span className="text-lab-success">Clear</span>
+                        )}
+                      </td>
+                      <td className={tableCellClasses}>
+                        <span className="flex items-center justify-end gap-[11px]">
+                          <button
+                            className={subtleButtonClasses}
+                            type="button"
+                            aria-label={`Duplicate ${productTitle(product)}`}
+                            onClick={duplicate(product.key)}
+                          >
+                            Duplicate
+                          </button>
+                          <RemoveButton
+                            name={productTitle(product)}
+                            label={`Delete ${productTitle(product)}`}
+                            entryKey={product.key}
+                            removal={removal}
+                            notice={deletedNotice}
+                            onRemove={() => edit(removeProduct(content, product.key))}
+                          />
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
         <RemovalNotice removal={removal} />
       </section>

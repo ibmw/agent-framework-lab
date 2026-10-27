@@ -137,7 +137,9 @@ export function ShopSwitcher({ shops, current, onChoose }: ShopSwitcherProps) {
   return (
     <div
       ref={wrapper}
-      className="relative flex items-center border-r border-white/[0.14] py-2 pr-4 pl-3.5 narrow:border-r-0"
+      // `min-w-0` down to the name, so a name longer than the bar's row gives its width up to
+      // an ellipsis rather than pushing the row past the viewport.
+      className="relative flex min-w-0 items-center border-r border-white/[0.14] py-2 pr-4 pl-3.5 narrow:border-r-0"
     >
       <button
         ref={button}
@@ -152,7 +154,7 @@ export function ShopSwitcher({ shops, current, onChoose }: ShopSwitcherProps) {
         title="Switch shop"
         // The button is on the bar and the rows below are on the panel's white, so the two
         // take different rings: pine is invisible on the forest ground (ADR 0055).
-        className={`flex items-center gap-[11px] rounded-[9px] py-[5px] pr-[9px] pl-[5px] transition hover:bg-white/[0.08] ${topBarFocusRingClasses}`}
+        className={`flex min-w-0 items-center gap-[11px] rounded-[9px] py-[5px] pr-[9px] pl-[5px] transition hover:bg-white/[0.08] ${topBarFocusRingClasses}`}
         onClick={() => (open ? close(false) : openPanel())}
         // Enter and Space arrive as a click; the down arrow is the menu-button convention and
         // is the one key the button has to answer itself.
@@ -164,7 +166,12 @@ export function ShopSwitcher({ shops, current, onChoose }: ShopSwitcherProps) {
         }}
       >
         {current ? <ShopBadge name={current.name} logo={current.logo} size={30} /> : null}
-        <span className="font-display text-base font-bold tracking-[-0.01em] whitespace-nowrap text-white">
+        {/* Cut with an ellipsis when the row is too narrow for it, and titled with the whole
+            name so a pointer can read what was cut; the button's name carries it in full. */}
+        <span
+          title={name}
+          className="min-w-0 truncate font-display text-base font-bold tracking-[-0.01em] text-white"
+        >
           {name}
         </span>
         <ChevronsUpDown

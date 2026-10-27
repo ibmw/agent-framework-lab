@@ -30,6 +30,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
@@ -159,45 +160,49 @@ export function TicketsPage() {
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No ticket matches this view.</p>
         ) : (
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr>
-                <th className={tableHeadClasses}>Ticket</th>
-                <th className={tableHeadClasses}>Customer</th>
-                <th className={tableHeadClasses}>Channel</th>
-                <th className={tableHeadClasses}>Status</th>
-                <th className={tableHeadClasses}>Published</th>
-                <th className={tableHeadClasses}>Draft updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((ticket) => (
-                <tr key={ticket.ticket_id}>
-                  <td className={tableCellClasses}>
-                    <Link
-                      className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                      to={`/shops/${shopId}/tickets/${ticket.ticket_id}`}
-                    >
-                      {ticket.subject}
-                    </Link>
-                    <div className="font-mono text-[12px] text-admin-muted">{ticket.reference}</div>
-                  </td>
-                  <td className={tableCellClasses}>{ticket.customer_display_name}</td>
-                  <td className={tableCellClasses}>
-                    {channelLabel(ticket.channel)}
-                    <div className="text-admin-muted">from {originLabel(ticket.origin_kind)}</div>
-                  </td>
-                  <td className={tableCellClasses}>
-                    <TicketStatusBadge status={ticket.status} />
-                  </td>
-                  <td className={tableCellClasses}>
-                    <PublicationPill record={ticket} />
-                  </td>
-                  <td className={tableCellClasses}>{formatTimestamp(ticket.updated_at)}</td>
+          <div className={tableScrollerClasses}>
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tableHeadClasses}>Ticket</th>
+                  <th className={tableHeadClasses}>Customer</th>
+                  <th className={tableHeadClasses}>Channel</th>
+                  <th className={tableHeadClasses}>Status</th>
+                  <th className={tableHeadClasses}>Published</th>
+                  <th className={tableHeadClasses}>Draft updated</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.map((ticket) => (
+                  <tr key={ticket.ticket_id}>
+                    <td className={tableCellClasses}>
+                      <Link
+                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                        to={`/shops/${shopId}/tickets/${ticket.ticket_id}`}
+                      >
+                        {ticket.subject}
+                      </Link>
+                      <div className="font-mono text-[12px] text-admin-muted">
+                        {ticket.reference}
+                      </div>
+                    </td>
+                    <td className={tableCellClasses}>{ticket.customer_display_name}</td>
+                    <td className={tableCellClasses}>
+                      {channelLabel(ticket.channel)}
+                      <div className="text-admin-muted">from {originLabel(ticket.origin_kind)}</div>
+                    </td>
+                    <td className={tableCellClasses}>
+                      <TicketStatusBadge status={ticket.status} />
+                    </td>
+                    <td className={tableCellClasses}>
+                      <PublicationPill record={ticket} />
+                    </td>
+                    <td className={tableCellClasses}>{formatTimestamp(ticket.updated_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </>

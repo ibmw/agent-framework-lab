@@ -45,6 +45,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
@@ -190,37 +191,39 @@ export function DocumentsPage() {
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No document matches this view.</p>
         ) : (
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr>
-                <th className={tableHeadClasses}>Document</th>
-                <th className={tableHeadClasses}>Kind</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((document) => (
-                <tr key={`${document.kind}:${document.id}`}>
-                  <td className={tableCellClasses}>
-                    <Link
-                      className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                      to={documentAt(shopId, document.kind, document.id)}
-                    >
-                      {document.title}
-                    </Link>
-                    <div className="font-mono text-admin-muted">{document.id}</div>
-                  </td>
-                  <td className={tableCellClasses}>
-                    <EntryKind value={documentKindShape(document.kind).column} />
-                    {document.policyKind === null ? null : (
-                      <div className="text-admin-muted">
-                        {labelOf(POLICY_KIND, document.policyKind)}
-                      </div>
-                    )}
-                  </td>
+          <div className={tableScrollerClasses}>
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tableHeadClasses}>Document</th>
+                  <th className={tableHeadClasses}>Kind</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.map((document) => (
+                  <tr key={`${document.kind}:${document.id}`}>
+                    <td className={tableCellClasses}>
+                      <Link
+                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                        to={documentAt(shopId, document.kind, document.id)}
+                      >
+                        {document.title}
+                      </Link>
+                      <div className="font-mono text-admin-muted">{document.id}</div>
+                    </td>
+                    <td className={tableCellClasses}>
+                      <EntryKind value={documentKindShape(document.kind).column} />
+                      {document.policyKind === null ? null : (
+                        <div className="text-admin-muted">
+                          {labelOf(POLICY_KIND, document.policyKind)}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         <RemovalNotice removal={removal} />
       </section>

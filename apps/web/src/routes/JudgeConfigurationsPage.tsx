@@ -30,6 +30,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
   textAreaClasses,
 } from "../lib/ui";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
@@ -129,41 +130,43 @@ export function JudgeConfigurationsPage() {
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No judge matches this view.</p>
         ) : (
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr>
-                <th className={tableHeadClasses}>Judge</th>
-                <th className={tableHeadClasses}>Provider</th>
-                <th className={tableHeadClasses}>Model</th>
-                <th className={tableHeadClasses}>Shown</th>
-                <th className={tableHeadClasses}>Published</th>
-                <th className={tableHeadClasses}>Draft updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((judge) => (
-                <tr key={judge.judge_id}>
-                  <td className={tableCellClasses}>
-                    <Link
-                      className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                      to={judge.judge_id}
-                    >
-                      {judge.name}
-                    </Link>
-                  </td>
-                  {/* One spelling for the workspace: the index and the editor must not disagree
-                        about a provider, and `lib/agents.ts` is where that word is decided. */}
-                  <td className={tableCellClasses}>{describeProvider(judge.provider)}</td>
-                  <td className={tableCellClasses}>{judge.model_id}</td>
-                  <td className={tableCellClasses}>{judge.evidence_count} kind(s) of evidence</td>
-                  <td className={tableCellClasses}>
-                    <PublicationPill record={judge} />
-                  </td>
-                  <td className={tableCellClasses}>{formatTimestamp(judge.updated_at)}</td>
+          <div className={tableScrollerClasses}>
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tableHeadClasses}>Judge</th>
+                  <th className={tableHeadClasses}>Provider</th>
+                  <th className={tableHeadClasses}>Model</th>
+                  <th className={tableHeadClasses}>Shown</th>
+                  <th className={tableHeadClasses}>Published</th>
+                  <th className={tableHeadClasses}>Draft updated</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.map((judge) => (
+                  <tr key={judge.judge_id}>
+                    <td className={tableCellClasses}>
+                      <Link
+                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                        to={judge.judge_id}
+                      >
+                        {judge.name}
+                      </Link>
+                    </td>
+                    {/* One spelling for the workspace: the index and the editor must not disagree
+                          about a provider, and `lib/agents.ts` is where that word is decided. */}
+                    <td className={tableCellClasses}>{describeProvider(judge.provider)}</td>
+                    <td className={tableCellClasses}>{judge.model_id}</td>
+                    <td className={tableCellClasses}>{judge.evidence_count} kind(s) of evidence</td>
+                    <td className={tableCellClasses}>
+                      <PublicationPill record={judge} />
+                    </td>
+                    <td className={tableCellClasses}>{formatTimestamp(judge.updated_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </>

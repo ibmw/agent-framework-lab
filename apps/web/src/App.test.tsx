@@ -55,6 +55,7 @@ import { routeTree } from "./routeTree";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectWayBack } from "./test/header";
+import { expectIndexTableScrolls } from "./test/indexes";
 import { expectRulesInFieldOrder } from "./test/itemForm";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
@@ -6825,6 +6826,11 @@ describe("index filter chips", () => {
     const box = await screen.findByRole("searchbox", { name: "Search products" });
     const title = screen.getByRole("heading", { level: 2, name: "Catalog" });
     expect(title.parentElement).toContainElement(box);
+  });
+
+  it("scrolls its table inside its card, so a phone's pane never scrolls sideways", async () => {
+    renderAt(`/shops/${SHOP_ID}/products`);
+    await expectIndexTableScrolls("Catalog");
   });
 
   // Slice 41: the shops index's logo tile, at its measure, for a product's first image.

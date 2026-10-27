@@ -29,6 +29,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
 } from "../lib/ui";
 import {
   type Pin,
@@ -690,7 +691,7 @@ export function ExperimentHistoryPage() {
             ) : total === 0 ? (
               <p className="p-4 text-[13px] text-admin-muted">No experiment matches this view.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className={tableScrollerClasses}>
                 <table className="w-full border-collapse text-[13px]">
                   <thead>
                     <tr>

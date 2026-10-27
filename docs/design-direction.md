@@ -29,10 +29,11 @@ Carried forward from the brief; they outrank any measurement below.
   attributes, never into one mega-form or a JSON editor.
 - **Status is never colour alone**: a glyph or a word always accompanies it. WCAG 2.2 AA
   contrast; every workflow keyboard-reachable.
-- **Desktop first, usable narrower.** Every row and card row wraps; nothing is fixed width except
-  the rail, the editor's side panel and the settings column cap. Below a phone's width the rail
-  narrows to its strip and the top bar wraps (ADR 0079 decides the breakpoint and the control);
-  no other narrow-width treatment of the live comparison is drawn.
+- **Desktop first, usable narrower.** Every row and card row wraps, and an index's table scrolls
+  inside its card; nothing is fixed width except the rail, the editor's side panel and the
+  settings column cap. Below a phone's width the rail narrows to its strip and the top bar wraps
+  (ADR 0079 decides the breakpoint and the control); no other narrow-width treatment of the live
+  comparison is drawn.
 - **Dense is fine, decorative is not.** No dashboard metrics for their own sake, no oversized
   status cards, realistic content rather than placeholder text.
 - **Every state is designed for**: empty, draft with findings, published and immutable, tool in

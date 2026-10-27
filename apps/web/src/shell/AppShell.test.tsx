@@ -495,6 +495,21 @@ describe("the top bar at a phone's width", () => {
     );
   });
 
+  it("cuts a shop name too long for the bar's row with an ellipsis, and still names it in full", () => {
+    const long = "Northstar Outfitters of the Far Northern Fjords and the Islands Beyond";
+    renderShell("shop", { shops: [{ ...SHOPS[0], name: long }, SHOPS[1]] });
+
+    expect(switcher()).toHaveAccessibleName(`Switch shop, current: ${long}`);
+    const name = within(switcher()).getByText(long);
+    // The whole name for a pointer, too, where the row cut it.
+    expect(name).toHaveAttribute("title", long);
+    expect(name).toHaveClass("truncate", "min-w-0");
+    // A flex item does not shrink below its content unless every box down to the name lets it:
+    // the switcher's group in the bar, and the button inside it.
+    expect(switcher()).toHaveClass("min-w-0");
+    expect(switcher().parentElement).toHaveClass("min-w-0");
+  });
+
   it("keeps every control in the keyboard's reach, in order, at a phone's width", async () => {
     stubViewport("narrow");
     renderShell("shop");

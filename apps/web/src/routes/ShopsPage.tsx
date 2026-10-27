@@ -45,6 +45,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
 } from "../lib/ui";
 import { AppShell } from "../shell/AppShell";
 
@@ -249,77 +250,79 @@ export function ShopsPage() {
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No shop matches this view.</p>
         ) : (
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr>
-                <th className={tableHeadClasses}>Shop</th>
-                <th className={tableHeadClasses}>Published</th>
-                <th className={tableHeadClasses}>Draft updated</th>
-                <th className={tableHeadClasses}>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((shop) =>
-                removal.isArmed(shop.shop_id) ? (
-                  <ShopDeleteConfirm
-                    key={shop.shop_id}
-                    shopId={shop.shop_id}
-                    name={shop.name}
-                    columns={4}
-                    onConfirm={removal.confirm(() => remove(shop), deletedNotice(shop))}
-                    onKeep={removal.keep}
-                  />
-                ) : (
-                  <tr key={shop.shop_id}>
-                    <td className={tableCellClasses}>
-                      {/* The frame's row (`Workspace.dc.html`:179): the badge, then the name
-                        over the slug. The badge is drawn for every shop — its logo, or its
-                        initials — so the names start on one line down the column. */}
-                      <div className="flex min-w-0 items-center gap-[11px]">
-                        <ShopBadge name={shop.name} logo={shop.logo} size={30} />
-                        <div className="min-w-0">
-                          <Link
-                            className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                            to={`/shops/${shop.shop_id}`}
-                          >
-                            {shop.name}
-                          </Link>
-                          <div className="text-admin-muted">{shop.slug}</div>
+          <div className={tableScrollerClasses}>
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tableHeadClasses}>Shop</th>
+                  <th className={tableHeadClasses}>Published</th>
+                  <th className={tableHeadClasses}>Draft updated</th>
+                  <th className={tableHeadClasses}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((shop) =>
+                  removal.isArmed(shop.shop_id) ? (
+                    <ShopDeleteConfirm
+                      key={shop.shop_id}
+                      shopId={shop.shop_id}
+                      name={shop.name}
+                      columns={4}
+                      onConfirm={removal.confirm(() => remove(shop), deletedNotice(shop))}
+                      onKeep={removal.keep}
+                    />
+                  ) : (
+                    <tr key={shop.shop_id}>
+                      <td className={tableCellClasses}>
+                        {/* The frame's row (`Workspace.dc.html`:179): the badge, then the name
+                          over the slug. The badge is drawn for every shop — its logo, or its
+                          initials — so the names start on one line down the column. */}
+                        <div className="flex min-w-0 items-center gap-[11px]">
+                          <ShopBadge name={shop.name} logo={shop.logo} size={30} />
+                          <div className="min-w-0">
+                            <Link
+                              className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                              to={`/shops/${shop.shop_id}`}
+                            >
+                              {shop.name}
+                            </Link>
+                            <div className="text-admin-muted">{shop.slug}</div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className={tableCellClasses}>
-                      <PublicationPill record={shop} />
-                    </td>
-                    <td className={tableCellClasses}>{formatTimestamp(shop.updated_at)}</td>
-                    <td className={tableCellClasses}>
-                      {/* The only place a shop is deleted from (ADR 0077). */}
-                      <span className="flex items-center justify-end">
-                        <RemoveButton
-                          name={shop.name}
-                          label={`Delete ${shop.name}`}
-                          entryKey={shop.shop_id}
-                          removal={removal}
-                          notice={deletedNotice(shop)}
-                          held={
-                            deletingId === shop.shop_id
-                              ? DELETING_SHOP
-                              : shop.latest_published_version !== null
-                                ? PUBLISHED_SHOP_KEPT
-                                : undefined
-                          }
-                          describedBy={keptLineId}
-                          onRemove={() => remove(shop)}
-                        />
-                      </span>
-                    </td>
-                  </tr>
-                ),
-              )}
-            </tbody>
-          </table>
+                      </td>
+                      <td className={tableCellClasses}>
+                        <PublicationPill record={shop} />
+                      </td>
+                      <td className={tableCellClasses}>{formatTimestamp(shop.updated_at)}</td>
+                      <td className={tableCellClasses}>
+                        {/* The only place a shop is deleted from (ADR 0077). */}
+                        <span className="flex items-center justify-end">
+                          <RemoveButton
+                            name={shop.name}
+                            label={`Delete ${shop.name}`}
+                            entryKey={shop.shop_id}
+                            removal={removal}
+                            notice={deletedNotice(shop)}
+                            held={
+                              deletingId === shop.shop_id
+                                ? DELETING_SHOP
+                                : shop.latest_published_version !== null
+                                  ? PUBLISHED_SHOP_KEPT
+                                  : undefined
+                            }
+                            describedBy={keptLineId}
+                            onRemove={() => remove(shop)}
+                          />
+                        </span>
+                      </td>
+                    </tr>
+                  ),
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
         {/* Said once under the table rather than per row, and named by every held trash. */}
         {!loading &&

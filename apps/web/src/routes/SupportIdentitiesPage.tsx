@@ -19,6 +19,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
   textAreaClasses,
 } from "../lib/ui";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
@@ -114,38 +115,40 @@ export function SupportIdentitiesPage() {
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No identity matches this view.</p>
         ) : (
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr>
-                <th className={tableHeadClasses}>Identity</th>
-                <th className={tableHeadClasses}>Permissions</th>
-                <th className={tableHeadClasses}>Guidance</th>
-                <th className={tableHeadClasses}>Published</th>
-                <th className={tableHeadClasses}>Draft updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((identity) => (
-                <tr key={identity.identity_id}>
-                  <td className={tableCellClasses}>
-                    <Link
-                      className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                      to={identity.identity_id}
-                    >
-                      {identity.name}
-                    </Link>
-                    <div className="text-admin-muted">{identity.title}</div>
-                  </td>
-                  <td className={tableCellClasses}>{identity.permission_count}</td>
-                  <td className={tableCellClasses}>{identity.guidance_count}</td>
-                  <td className={tableCellClasses}>
-                    <PublicationPill record={identity} />
-                  </td>
-                  <td className={tableCellClasses}>{formatTimestamp(identity.updated_at)}</td>
+          <div className={tableScrollerClasses}>
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tableHeadClasses}>Identity</th>
+                  <th className={tableHeadClasses}>Permissions</th>
+                  <th className={tableHeadClasses}>Guidance</th>
+                  <th className={tableHeadClasses}>Published</th>
+                  <th className={tableHeadClasses}>Draft updated</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.map((identity) => (
+                  <tr key={identity.identity_id}>
+                    <td className={tableCellClasses}>
+                      <Link
+                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                        to={identity.identity_id}
+                      >
+                        {identity.name}
+                      </Link>
+                      <div className="text-admin-muted">{identity.title}</div>
+                    </td>
+                    <td className={tableCellClasses}>{identity.permission_count}</td>
+                    <td className={tableCellClasses}>{identity.guidance_count}</td>
+                    <td className={tableCellClasses}>
+                      <PublicationPill record={identity} />
+                    </td>
+                    <td className={tableCellClasses}>{formatTimestamp(identity.updated_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </>

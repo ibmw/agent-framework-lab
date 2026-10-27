@@ -51,3 +51,20 @@ export function expectCreateGlyph(control: HTMLElement, name: string) {
   expect(glyph).toHaveAttribute("focusable", "false");
   expect(control).toHaveAccessibleName(name);
 }
+
+/**
+ * An index's table scrolls sideways in a box of its own inside its card, so a phone's pane never
+ * does (ADR 0079): the box `overflow-x-auto`, and `relative`, so an `sr-only` line a cell carries
+ * is laid out in it rather than against the pane. Waits for the table, which an index draws only
+ * once its listing holds a row.
+ */
+export async function expectIndexTableScrolls(title: string): Promise<HTMLElement> {
+  await screen.findByRole("heading", { level: 2, name: title });
+  const card = indexCard(title);
+  const table = await within(card).findByRole("table");
+  const scroller = table.parentElement;
+  expect(scroller, `the box the ${title} table is in`).not.toBe(card);
+  expect(card).toContainElement(scroller);
+  expect(scroller).toHaveClass("overflow-x-auto", "relative");
+  return scroller as HTMLElement;
+}

@@ -13,7 +13,7 @@ import {
 } from "./lib/shopDeletion";
 import { cardTitleClasses } from "./lib/ui";
 import { renderApp, wholeDescription } from "./test/app";
-import { expectPublicationPill } from "./test/indexes";
+import { expectIndexTableScrolls, expectPublicationPill } from "./test/indexes";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { expectRunsOpenOnARow } from "./test/rows";
 import { shellListings } from "./test/shell";
@@ -111,6 +111,12 @@ describe("a shop's publication on the index", () => {
       },
     ],
   };
+
+  it("scrolls its table inside its card, so a phone's pane never scrolls sideways", async () => {
+    server.use(http.get("*/api/v1/shops", () => HttpResponse.json(listed)));
+    renderShops();
+    await expectIndexTableScrolls("In this lab");
+  });
 
   it("is a pill: the version and how many there are, or Never published", async () => {
     server.use(http.get("*/api/v1/shops", () => HttpResponse.json(listed)));

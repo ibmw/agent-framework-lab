@@ -28,7 +28,7 @@ import { todayInput } from "./lib/orders";
 import { itemFormReason } from "./lib/unsavedWork";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectWayBack } from "./test/header";
-import { expectPublicationPill, indexCard } from "./test/indexes";
+import { expectIndexTableScrolls, expectPublicationPill, indexCard } from "./test/indexes";
 import { expectRulesInFieldOrder } from "./test/itemForm";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
@@ -345,6 +345,11 @@ describe("customer workspace", () => {
     const box = await screen.findByRole("searchbox", { name: "Search by name or email" });
     const title = screen.getByRole("heading", { level: 2, name: "Attached to this shop" });
     expect(title.parentElement).toContainElement(box);
+  });
+
+  it("scrolls its table inside its card, so a phone's pane never scrolls sideways", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers`);
+    await expectIndexTableScrolls("Attached to this shop");
   });
 
   it("lists the profiles attached to this shop with their provenance", async () => {

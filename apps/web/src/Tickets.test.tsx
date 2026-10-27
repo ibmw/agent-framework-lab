@@ -21,7 +21,7 @@ import { stickyHeaderClasses } from "./lib/stickyHeader";
 import { TOURS, tourAt } from "./lib/tours";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
-import { expectPublicationPill } from "./test/indexes";
+import { expectIndexTableScrolls, expectPublicationPill } from "./test/indexes";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import {
   expectBusy,
@@ -456,6 +456,11 @@ describe("the ticket index", () => {
     expect(create.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
     // An index scrolls its header away; only an editor or a create page pins one.
     expect(header.className).not.toContain("sticky");
+  });
+
+  it("scrolls its table inside its card, so a phone's pane never scrolls sideways", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    await expectIndexTableScrolls("Raised in this shop");
   });
 
   it("counts the whole listing on its chips, the figure the rail draws beside it", async () => {

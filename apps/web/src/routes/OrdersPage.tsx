@@ -45,6 +45,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
@@ -173,49 +174,51 @@ export function OrdersPage() {
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No order matches this view.</p>
         ) : (
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr>
-                <th className={tableHeadClasses}>Order</th>
-                <th className={tableHeadClasses}>Placed</th>
-                <th className={tableHeadClasses}>Customer</th>
-                <th className={tableHeadClasses}>Payment</th>
-                <th className={tableHeadClasses}>Fulfillment</th>
-                <th className={tableHeadClasses}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((order) => (
-                <tr key={order.order_id}>
-                  <td className={tableCellClasses}>
-                    <Link
-                      className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                      to={order.order_id}
-                    >
-                      {order.reference}
-                    </Link>
-                    <div className="text-admin-muted">
-                      {order.line_count} line{order.line_count === 1 ? "" : "s"}
-                    </div>
-                  </td>
-                  <td className={tableCellClasses}>{formatFixtureTimestamp(order.placed_at)}</td>
-                  <td className={tableCellClasses}>{order.customer_display_name}</td>
-                  <td className={tableCellClasses}>
-                    <StatusPill tone="payment" label={paymentLabel(order.payment_status)} />
-                  </td>
-                  <td className={tableCellClasses}>
-                    <StatusPill
-                      tone="fulfilment"
-                      label={fulfilmentLabel(order.fulfilment_status)}
-                    />
-                  </td>
-                  <td className={tableCellClasses}>
-                    {order.total.amount} {order.total.currency}
-                  </td>
+          <div className={tableScrollerClasses}>
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tableHeadClasses}>Order</th>
+                  <th className={tableHeadClasses}>Placed</th>
+                  <th className={tableHeadClasses}>Customer</th>
+                  <th className={tableHeadClasses}>Payment</th>
+                  <th className={tableHeadClasses}>Fulfillment</th>
+                  <th className={tableHeadClasses}>Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.map((order) => (
+                  <tr key={order.order_id}>
+                    <td className={tableCellClasses}>
+                      <Link
+                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                        to={order.order_id}
+                      >
+                        {order.reference}
+                      </Link>
+                      <div className="text-admin-muted">
+                        {order.line_count} line{order.line_count === 1 ? "" : "s"}
+                      </div>
+                    </td>
+                    <td className={tableCellClasses}>{formatFixtureTimestamp(order.placed_at)}</td>
+                    <td className={tableCellClasses}>{order.customer_display_name}</td>
+                    <td className={tableCellClasses}>
+                      <StatusPill tone="payment" label={paymentLabel(order.payment_status)} />
+                    </td>
+                    <td className={tableCellClasses}>
+                      <StatusPill
+                        tone="fulfilment"
+                        label={fulfilmentLabel(order.fulfilment_status)}
+                      />
+                    </td>
+                    <td className={tableCellClasses}>
+                      {order.total.amount} {order.total.currency}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         <RemovalNotice removal={removal} />
       </section>

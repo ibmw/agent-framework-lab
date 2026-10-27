@@ -37,6 +37,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
@@ -326,47 +327,51 @@ export function CustomersPage() {
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No customer matches this view.</p>
         ) : (
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr>
-                <th className={tableHeadClasses}>Customer</th>
-                <th className={tableHeadClasses}>Persona</th>
-                <th className={tableHeadClasses}>Addresses</th>
-                <th className={tableHeadClasses}>Shops</th>
-                <th className={tableHeadClasses}>Published</th>
-                <th className={tableHeadClasses}>Draft updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((profile) => (
-                <tr key={profile.profile_id}>
-                  <td className={tableCellClasses}>
-                    <Link
-                      className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                      to={profile.profile_id}
-                    >
-                      {profile.display_name}
-                    </Link>
-                    <div className="text-admin-muted">{profile.email}</div>
-                  </td>
-                  <td className={tableCellClasses}>
-                    {profile.persona_traits.length === 0 ? "—" : profile.persona_traits.join(" · ")}
-                  </td>
-                  <td className={tableCellClasses}>
-                    {profile.address_count}
-                    {profile.default_address_label
-                      ? ` · default: ${profile.default_address_label}`
-                      : " · no default"}
-                  </td>
-                  <td className={tableCellClasses}>{profile.attached_shop_count}</td>
-                  <td className={tableCellClasses}>
-                    <PublicationPill record={profile} />
-                  </td>
-                  <td className={tableCellClasses}>{formatTimestamp(profile.updated_at)}</td>
+          <div className={tableScrollerClasses}>
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tableHeadClasses}>Customer</th>
+                  <th className={tableHeadClasses}>Persona</th>
+                  <th className={tableHeadClasses}>Addresses</th>
+                  <th className={tableHeadClasses}>Shops</th>
+                  <th className={tableHeadClasses}>Published</th>
+                  <th className={tableHeadClasses}>Draft updated</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.map((profile) => (
+                  <tr key={profile.profile_id}>
+                    <td className={tableCellClasses}>
+                      <Link
+                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                        to={profile.profile_id}
+                      >
+                        {profile.display_name}
+                      </Link>
+                      <div className="text-admin-muted">{profile.email}</div>
+                    </td>
+                    <td className={tableCellClasses}>
+                      {profile.persona_traits.length === 0
+                        ? "—"
+                        : profile.persona_traits.join(" · ")}
+                    </td>
+                    <td className={tableCellClasses}>
+                      {profile.address_count}
+                      {profile.default_address_label
+                        ? ` · default: ${profile.default_address_label}`
+                        : " · no default"}
+                    </td>
+                    <td className={tableCellClasses}>{profile.attached_shop_count}</td>
+                    <td className={tableCellClasses}>
+                      <PublicationPill record={profile} />
+                    </td>
+                    <td className={tableCellClasses}>{formatTimestamp(profile.updated_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         <RemovalNotice removal={removal} />
       </section>

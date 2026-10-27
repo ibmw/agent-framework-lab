@@ -16,7 +16,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { HISTORY_TOTAL_PAGE_SIZE } from "./shell/listings";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
-import { indexCard } from "./test/indexes";
+import { expectIndexTableScrolls, indexCard } from "./test/indexes";
 import { expectBusy, expectNotRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -1702,5 +1702,20 @@ describe("a row's replay, fork and the provider the lab can reach", () => {
     );
     expect(fork).not.toHaveAttribute("title");
     expect(within(row).getAllByText(NOTE)).toHaveLength(1);
+  });
+
+  it("scrolls its table inside its card, holding a row's sr-only reason in the scroller", async () => {
+    // A fork with nothing newer carries its reason as an `sr-only` line, which is absolutely
+    // placed: outside a `relative` scroller it would widen the pane at a phone's width.
+    connectionSource = "none";
+    rows = [FINISHED];
+    renderHistory();
+    await forkableRow();
+    await versionRead(1);
+
+    const scroller = await expectIndexTableScrolls(CARD_TITLE);
+    const reason = screen.getByText(/^Every arm already runs the newest published version/);
+    expect(reason).toHaveClass("sr-only");
+    expect(scroller).toContainElement(reason);
   });
 });

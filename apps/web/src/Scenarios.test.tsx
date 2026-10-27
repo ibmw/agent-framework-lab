@@ -24,7 +24,7 @@ import { TOURS } from "./lib/tours";
 import { fieldRowWideControlClasses } from "./lib/ui";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
-import { expectPublicationPill, indexCard } from "./test/indexes";
+import { expectIndexTableScrolls, expectPublicationPill, indexCard } from "./test/indexes";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
   describedText,
@@ -562,6 +562,11 @@ describe("scenario index", () => {
     const box = await screen.findByRole("searchbox", { name: "Search scenarios" });
     const title = screen.getByRole("heading", { level: 2, name: "Built on this shop" });
     expect(title.parentElement).toContainElement(box);
+  });
+
+  it("scrolls its table inside its card, so a phone's pane never scrolls sideways", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios`);
+    await expectIndexTableScrolls("Built on this shop");
   });
 
   it("shows the incident and the customer each scenario was built on", async () => {

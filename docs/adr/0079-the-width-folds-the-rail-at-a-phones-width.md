@@ -107,9 +107,10 @@ reader, but an operator who wants the words on screen would have no way to get t
 Below the breakpoint the bar drops its fixed 56px for `min-h-14` and wraps its three groups: the
 identity, the mode tabs, and *Show me around* with *Settings*. Each row the tabs or the controls
 land on is at least 44px tall, so each one stays a press-sized target. At 390 that is three rows
-and 144px, with the switcher on the first. No control is hidden, shortened or renamed, so the
-keyboard meets them in the order it always has. Above the breakpoint the bar is ADR 0055's one
-56px row, byte for byte.
+and 144px, with the switcher on the first. No control is hidden or renamed, and none is
+shortened but the shop's name, which is cut on screen only when it is longer than its row (*The
+indexes scroll their tables, and a long shop name is cut*, below). So the keyboard meets them in
+the order it always has. Above the breakpoint the bar is ADR 0055's one 56px row, byte for byte.
 
 ### A page header's actions wrap among themselves
 
@@ -128,6 +129,22 @@ placed, was laid out against the pane. That made the pane 509px wide in a 338px 
 escape ADR 0066 found down the page. The scroller is now `relative`. The objective column also
 gave its width up to the arms', and was 88px. It now keeps `min-w-[10rem]`, and the card scrolls
 whatever is left over.
+
+### The indexes scroll their tables, and a long shop name is cut
+
+Each index on the index template draws one table in a card, and nine of them had no scroller. The
+card's `overflow-hidden` clipped the columns past its edge, out of reach, and an `sr-only` line
+in the table, laid out against the pane, could still push the pane sideways. Every
+index's table now sits in a scroller, and so do the results matrices. The class set is the one
+Slice 53 gave the matrices, `relative overflow-x-auto`, and it is declared once as
+`tableScrollerClasses`. History's table already scrolled, but its scroller was not positioned, so
+it was the matrices' escape again.
+
+The switcher's name is the one text in the bar that grows with what the operator types. Every box
+down to it is `min-w-0`, and the name is `truncate`, so a name too long for the row gives up its
+width to an ellipsis rather than running past the viewport. This is the one text the bar shortens,
+and only on screen. The button is still named "Switch shop, current: <name>" in full, and the
+name's `title` is the whole name for a pointer.
 
 ## Departures
 
@@ -152,10 +169,25 @@ whatever is left over.
 - `sticky-header.spec.ts`'s sized header measures 261px against a third of 235.33px at 390×844
   (it was 350px against 262.67px). The pane is wider and shorter there now, the header still
   scrolls away, and the margin still holds.
-- This ADR does not cover the other surfaces at 390. The shop indexes' tables (Products, for one)
-  have no scroller of their own, and History's table carries the same unpositioned `sr-only`
-  escape the matrices had. A shop name long enough to fill the switcher's row has no truncation.
-  Each is a narrow-width slice of its own.
+- The indexes and the switcher at 390 were settled on 2026-10-27, measured on a built chain at
+  390×844. All thirteen indexes on the index template now draw their table in
+  `tableScrollerClasses` (`lib/ui.ts`). Every figure here is the pane's scroll width against the
+  pane's own width: 338px beside the 52px strip, and the whole 390px on the shops index, which
+  draws no rail. The two marked *about* move by a pixel with the generated names. Before,
+  Products' pane scrolled to 479px of 338 and its last columns were clipped by the card.
+  History's unpositioned scroller let its rows' `sr-only` reasons out to about 654px of 338. A
+  scroller without `relative` is not enough either: in one, the shops index's pane still scrolls
+  to about 426px of 390, and Products' to 479px of 338. A shop name longer than the bar's row is
+  cut with an ellipsis, and the button's name and the name's `title` carry it whole. No
+  accessible name, tour anchor or landmark moves.
+- This ADR still does not cover the tables off the index template at 390. The snapshots page's
+  three tables (`SnapshotsPage.tsx`) and the shop version's (`ShopVersionPage.tsx`) have no
+  scroller inside their `overflow-hidden` card. Experiment setup's matrix
+  (`ExperimentSetupPage.tsx`) has none either. The product editor's variants table
+  (`ProductEditorPage.tsx`) scrolls, but its scroller is not `relative`, and its cells carry
+  `sr-only` lines. The results page's *Quantitative* table (`ExperimentResultsPage.tsx`) has no
+  scroller inside its card, and nobody has measured it at 390. These are the ones known on
+  2026-10-27, not a sweep of every table. Each is a narrow-width slice of its own.
 
 ## Verification
 
@@ -185,6 +217,15 @@ whatever is left over.
   action and nothing else, inside the row that wraps first.
 - `Experiments.test.tsx`: both results matrices scroll in a `relative` scroller, with the objective
   column at `min-w-[10rem]` and each arm head at 220px.
+- Each index's suite, *scrolls its table inside its card* (`expectIndexTableScrolls`,
+  `test/indexes.ts`), checks the box the table sits in. That box is inside the card, is not the
+  card, and is `overflow-x-auto relative`. The suites are `Shops`, `App` (Products), `Orders`,
+  `Customers`, `Tickets`, `Scenarios`, `Documents`, `SupportIdentities`, `AgentConfigurations`,
+  `JudgeConfigurations`, `Blocks` and `History`. History's also holds a row's `sr-only` fork
+  reason inside the scroller.
+- `shell/AppShell.test.tsx`, *the top bar at a phone's width*: a long shop name is `truncate`
+  with its whole self as its `title`, the button and its group are `min-w-0`, and the button is
+  still named "Switch shop, current: <name>" in full.
 - `tests/e2e/workspace-shell.spec.ts`, *at a phone's width the rail is the strip…*: a first paint
   at 390×844 with nothing stored is the strip, passes nothing past the viewport, and leaves the
   key absent. Then, for a stored `false` and a stored `true`: at 390×844 the rail is 52px wide and
@@ -193,7 +234,12 @@ whatever is left over.
   its box and the viewport (`expectTopBarHoldsItsControls`, `support/viewport.ts`); the rail
   opened narrow is the strip again once *Orders* is followed from it, nothing on Orders passes
   the viewport, and the stored value is unchanged. At 1280 the
-  remembered state is back. The lab's rail on the bench folds at the same width.
+  remembered state is back. The lab's rail on the bench folds at the same width. *At a phone's
+  width the indexes scroll their tables…*: on a built chain, each of the thirteen indexes draws
+  its table and passes nothing past the viewport. History's rows carry `sr-only` lines. A shop
+  named past the bar's row draws its name cut (content wider than its box, `text-overflow:
+  ellipsis`), is still named in full, passes nothing past the viewport and keeps the bar's
+  controls in it.
 - `tests/e2e/experiment-start.spec.ts`: the results of the journey's run at 390×844 show the
   strip, pass nothing past the viewport, and keep the bar's controls in it. The journey's cells
   carry no timeline link, so they hold no `sr-only` line, and no browser test here can see the

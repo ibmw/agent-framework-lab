@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
+import { buildLab } from "./support/lab";
 import {
   COLLAPSED_KEY,
   expectTopBarHoldsItsControls,
@@ -170,6 +171,89 @@ test("at a phone's width the rail is the strip, nothing passes the viewport, and
   expect(await page.evaluate((key) => window.localStorage.getItem(key), COLLAPSED_KEY)).toBe(
     "true",
   );
+});
+
+/**
+ * The surfaces ADR 0079 left open, at a phone's width: every index on the template draws its
+ * table in a scroller of its own, so the pane never scrolls sideways — History's included, whose
+ * rows carry `sr-only` reasons that a scroller not `relative` lets out against the pane — and a
+ * shop name longer than the bar's row is cut with an ellipsis, still named in full.
+ */
+test("at a phone's width the indexes scroll their tables and a long shop name is cut, not spilled", async ({
+  page,
+  request,
+}) => {
+  const lab = await buildLab(request);
+  // The one index the chain writes no row for: no arm is judged.
+  const judge = await request.post("/api/v1/judge-configurations", {
+    data: { name: `Narrow sweep ${Date.now().toString(36)}` },
+  });
+  expect(judge.ok(), await judge.text()).toBe(true);
+  const shop = (path: string) => `/shops/${lab.shopId}${path}`;
+  await page.setViewportSize(PHONE);
+
+  // Each index, the heading it lands on, and its card's title: the card holds a table there, so
+  // the check is of a drawn table and not of an empty state.
+  const INDEXES = [
+    ["/shops", "Shops", "In this lab"],
+    [shop("/products"), "Products", "Catalog"],
+    [shop("/orders"), "Orders", "Order fixtures"],
+    [shop("/customers"), "Customers", "Attached to this shop"],
+    [shop("/tickets"), "Tickets", "Raised in this shop"],
+    [shop("/scenarios"), "Scenarios", "Built on this shop"],
+    [shop("/setup/policies"), "Policies & FAQ", "What the agent can consult"],
+    ["/lab/support-identities", "Support identities", "Shared by every shop"],
+    ["/lab/agent-configurations", "Agent configs", "Agents under test"],
+    ["/lab/judges", "Judges", "What a scenario leaves to a judge"],
+    ["/lab/objective-blocks", "Objective blocks", "What a scenario can assert"],
+    ["/lab/mutation-blocks", "Mutation blocks", "Faults a scenario can inject"],
+    ["/lab/history", "Experiment history", "Recorded across every shop"],
+  ] as const;
+  for (const [path, heading, card] of INDEXES) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+    const index = page.locator("section").filter({
+      has: page.getByRole("heading", { level: 2, name: card }),
+    });
+    await expect(index.getByRole("table")).toBeVisible();
+    expect.soft(await pastTheViewport(page), path).toEqual([]);
+  }
+
+  // History's rows carry their `sr-only` reasons, so the case above is the one the `relative`
+  // scroller answers and not a table with nothing absolutely placed in it.
+  await page.goto("/lab/history");
+  await expect(page.getByRole("button", { name: "Fork with newer versions" })).toBeVisible();
+  expect(await page.locator("table .sr-only").count()).toBeGreaterThan(0);
+
+  // A shop whose name is longer than the bar's row: cut, on the bar's first row, and still the
+  // name the switcher is known by.
+  const long = `Northstar Outfitters of the Far Northern Fjords ${Date.now().toString(36)}`;
+  const created = await request.post("/api/v1/shops", {
+    data: {
+      identity: {
+        name: long,
+        slug: `fjords-${Date.now().toString(36)}`,
+        locale: "en-GB",
+        currencies: ["EUR"],
+        channels: ["chat"],
+      },
+    },
+  });
+  expect(created.ok(), await created.text()).toBe(true);
+  const { shop_id: longId } = (await created.json()) as { shop_id: string };
+  await page.goto(`/shops/${longId}`);
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  const switcher = page.getByRole("button", { name: /^Switch shop/ });
+  await expect(switcher).toHaveAccessibleName(`Switch shop, current: ${long}`);
+  const name = switcher.getByTitle(long, { exact: true });
+  await expect(name).toHaveText(long);
+  expect(
+    await name.evaluate((element) => element.scrollWidth > element.clientWidth),
+    "the name is cut rather than drawn whole",
+  ).toBe(true);
+  expect(await name.evaluate((element) => getComputedStyle(element).textOverflow)).toBe("ellipsis");
+  expect(await pastTheViewport(page)).toEqual([]);
+  await expectTopBarHoldsItsControls(page);
 });
 
 /**

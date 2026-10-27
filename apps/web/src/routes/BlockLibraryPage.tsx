@@ -47,6 +47,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
 } from "../lib/ui";
 import type { Listing } from "../shell/listings";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
@@ -227,7 +228,7 @@ function BlockLibrary({
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">{copy.noMatch}</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className={tableScrollerClasses}>
             <table className="w-full border-collapse text-[13px]">
               <thead>
                 <tr>

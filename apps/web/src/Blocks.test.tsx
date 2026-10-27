@@ -24,7 +24,7 @@ import { neutralPillClasses } from "./lib/ui";
 import { itemFormReason } from "./lib/unsavedWork";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
-import { expectPublicationPill } from "./test/indexes";
+import { expectIndexTableScrolls, expectPublicationPill } from "./test/indexes";
 import { expectRulesInFieldOrder } from "./test/itemForm";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
@@ -482,6 +482,11 @@ describe("block libraries", () => {
     const title = screen.getByRole("heading", { level: 2, name: "Faults a scenario can inject" });
     expect(title.parentElement).toContainElement(box);
     expect(screen.queryByRole("heading", { name: "What a scenario can assert" })).toBeNull();
+  });
+
+  it("scrolls its table inside its card, so a phone's pane never scrolls sideways", async () => {
+    renderAt("/lab/objective-blocks");
+    await expectIndexTableScrolls("What a scenario can assert");
   });
 
   it("lists objective blocks with their type axis and publication state", async () => {

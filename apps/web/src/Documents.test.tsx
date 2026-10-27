@@ -13,7 +13,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { toPayload } from "./lib/shop";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
-import { expectCreateGlyph } from "./test/indexes";
+import { expectCreateGlyph, expectIndexTableScrolls } from "./test/indexes";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { expectEditorOnRows } from "./test/rows";
@@ -186,6 +186,11 @@ describe("the Documents table", () => {
     expect(title.parentElement).toContainElement(
       within(table()).getByRole("searchbox", { name: "Search documents" }),
     );
+  });
+
+  it("scrolls its table inside its card, so a phone's pane never scrolls sideways", async () => {
+    await openTable();
+    await expectIndexTableScrolls("What the agent can consult");
   });
 
   it("puts New document in the page header beside the draft's Save and Discard, not on the card", async () => {

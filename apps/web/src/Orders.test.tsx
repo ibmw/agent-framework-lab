@@ -32,7 +32,7 @@ import { formatFixtureTimestamp } from "./lib/ui";
 import { itemFormReason } from "./lib/unsavedWork";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectWayBack } from "./test/header";
-import { indexCard } from "./test/indexes";
+import { expectIndexTableScrolls, indexCard } from "./test/indexes";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { expectEditorOnRows, expectFieldRow } from "./test/rows";
@@ -402,6 +402,11 @@ describe("order index", () => {
     const box = await screen.findByRole("searchbox", { name: "Search by reference or customer" });
     const title = screen.getByRole("heading", { level: 2, name: "Order fixtures" });
     expect(title.parentElement).toContainElement(box);
+  });
+
+  it("scrolls its table inside its card, so a phone's pane never scrolls sideways", async () => {
+    renderAt(`/shops/${SHOP_ID}/orders`);
+    await expectIndexTableScrolls("Order fixtures");
   });
 
   it("lists the shop's fixtures with their two status axes", async () => {

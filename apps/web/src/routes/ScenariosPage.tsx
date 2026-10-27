@@ -54,6 +54,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  tableScrollerClasses,
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
@@ -164,7 +165,7 @@ export function ScenariosPage() {
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No scenario matches this view.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className={tableScrollerClasses}>
             <table className="w-full border-collapse text-[13px]">
               <thead>
                 <tr>
