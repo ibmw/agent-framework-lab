@@ -109,29 +109,6 @@ named in the tests and the tokens are paid. The operator took the milestone's de
 No open slice touches the backend. The covered journeys are
 `experiment-start.spec.ts`, `workspace-shell.spec.ts` and `sticky-header.spec.ts`.
 
-### Slice 58 — The debts the reviews named
-
-- [ ] `#14352e`, the selected ink of the rail and the depth tabs (`shell/AppShell.tsx:299`,
-  `lib/ui.ts:815`), becomes a named colour token in `styles.css`. Both class sets use the token,
-  and `ui.test.ts` asserts the token's value.
-- [ ] `LabSettings.test.tsx:400–404` waits for the loaded settings with `findByRole` before
-  asserting them synchronously.
-- [ ] The tie-break between two attempts within one turn (`lib/timelineAnchors.ts`) has a test of
-  its own, with a mutation proof.
-- [ ] A Playwright journey follows a deciding-call link from a results cell that has to be
-  scrolled to inside the matrices' `relative` scroller. It runs on a run whose evidence carries
-  `decided_by`: the seeded demo's, or one the spec's fixture records.
-
-Frames: none.
-
-Authority: ADR 0030's 2026-10-25 amendment, ADR 0079.
-
-Departures to record: none.
-
-Branch: `test/results-review-debts`. Checks: Vitest `ui.test.ts`, `LabSettings.test.tsx`
-repeated twenty times under load, and the timeline anchors test. `make check`, `pnpm build`;
-`pnpm test:e2e` for `experiment-start.spec.ts`.
-
 ## Deliberately not here
 
 - **Any reading of what the lab still lacks across listings.** ADR 0044 and ADR 0045 stand; the

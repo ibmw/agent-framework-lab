@@ -415,7 +415,9 @@ describe("your preferences", () => {
 
     renderAt("/settings");
     const row = within(await screen.findByRole("group", { name: "Last-visited shop" }));
-    expect(row.getByRole("link", { name: "Northstar Outfitters" })).toHaveAttribute(
+    // The group is drawn before the shop list answers, and reads "Reading…" until it does: the
+    // shop it names is the loaded setting, so it is waited for and not assumed.
+    expect(await row.findByRole("link", { name: "Northstar Outfitters" })).toHaveAttribute(
       "href",
       `/shops/${SHOP_ID}`,
     );

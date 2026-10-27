@@ -449,3 +449,153 @@ export async function buildLab(request: APIRequestContext): Promise<BuiltLab> {
     configurationId: arms[0].configuration_id,
   };
 }
+
+/** One run on a built chain whose evaluation names, for each arm, the call that decided a row. */
+export interface DecidedRun {
+  experimentId: string;
+  /** The arms in their positions: A, then B. */
+  runIds: [string, string];
+  /** The objective's statement, which is its row's name in the results matrices. */
+  statement: string;
+}
+
+/**
+ * A run whose evidence carries `decided_by` (ADR 0030, amended 2026-10-25), recorded through the
+ * public API on a chain `buildLab` built.
+ *
+ * A call decides two verdicts only: a requirement met, and a prohibition broken. The chain's own
+ * objective asks for a document read, which the deterministic control never makes, so its rows
+ * are pending or missed and link nowhere. This records a second recipe on the same ticket whose
+ * one objective asks that the arm read the ticket's order — which the control's declared policy
+ * does on every turn (`infrastructure/agents/fake/runtime.py`: the interaction context, then that
+ * order) — and runs both arms of a fresh experiment once, on that framework. Each arm's row is
+ * then met, and decided by its own `orders.read_order` call.
+ */
+export async function recordDecidedRun(
+  request: APIRequestContext,
+  lab: BuiltLab,
+): Promise<DecidedRun> {
+  const unique = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
+  const statement = "Read the order";
+
+  const objectiveId = String(
+    (await json(request, "post", "/api/v1/objective-blocks", { name: `read-order-${unique}` }))
+      .block_id,
+  );
+  await json(request, "put", `/api/v1/objective-blocks/${objectiveId}/draft`, {
+    payload: {
+      name: `read-order-${unique}`,
+      statement,
+      description: "Passes when the arm looks up the bound order through its tool.",
+      assessment: "deterministic",
+      evidence: "event",
+      parameters: [
+        {
+          name: "entity_ref",
+          kind: "entity_reference",
+          description: "The order the arm has to read.",
+          required: true,
+          default: null,
+        },
+        {
+          name: "severity",
+          kind: "severity",
+          description: "Whether missing the read fails the objective.",
+          required: true,
+          default: "required",
+        },
+      ],
+    },
+  });
+  await json(request, "post", `/api/v1/objective-blocks/${objectiveId}/versions`, {});
+
+  const scenarioId = String(
+    (
+      await json(request, "post", `/api/v1/shops/${lab.shopId}/scenarios`, {
+        name: `Read the order ${unique}`,
+        ticket_id: lab.ticketId,
+      })
+    ).scenario_id,
+  );
+  await json(request, "put", `/api/v1/shops/${lab.shopId}/scenarios/${scenarioId}/draft`, {
+    payload: {
+      name: `Read the order ${unique}`,
+      context_documents: [],
+      objectives: [
+        {
+          id: "read-the-order",
+          block_id: objectiveId,
+          severity: "required",
+          bindings: [{ parameter: "entity_ref", value: `order:${lab.orderId}` }],
+        },
+      ],
+      mutations: [],
+      hidden_facts: "",
+      completion: { statement: "The arm has read the order.", max_turns: 3 },
+    },
+  });
+  const scenarioVersion = Number(
+    (
+      await json(
+        request,
+        "post",
+        `/api/v1/shops/${lab.shopId}/scenarios/${scenarioId}/versions`,
+        {},
+      )
+    ).version,
+  );
+
+  // Both arms on the control framework, which runs offline: the e2e stack has no provider key.
+  // A new configuration enables every read tool and no write, which is all the policy needs.
+  const arms: { configuration_id: string; version: number }[] = [];
+  for (const name of ["Control A", "Control B"]) {
+    const created = await json(request, "post", "/api/v1/agent-configurations", {
+      name: `${name} ${unique}`,
+      support_identity_id: lab.identityId,
+    });
+    const configurationId = String(created.configuration_id);
+    const content = created.content as Record<string, unknown>;
+    await json(request, "put", `/api/v1/agent-configurations/${configurationId}/draft`, {
+      payload: {
+        ...content,
+        framework_id: "fake",
+        model: {
+          ...(content.model as Record<string, unknown>),
+          provider: "fake",
+          model_id: "deterministic",
+        },
+        prompt: `You are {{support_identity.role}} for {{shop.name}}. ${name}.`,
+      },
+    });
+    const published = await json(
+      request,
+      "post",
+      `/api/v1/agent-configurations/${configurationId}/versions`,
+      {},
+    );
+    arms.push({ configuration_id: configurationId, version: Number(published.version) });
+  }
+
+  const experiment = await json(request, "post", `/api/v1/shops/${lab.shopId}/experiments`, {
+    label: `Deciding calls ${unique}`,
+    scenario_id: scenarioId,
+    scenario_version: scenarioVersion,
+    seed: 20261027,
+    arms,
+  });
+  const experimentId = String(experiment.experiment_id);
+  const runs = (experiment.runs as { run_id: string; position: number }[])
+    .slice()
+    .sort((left, right) => left.position - right.position)
+    .map((run) => run.run_id);
+  expect(runs, "the experiment did not open two arms").toHaveLength(2);
+  for (const runId of runs) {
+    await json(
+      request,
+      "post",
+      `/api/v1/shops/${lab.shopId}/experiments/${experimentId}/runs/${runId}/agent-turns`,
+      {},
+    );
+  }
+  return { experimentId, runIds: [runs[0], runs[1]], statement };
+}

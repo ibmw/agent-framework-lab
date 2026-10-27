@@ -242,9 +242,13 @@ name's `title` is the whole name for a pointer.
   controls in it.
 - `tests/e2e/experiment-start.spec.ts`: the results of the journey's run at 390×844 show the
   strip, pass nothing past the viewport, and keep the bar's controls in it. The journey's cells
-  carry no timeline link, so they hold no `sr-only` line, and no browser test here can see the
-  `relative` scroller. It is held by `Experiments.test.tsx`'s class assertion, and it was measured
-  on the seeded run: without it the pane scrolls to 581px of 338.
+  carry no timeline link, so they hold no `sr-only` line. The spec's second journey, *a deciding
+  call scrolled to inside the results matrix…*, records through the API a run whose one row names
+  a deciding call in each arm (`recordDecidedRun`, `support/lab.ts`). At 390×844 arm B's link
+  starts past the scroller's right edge with the scroller at rest, is scrolled to inside it, and
+  nothing passes the viewport. Followed, it lands focused on that call in the timeline. Without
+  `relative` the pane scrolls to 494px of 338 there (581px on the seeded run), and the journey
+  fails.
 
 ## Migration
 

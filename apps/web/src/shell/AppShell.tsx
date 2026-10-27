@@ -295,8 +295,11 @@ const inactiveExpandedClasses = "text-admin-ink-soft hover:bg-[#eceef0] hover:te
 const inactiveCollapsedClasses =
   "font-[650] text-admin-muted hover:bg-[#eceef0] hover:text-admin-ink";
 
-/** Active row: `#e8f0ed` behind `#14352e` at 700, washing to `#ddeae5` under the pointer. */
-const activeEntryClasses = "bg-[#e8f0ed] font-bold text-[#14352e] hover:bg-[#ddeae5]";
+/**
+ * Active row: `#e8f0ed` behind `admin-selected-ink` (`#14352e`) at 700, washing to `#ddeae5`
+ * under the pointer.
+ */
+const activeEntryClasses = "bg-[#e8f0ed] font-bold text-admin-selected-ink hover:bg-[#ddeae5]";
 
 /**
  * The foot control. It is not an entry: the handoff gives it its own type — 12.5px at 650 in
@@ -377,7 +380,7 @@ function SidebarEntry({ entry, collapsed }: { entry: NavEntry; collapsed: boolea
             {phrase === null || collapsed ? null : (
               <span
                 aria-hidden="true"
-                // The prototype's own two inks: the row's `#14352e` where you are standing,
+                // The prototype's own two inks: the row's `admin-selected-ink` where you are standing,
                 // `admin-muted` everywhere else (`Workspace.dc.html` :110, :113).
                 className={`ml-auto text-[12px] ${isActive ? "" : "text-admin-muted"}`}
               >

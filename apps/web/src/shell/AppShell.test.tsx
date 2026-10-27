@@ -180,6 +180,17 @@ describe("the navigation rail's metrics", () => {
     expect(elsewhere.className).toContain("[&:not([aria-current])>svg]:opacity-75");
   });
 
+  it("inks the row you are standing on in the selected-ink token, and no other row", () => {
+    renderShell("shop");
+
+    const here = within(rail()).getByRole("link", { name: "Overview" });
+    const elsewhere = within(rail()).getByRole("link", { name: "Products" });
+
+    expect(here.className.split(" ")).toContain("text-admin-selected-ink");
+    expect(here.className).not.toContain("#14352e");
+    expect(elsewhere.className.split(" ")).not.toContain("text-admin-selected-ink");
+  });
+
   it("lifts an inactive row to admin-muted at 650 once it is a glyph on its own", async () => {
     renderShell("shop");
 

@@ -829,6 +829,13 @@ describe("depth tab states", () => {
     expect(depthTabStateClasses.idle).toMatch(/(^|\s)hover:text-admin-ink(\s|$)/);
   });
 
+  it("inks the selected tab in the named colour the rail's active row shares", () => {
+    // `#14352e`, the prototype's ink where you are standing, is one token and not two literals.
+    expect(themeSource).toMatch(/--color-admin-selected-ink:\s*#14352e;/);
+    expect(depthTabStateClasses.selected).toMatch(/(^|\s)text-admin-selected-ink(\s|$)/);
+    expect(Object.values(depthTabStateClasses).join(" ")).not.toContain("#14352e");
+  });
+
   it("gives every tab an underline of one width, so choosing one moves nothing", () => {
     expect(depthTabStateClasses.idle).toContain("border-transparent");
     for (const [, classes] of tabStates) {

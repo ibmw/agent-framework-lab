@@ -6823,6 +6823,45 @@ describe("traces", () => {
     ).toBeVisible();
   });
 
+  it("opens on a turn's first attempt when the same turn was retried, whatever order they arrive in", async () => {
+    // Two attempts of arm A's turn 1, the retry listed first: the turn alone cannot choose
+    // between them, so the attempt number breaks the tie.
+    const base = TRACES.traces[0];
+    traced = {
+      ...TRACES,
+      traces: [
+        {
+          ...base,
+          run_id: ARM_A,
+          arm_label: "Arm A",
+          ordinal: 0,
+          attempt: 2,
+          trace_id: "d".repeat(32),
+        },
+        {
+          ...base,
+          run_id: ARM_A,
+          arm_label: "Arm A",
+          ordinal: 0,
+          attempt: 1,
+          trace_id: "c".repeat(32),
+        },
+      ],
+    };
+    renderTraces();
+
+    const picker = await screen.findByRole("group", { name: "Traced attempts" });
+    expect(
+      within(picker).getByRole("button", { name: "Arm A · turn 1 · attempt 1" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(picker).getByRole("button", { name: "Arm A · turn 1 · attempt 2" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      within(screen.getByRole("region", { name: "Span" })).getByText("c".repeat(32)),
+    ).toBeVisible();
+  });
+
   it("opens on the first attempt recorded when the first arm has none", async () => {
     const both = twoArmTraces();
     traced = { ...both, traces: both.traces.filter((entry) => entry.run_id === ARM_B) };

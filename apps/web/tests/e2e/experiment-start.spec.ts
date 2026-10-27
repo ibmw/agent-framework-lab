@@ -10,6 +10,7 @@ import {
   editRow,
 } from "./support/authoring";
 import { expect as baseExpect, test } from "./support/e2e";
+import { buildLab, recordDecidedRun } from "./support/lab";
 import { openSection } from "./support/navigate";
 import { expectTopBarHoldsItsControls, PHONE, pastTheViewport } from "./support/viewport";
 
@@ -958,4 +959,95 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(
     page.locator("header").getByText(`${pinnedVersion} published`).first(),
   ).toBeVisible();
+});
+
+/**
+ * A deciding-call link followed from a cell the operator has to scroll to (ADR 0030 amended
+ * 2026-10-25, ADR 0079).
+ *
+ * The journey above records no `decided_by`: the control policy never opens the document its
+ * objective asks for, so its rows are pending or missed and their lines are text. This run is
+ * recorded through the public API (`recordDecidedRun`) on an objective the control meets, so
+ * each arm's row is a link to the `orders.read_order` call that decided it — and a link carries
+ * an absolutely placed `sr-only` line, which is what the matrices' `relative` scroller holds in.
+ *
+ * At a phone's width the arm B column starts past the pane's edge, so the link is reached by
+ * scrolling the matrix inside its card. Nothing passes the viewport while it is, and following
+ * it lands on that very call in the execution timeline, focused and named as the event followed.
+ */
+test("a deciding call scrolled to inside the results matrix opens the call on the timeline", async ({
+  page,
+  request,
+}) => {
+  test.slow();
+  const lab = await buildLab(request);
+  const run = await recordDecidedRun(request, lab);
+  const [, armB] = run.runIds;
+
+  // The coordinate the link must carry is the evaluation's own, read off the record rather than
+  // restated here: it is arm B's call, and it is the one the reading stopped at.
+  const evaluation = await request.get(
+    `/api/v1/shops/${lab.shopId}/experiments/${run.experimentId}/evaluation`,
+  );
+  expect(evaluation.ok(), await evaluation.text()).toBe(true);
+  const { arms } = (await evaluation.json()) as {
+    arms: {
+      run_id: string;
+      objectives: {
+        statement: string;
+        outcome: string;
+        decided_by: { ordinal: number; attempt: number; sequence: number } | null;
+      }[];
+    }[];
+  };
+  const decided = arms
+    .find((arm) => arm.run_id === armB)
+    ?.objectives.find((objective) => objective.statement === run.statement);
+  expect(decided?.outcome).toBe("met");
+  const call = decided?.decided_by;
+  expect(call, "arm B's row names no deciding call").toBeTruthy();
+  if (!call) return;
+  const anchor = `event-${armB}-${call.ordinal}-${call.attempt}-call-${call.sequence}`;
+
+  await page.setViewportSize(PHONE);
+  await page.goto(`/lab/bench/${lab.shopId}/${run.experimentId}/results`);
+  const row = card(page, "Deterministic evidence").getByRole("row", { name: /Read the order/ });
+  const cell = row.getByRole("cell").nth(1);
+  const link = cell.getByRole("link", { name: /orders\.read_order answered order:/ });
+  await expect(link).toHaveAttribute(
+    "href",
+    `/lab/bench/${lab.shopId}/${run.experimentId}/results/timeline#${anchor}`,
+  );
+
+  // Arm B's column is past the pane's edge: the link is in the page but not on screen, and the
+  // only way to it is the matrix's own scroller, which has not moved.
+  const scroller = link.locator("xpath=ancestor::div[contains(@class, 'overflow-x-auto')][1]");
+  await expect(scroller, "the matrix has no scroller of its own").toHaveCount(1);
+  await expect(link).not.toBeInViewport();
+  expect(await scroller.evaluate((element) => element.scrollLeft)).toBe(0);
+  // Off screen sideways, not merely below the fold: the link starts at or past the scroller's
+  // right edge, so only scrolling the matrix brings it in.
+  const [linkBox, scrollerBox] = [await link.boundingBox(), await scroller.boundingBox()];
+  expect(linkBox && scrollerBox, "the link or its scroller is not rendered").toBeTruthy();
+  if (!linkBox || !scrollerBox) return;
+  expect(linkBox.x, "arm B's link is not past the scroller's right edge").toBeGreaterThanOrEqual(
+    scrollerBox.x + scrollerBox.width,
+  );
+
+  await link.scrollIntoViewIfNeeded();
+  await expect(link).toBeInViewport();
+  expect(await scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  // The cell's `sr-only` line went with it: inside the scroller, not past the viewport.
+  expect(await pastTheViewport(page)).toEqual([]);
+
+  await link.click();
+  await expect(page).toHaveURL(new RegExp(`/results/timeline#${anchor}$`));
+  const stream = card(page, "Execution timeline");
+  const landed = stream.locator(`li[id="${anchor}"]`);
+  await expect(landed).toBeFocused();
+  await expect(landed).toHaveAttribute("aria-current", "location");
+  await expect(landed).toContainText("orders.read_order");
+  await expect(landed.getByText("the event you followed")).toBeVisible();
+  await expect(landed).toBeInViewport();
+  await expect(stream.getByText("the event you followed")).toHaveCount(1);
 });

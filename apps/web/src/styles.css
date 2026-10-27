@@ -123,6 +123,12 @@
   --color-admin-published-ink: #0f5132;
   --color-admin-draft: #ffe9a3;
   --color-admin-draft-ink: #5c4813;
+  /*
+   * The prototype's ink where you are standing: the rail's active row and the selected depth
+   * tab (`Workspace.dc.html` :110, :2595–2602). The README's token table does not name it; it is minted
+   * because two class sets drew it as the same literal.
+   */
+  --color-admin-selected-ink: #14352e;
   --font-display: Georgia, "Times New Roman", serif;
   --radius-panel: 1.15rem;
   --shadow-panel: 0 22px 70px rgb(31 56 49 / 8%);

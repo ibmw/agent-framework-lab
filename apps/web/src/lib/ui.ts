@@ -803,16 +803,16 @@ export const filterChipCountClasses = "tabular-nums opacity-75";
  *
  * The selected tab is told apart by its underline, its weight and its ink, never by
  * `aria-current` alone. The idle tab carries a transparent underline of the same width so that
- * moving between tabs moves nothing. `#14352e` is a literal for the reason the rail's active
- * row writes it (`AppShell.tsx`): the prototype's ink where you are standing, which the
- * README's token table does not name. The row wraps, as every row does.
+ * moving between tabs moves nothing. `#14352e` is `admin-selected-ink`, the token the rail's
+ * active row draws too (`AppShell.tsx`): the prototype's ink where you are standing. The row
+ * wraps, as every row does.
  */
 export const depthTabRowClasses = "flex flex-wrap items-end gap-0.5 border-b border-admin-border";
 
 const depthTabBaseClasses = `-mb-px inline-flex items-center border-b-2 px-[15px] py-2.5 text-[13px] transition ${focusRingClasses}`;
 
 const depthTabStates = {
-  selected: `${depthTabBaseClasses} border-lab-accent font-bold text-[#14352e]`,
+  selected: `${depthTabBaseClasses} border-lab-accent font-bold text-admin-selected-ink`,
   idle: `${depthTabBaseClasses} border-transparent font-semibold text-admin-muted hover:text-admin-ink`,
 } as const;
 
