@@ -1,6 +1,6 @@
 # Project plan
 
-Status: current roadmap — 2026-10-02. Open work only; delivered milestones are one line each in
+Status: current roadmap — 2026-10-26. Open work only; delivered milestones are one line each in
 the index below, and their narrative is `docs/history/PLAN.md`.
 
 ## Purpose and authority
@@ -127,6 +127,7 @@ consistently.
 | 9 — Every page is one of three templates | One editor side panel, header and card, field rows and lists everywhere; Tickets as an index, a create page and an editor; the indexes and History finished on the index template. | ADR 0073, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-09-28.md` |
 | 10 — A list is edited in the form below it | Shop details' method list shared, and the lists the editors edit with a form drawn on it: an order's lines and events, a profile's addresses, background and hidden facts, an identity's guidance, a product's options, media, attributes and reviews, the tone-of-voice guidelines, a template's parameters. | ADR 0074, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-09-29.md` |
 | 11 — A product's images are files the shop holds | A product's images uploaded by drop, the operating system's picker or the shop's own library, named by their file, stored by their content and never overwritten, replaced on their item and drawn wherever they are listed; a shop that never published deleted with everything it holds; the seed shipping real images. | ADR 0076–0077, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-10-02.md` |
+| 12 — The results say why | Every mark on the results matrices says why, a judged one with the judge's reason and name; the arms' difference, a summarised state diff and the conversation as a read-only tab; visible selection and a two-lane timeline the evidence links into; the record each run froze in the rail; an untouched form's refusal muted; the rail folded by a phone's width. Frontend but for one move: the verdict's deciding call served in the v1 contract (ADR 0030's 2026-10-25 amendment). | ADR 0030, ADR 0078–0079, `docs/history/PLAN-UX-2026-10-22.md` |
 
 ## Deferred decision triggers
 

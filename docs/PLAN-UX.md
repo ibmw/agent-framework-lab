@@ -1,13 +1,14 @@
 # UX plan
 
-Status: Milestone 12 open — 2026-10-22. Open slices only: a slice that lands is removed from this
+Status: no milestone open — 2026-10-26. Open slices only: a slice that lands is removed from this
 file. Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
 `docs/history/PLAN-UX-2026-09-13.md`; the 20 September plan, whose delivered Milestone 8's goal
 and acceptance criteria are in `docs/history/PLAN-UX-2026-09-20.md`; the 28 September plan,
 whose delivered Milestone 9's are in `docs/history/PLAN-UX-2026-09-28.md`; the 29 September
-plan, whose delivered Milestone 10's are in `docs/history/PLAN-UX-2026-09-29.md`; and the
+plan, whose delivered Milestone 10's are in `docs/history/PLAN-UX-2026-09-29.md`; the
 2 October plan, whose delivered Milestone 11's decisions, goal and acceptance criteria are in
-`docs/history/PLAN-UX-2026-10-02.md`.
+`docs/history/PLAN-UX-2026-10-02.md`; and the 22 October plan, whose delivered Milestone 12's
+goal, decisions and acceptance criteria are in `docs/history/PLAN-UX-2026-10-22.md`.
 
 ## Purpose and authority
 
@@ -80,74 +81,11 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Milestones 8, 9, 10 and 11 are delivered. Their record is the commits and ADR 0052–0077; their
-goals and acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md`,
-`docs/history/PLAN-UX-2026-09-28.md`, `docs/history/PLAN-UX-2026-09-29.md` and
-`docs/history/PLAN-UX-2026-10-02.md`. Milestone 12 is open; its slices land in the order they
-are numbered, because each reads the page the one before it left.
-
-## Milestone 12 — The results say why
-
-### Goal
-
-An operator who has just finished an experiment opens its results and can answer, from the screen
-alone: did each arm succeed, why or why not, what differed between the arms, where the evidence
-is, and what to do next. Today every cell is a bare ✓ whose reason only a screen reader hears, the
-arms' one difference is a chip, the state diff is seventeen near-identical lines per arm, the
-conversation is on another page, and the seeded run's turn 2 — a refused proposal and a reply that
-ignored the customer's question, marked *met* — cannot be seen from the verdict. The operator
-asked for this milestone on 16 October 2026 and took its decisions on 22 October 2026, after an
-assessment of the seeded run in Chrome at 1440, and headless at 1280 and 390:
-
-- **The per-cell evidence line is drawn** on the results matrices, not on the bench's compact one.
-- **The judge's rationale is on screen**, one line, the whole of it behind a disclosure.
-- **The conversation is a read-only tab** of the results, the fourth beside General, Execution
-  timeline and Traces; the prototype's *Code paths* tab is not built.
-- **The rail collapses at phone width**, in this milestone, as a shell slice.
-- **A refusal on a form nobody has touched is muted** until the operator touches it — an
-  amendment of ADR 0063.
-
-Every slice is frontend-only: the results layout already reads `experiment.turns`,
-`experiment.agent_turns`, `experiment.comparison`, `derived_from`, `resolution_fingerprint` and
-each judgement's `provider`, and no contract moves. The covered journeys are
-`experiment-start.spec.ts` (the results at :640 and History's *Open results* at :818),
-`tour-anchors.spec.ts`, `sticky-header.spec.ts` (:684) and `workspace-shell.spec.ts`.
-
-### Slice 53 — The rail collapses at phone width
-
-- [ ] Below the narrow breakpoint the rail draws its 52px collapsed strip without writing the
-  remembered preference (`shell/AppShell.tsx:451`), and the top bar and a page header's actions
-  wrap rather than clip.
-- [ ] The results' matrix arm heads are not squeezed at 390 (`ObjectiveEvidence.tsx:56`).
-- [ ] ADR 0079 records the breakpoint and that the width, not the operator, collapsed it.
-
-Frames: the prototype draws no phone width; `docs/design-direction.md`, *Desktop first, usable
-narrower*.
-
-Authority: ADR 0054, ADR 0055.
-
-Departures to record: none; the narrow treatment is the lab's.
-
-Branch: `feat/shell-narrow-rail`. Checks: Vitest — `App.test.tsx` for the collapsed strip at a
-narrow width and the preference left as it was. `make check`, `pnpm build`; `pnpm test:e2e` for
-`workspace-shell.spec.ts` and `sticky-header.spec.ts`.
-
-Slice evidence: the results and the bench at 390, no text past the viewport.
-
-### Acceptance criteria
-
-- Every mark on the results matrices shows why in words; a judged mark shows the judge's reason
-  and who the judge was, and the offline control judge says what it does not check.
-- Each arm's card counts its turns from one and says when it missed a required objective.
-- What the arms differed on is a card that says whether the behaviour is attributable.
-- The state diff opens with a summary, reads arm beside arm, and keeps every path in a
-  disclosure.
-- The conversation is readable on the results without leaving them, and nothing on it writes.
-- The selected tab, lens and attempt are visible; the timeline reads in two lanes, and an
-  evidence line lands on its event.
-- Provenance and notes are in the rail; no text clips at 1280 or 1440, and none passes the
-  viewport at 390.
-- An untouched form's refusal is muted, and ADR 0078 and ADR 0079 record the two decisions.
+Milestones 8, 9, 10, 11 and 12 are delivered. Their record is the commits and ADR 0052–0079;
+their goals and acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md`,
+`docs/history/PLAN-UX-2026-09-28.md`, `docs/history/PLAN-UX-2026-09-29.md`,
+`docs/history/PLAN-UX-2026-10-02.md` and `docs/history/PLAN-UX-2026-10-22.md`. No UX milestone
+is open: the next one is planned here, under the rules above, when the operator asks for it.
 
 ## Deliberately not here
 
