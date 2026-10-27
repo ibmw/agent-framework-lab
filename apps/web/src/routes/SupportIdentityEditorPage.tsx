@@ -432,7 +432,8 @@ function GuidanceNotes({
   const titleInput = useRef<HTMLInputElement>(null);
   const reasonId = useId();
   const refusal = guidanceRefusal(form.fields);
-  const marked = form.dirty ? refusal : null;
+  // A field is marked by the refusal only once the form is touched (ADR 0078).
+  const touched = form.touch.touched;
 
   function drop(id: string) {
     edit({ ...content, guidance: notes.filter((note) => note.id !== id) });
@@ -525,6 +526,7 @@ function GuidanceNotes({
         addLabel="Add guidance"
         refusal={refusal}
         reasonId={reasonId}
+        touch={form.touch}
         onSubmit={submit}
         onCancel={() => {
           const editing = form.editing;
@@ -540,7 +542,7 @@ function GuidanceNotes({
             ref={titleInput}
             className={`${fieldControlClasses} w-full`}
             value={form.fields.title}
-            {...refusedProps(marked, "title", reasonId)}
+            {...refusedProps(refusal, "title", reasonId, touched)}
             onChange={(event) => form.update({ title: event.target.value })}
           />
         </FieldHint>
@@ -550,7 +552,7 @@ function GuidanceNotes({
               maxLength={TEXT_MAX_LENGTH}
               className={`${textAreaClasses} w-full`}
               value={form.fields.body}
-              {...refusedProps(marked, "body", reasonId)}
+              {...refusedProps(refusal, "body", reasonId, touched)}
               onChange={(event) => form.update({ body: event.target.value })}
             />
           </FieldHint>

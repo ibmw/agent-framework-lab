@@ -1,5 +1,6 @@
 import { type DragEvent, type ReactNode, type Ref, useId, useState } from "react";
 import { MEDIA_TYPES } from "../lib/fieldRules";
+import { type RefusedBy, refusalLineOf } from "../lib/itemForm";
 import {
   fieldLabelClasses,
   mediaBrowseClasses,
@@ -29,8 +30,7 @@ export function MediaDropZone({
   uploading,
   status,
   refused,
-  invalid,
-  describedBy,
+  refusedBy,
   onFile,
   library,
   pickerRef,
@@ -45,9 +45,12 @@ export function MediaDropZone({
   status: string;
   /** `status` is a refusal, which the file input is then described by. */
   refused: boolean;
-  /** The form refuses for want of an image, said in the line `describedBy` names. */
-  invalid: boolean;
-  describedBy?: string;
+  /**
+   * The form refuses for want of an image, said in the line this names. The file input is
+   * marked invalid and described by it once the form is touched, and not while that line is a
+   * hint (ADR 0078).
+   */
+  refusedBy?: RefusedBy;
   onFile: (file: File) => void;
   library?: ReactNode;
   pickerRef?: Ref<HTMLInputElement>;
@@ -59,6 +62,7 @@ export function MediaDropZone({
   const statusId = `${id}-status`;
   const [dragging, setDragging] = useState(false);
   const takes = !fixed && !uploading;
+  const refusalLine = refusalLineOf(refusedBy);
 
   function over(event: DragEvent<HTMLFieldSetElement>) {
     if (!takes) {
@@ -115,14 +119,9 @@ export function MediaDropZone({
               // Not `disabled` while an upload runs: that would drop the focus of a reader who
               // chose the file from here. It says it is unavailable and takes no file instead.
               aria-disabled={uploading || undefined}
-              aria-invalid={invalid || undefined}
+              aria-invalid={refusalLine !== undefined || undefined}
               aria-describedby={
-                [
-                  hintId,
-                  uploading ? noteId : null,
-                  refused ? statusId : null,
-                  invalid ? describedBy : null,
-                ]
+                [hintId, uploading ? noteId : null, refused ? statusId : null, refusalLine ?? null]
                   .filter(Boolean)
                   .join(" ") || undefined
               }

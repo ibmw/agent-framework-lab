@@ -1,6 +1,6 @@
-import { type FormEvent, type ReactNode, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
 import type { ItemRefusal } from "../lib/itemForm";
-import { useRefusalTouch } from "../lib/refusalTouch";
+import type { RefusalTouch } from "../lib/refusalTouch";
 import type { Removal } from "../lib/removal";
 import {
   itemClasses,
@@ -269,6 +269,7 @@ export function ItemFormRow({
   saveLabel = "Save changes",
   refusal,
   reasonId,
+  touch,
   onSubmit,
   onCancel,
   children,
@@ -282,18 +283,19 @@ export function ItemFormRow({
   saveLabel?: string;
   refusal: ItemRefusal | null;
   reasonId: string;
+  /**
+   * The form's touch (`useItemForm().touch`): the line below and the field it names follow it
+   * together (ADR 0078). The form owns it, so every new filling — an Edit opened, a reset —
+   * starts a new attempt.
+   */
+  touch: RefusalTouch;
   onSubmit: () => void;
   onCancel: () => void;
   children: ReactNode;
 }) {
   // The form's refusal is a hint until the operator edits a field or presses the refused action
-  // (ADR 0078). Opening an entry, putting it back, or an accepted submit starts a new attempt.
-  const touch = useRefusalTouch();
-  const [attemptFor, setAttemptFor] = useState(editing);
-  if (attemptFor !== editing) {
-    setAttemptFor(editing);
-    touch.reset();
-  }
+  // (ADR 0078). An accepted submit starts a new attempt, as opening an entry or putting it back
+  // does in `useItemForm`.
   return (
     <form
       onSubmit={(event: FormEvent<HTMLFormElement>) => {

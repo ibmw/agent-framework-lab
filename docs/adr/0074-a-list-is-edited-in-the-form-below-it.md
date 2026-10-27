@@ -141,7 +141,8 @@ and stays on the item.
   placement, and every converted form takes it, a field's native `required` included: the
   event's time and summary are no longer `required`, and an empty one is said in the line like
   any other rule. A rule about the list rather than a field — the order's cap on its events,
-  nothing left to add as a line — marks no field.
+  nothing left to add as a line — marks no field. (Amended by ADR 0078, 27 October 2026: a
+  blank form marks nothing until it is touched, which a press with nothing typed also does.)
 
 ### The order's two forms
 

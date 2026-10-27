@@ -1,6 +1,7 @@
 import { type KeyboardEvent, type ReactNode, useId, useState } from "react";
 import { savedAsPreview } from "../lib/fieldPreviews";
 import { alreadyTakenMessage } from "../lib/fieldRules";
+import { type RefusedBy, refusalLineOf } from "../lib/itemForm";
 import { pythonStrip } from "../lib/pythonText";
 import { useRemoval } from "../lib/removal";
 import { fieldControlClasses, itemFormTracksClasses, subtleFieldButtonClasses } from "../lib/ui";
@@ -78,11 +79,12 @@ type ChipListFieldProps = {
     notice: (value: string) => string;
   };
   /**
-   * The id of a line elsewhere on the form that says why the list as it stands is refused — an
-   * option with no value, said after the buttons of the form below the options (ADR 0074). The
-   * field that takes the next value is marked invalid and described by that line.
+   * The line elsewhere on the form that says why the list as it stands is refused — an option
+   * with no value, said after the buttons of the form below the options (ADR 0074) — and
+   * whether that form is touched. Once it is, the field that takes the next value is marked
+   * invalid and described by that line; until then the line is a hint (ADR 0078).
    */
-  refusedBy?: string;
+  refusedBy?: RefusedBy;
   onChange: (values: string[]) => void;
 } & (
   | {
@@ -172,6 +174,7 @@ export function ChipListField(props: ChipListFieldProps) {
   const trimmed = pythonStrip(typed);
   const candidate = normalize ? normalize(trimmed) : trimmed;
   const colliding = candidate !== "" && values.includes(candidate);
+  const refusalLine = refusalLineOf(refusedBy);
 
   function add() {
     if (candidate === "" || colliding) {
@@ -265,8 +268,10 @@ export function ChipListField(props: ChipListFieldProps) {
               placeholder={placeholder}
               maxLength={maxLength}
               aria-labelledby={`${legendId} ${labelId}`}
-              aria-invalid={colliding || refusedBy !== undefined || undefined}
-              aria-describedby={refusedBy}
+              // A value already in the list is the field's own refusal, said as it is typed;
+              // the form's only once its line is drawn as one (ADR 0078).
+              aria-invalid={colliding || refusalLine !== undefined || undefined}
+              aria-describedby={refusalLine}
               onChange={(event) => setTyped(event.target.value)}
               onKeyDown={keyDown}
             />

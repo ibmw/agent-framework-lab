@@ -1,10 +1,14 @@
 # ADR 0078 — A refusal on an untouched form is a hint
 
-Status: accepted — 2026-10-25
+Status: accepted — 2026-10-25; amended 2026-10-27
 
 Amends ADR 0063, *The reason line and the validation message are one weight*. Every other
 decision of ADR 0063 stands: a refused action is `aria-disabled`, reachable and titled with its
 reason, swallows its own activation, and every submit handler still checks the refusal itself.
+
+The 27 October amendment also amends ADR 0072 and ADR 0074 where they say a blank form below a
+list marks no field "until something is typed": it marks none until it is touched, which a
+press with nothing typed also does (*What touched means*).
 
 ## Context
 
@@ -19,11 +23,12 @@ submit before anyone has typed.
 
 The operator decided on 22 October 2026 that such a refusal is muted until the form is touched
 (PLAN-UX Milestone 12), and on 25 October 2026 that the rule holds for every refusal line in the
-workspace, with no page-by-page exception.
+workspace, with no page-by-page exception. On 27 October 2026 they decided that a field's
+`aria-invalid` follows the same touch as the line that names its refusal (PLAN-UX Milestone 13).
 
 ## Decision
 
-### The line's weight follows the attempt, and nothing else moves
+### The line's weight follows the attempt, and on the action nothing else moves
 
 A refused action's own line is drawn at the README's **hint** — 13px, 400, `#42474c`
 (`refusalHintClasses` in `lib/ui.ts`, which sets `font-normal` rather than inheriting a
@@ -33,8 +38,8 @@ operator has touched it. `refusalLineClasses(touched)` is that choice, and the o
 made. The README's 1.5 leading is not set: the line inherits its parent's, as the validation
 message does, so it keeps its height when it turns and nothing below it moves.
 
-Only the weight moves. The words are the same sentence, so the line still is the reason, and
-colour is not what makes it read as one. The button keeps its dashed weight, `aria-disabled`,
+On the action, only the weight moves. The words are the same sentence, so the line still is the
+reason, and colour is not what makes it read as one. The button keeps its dashed weight, `aria-disabled`,
 `title` and `aria-describedby`; the line keeps its id. A screen reader hears the same
 description either way, and a keyboard reader who lands on the refused action is told the same
 thing as before.
@@ -66,6 +71,22 @@ to vN" after a publish — reports no mistake, so it is a hint.
 A submission that reaches a form without a press (`form.requestSubmit`) touches nothing: the
 handler refuses it, as ADR 0063 requires, and no operator made it.
 
+**The field a refusal names is invalid exactly while its line is the validation message.** A
+control the refused action's line names — the field a form below a list marks, the ID or values
+field, the image picker, the open variant row's SKU — carries `aria-invalid`, and is described
+by that line, only once its form is touched. On an untouched form the line is a hint and the
+field says nothing invalid, so a screen reader is never told a field is wrong while the screen
+draws its reason as guidance. It is the same touch, not a second one: a press with nothing
+typed turns the line and marks the field together, and an edit undone leaves both as they
+turned. A line whose words are a rule the field is already described by — the variant
+row's misshapen SKU, whose line is the rename rule — is not added to its description a second
+time; the field is still marked.
+
+A refusal the field finds in its own value and says on its own line — an ID or a value another
+entry already holds, a value past its cap, a handle the lab would not store, a fee that is not
+an amount — is not the action's line, and says `aria-invalid` from the keystroke that causes it,
+touched or not. So does a publish-gate finding on its control, which refuses nothing.
+
 ### A refusal whose cause the operator cannot edit
 
 The bench's "Every arm has completed, so there is no arm left to send a turn to." has no field
@@ -96,6 +117,11 @@ hint.
   `edited` latches a state the page already knows is the operator's (a draft made dirty).
 - `PrimaryAction` takes `onRefusedPress`, called when it swallows a press because it is refused
   (not while busy), for an action that sits outside the element `watch` is on.
+- A field takes the form's `touched` with the refusal that names it: `refusedProps(refusal,
+  field, reasonId, touched)` (`lib/itemForm.ts`) for a plain control, and `refusedBy`, a
+  `RefusedBy` (`{ id, touched }`, built by `refusalOn`), for `DerivedIdField`, `ChipListField`
+  and `MediaDropZone`. A form below a list holds its touch in `useItemForm().touch`, which
+  `ItemFormRow` takes and watches, so the form's fields and its line read one value.
 - A reason drawn as more than one line wears `refusalLineClasses(touched)` itself:
   `PublishReasons` and Start's list.
 
@@ -111,8 +137,8 @@ hint.
 | Settings, *Save connection* and *Test connection* | one `RefusalLine` | `watch` on the card holding the fields (a typed key of spaces, a preset, *Replace*, *Keep the current key*, Test), and `onRefusedPress` on Save, which sits above it |
 | Scenario, *Add* at a cap | `RefusalLine` | `watch` on the picker form; reset after an add |
 | New block, *Add parameter* at the cap | `RefusalLine` | `watch` on the form; reset after an add |
-| Every form below a list (`ItemFormRow`) | `RefusalLine` | `watch` on the form; reset on an accepted submit and when the form changes between adding and editing |
-| Product editor, an open variant row's Save | `RefusalLine` under the table, inside an always-mounted polite live region (it used to be an alert) | `watch` on the open row's `<tr>`; reset when another row opens or the row closes |
+| Every form below a list (`ItemFormRow`), and the field its refusal names | `RefusalLine` | `useItemForm().touch`, watched on the form; reset on an accepted submit and on every new filling of the form (an Edit opened, a reset, an entry taken away under it) |
+| Product editor, an open variant row's Save, and the row's SKU | `RefusalLine` under the table, inside an always-mounted polite live region (it used to be an alert) | `watch` on the open row's `<tr>`; reset when another row opens or the row closes |
 | Starting states, *Freeze snapshot* and *Clone sandbox* | `RefusalLine` each | `watch` on each form; reset after a clone |
 | Customers, *Attach to this shop* | `RefusalLine` | `watch` on the form; reset when the panel is toggled and after an attach |
 | Every create page (`CreatePage`) | `RefusalLine` in the header | `watch` on the body, and `onRefusedPress` on Create, which sits outside it. The page body is the form Create submits, so typing in a sub-form inside it — the new-block page's parameter form — touches Create's line too |
@@ -139,14 +165,6 @@ operator types in the row is heard without interrupting them; an assertive alert
 the row would announce a hint over the press that opened it — and on a stored SKU of the wrong
 shape its words are the rename rule, which the SKU field already reads in its description.
 
-### Two notions of "touched" in a form below a list
-
-`ItemFormRow`'s fields mark themselves `aria-invalid` once the form is dirty (`useItemForm`'s
-`dirty`, e.g. `OrderEditorPage.tsx`), while its line follows `useRefusalTouch`. The two mostly
-agree — an edit makes the form dirty and touches it — and differ on a press with nothing typed,
-which turns the line and marks no field. They are left as two notions here; unifying them is a
-follow-up.
-
 ## Departures
 
 - `tmp/design-frames/README.md`, *The form pattern*: "Validation messages sit under the
@@ -156,8 +174,9 @@ follow-up.
 
 ## Consequences
 
-- No accessible name, description, `title` or `aria-disabled` changes, so no Playwright spec
-  moves.
+- On the refused action, no accessible name, description, `title` or `aria-disabled` changes.
+  The field the refusal names changes its `aria-invalid` and its description with the touch
+  (27 October amendment). No Playwright spec reaches a field by either, so none moves.
 - A surface that adds a refused action decides `touched` when it draws the line, because
   `RefusalLine` will not compile without it.
 - `docs/design-direction.md`, *A blocked primary action says why*, says the rule.
@@ -178,6 +197,15 @@ follow-up.
   `onRefusedPress` is called for a refused press and not for a busy or a free one.
 - `test/refused.ts`: `expectRefusalWeight(button, "hint" | "touched")` reads the line the
   button's refusal names, so it cannot pass on a sentence found elsewhere.
+- One adopter test per field component the refusal names, the control without `aria-invalid`
+  on an untouched form whose action is refused, then marked after an edit and after a press:
+  `ItemList.test.tsx` (`refusedProps` through `ItemFormRow`, reset when an entry is opened and
+  put back and after an accepted add, and still marked after an edit undone),
+  `DerivedIdField.test.tsx`, `ChipListField.test.tsx` and `MediaDropZone.test.tsx` (on
+  `test/refusingForm.tsx`), `Blocks.test.tsx` (the parameter form's Label), and `App.test.tsx`
+  (the variant row's SKU). A collision of the field's own is marked from the keystroke that
+  causes it while the form's refusal names another field (`DerivedIdField.test.tsx`,
+  `ChipListField.test.tsx`).
 - One adopter test per surface, each muted on first render, then at the refusal's weight after
   an edit and after a press where the form has both, with the button's facts unchanged:
   `Experiments.test.tsx` (tags, notes, Fork, the bench's composer, Start), `Tickets.test.tsx`

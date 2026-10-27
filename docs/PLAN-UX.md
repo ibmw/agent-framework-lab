@@ -109,29 +109,6 @@ named in the tests and the tokens are paid. The operator took the milestone's de
 No open slice touches the backend. The covered journeys are
 `experiment-start.spec.ts`, `workspace-shell.spec.ts` and `sticky-header.spec.ts`.
 
-### Slice 56 — A field is invalid when its refusal is shown
-
-- [ ] A control that a refusal names carries `aria-invalid` only while the line naming that
-  refusal is drawn at the validation weight, so a screen reader is not told a field is invalid
-  while the screen still shows a hint. `refusedProps` (`lib/itemForm.ts:194`) takes the form's
-  `touched` from `useRefusalTouch`, and so do the field components that set `aria-invalid` from
-  a refusal: `DerivedIdField`, `ChipListField`, `ToggleChipGroup`, `MediaDropZone` and
-  `FieldHint`'s consumers. A refusal found on the field itself and not on the action (a
-  colliding id, a value too long) still says so as soon as it is typed.
-- [ ] ADR 0078 is amended: *What touched means* covers the field's `aria-invalid`, and the
-  Consequences line that recorded the two meanings goes.
-
-Frames: none.
-
-Authority: ADR 0063, ADR 0078.
-
-Departures to record: none.
-
-Branch: `fix/invalid-follows-touch`. Checks: Vitest, one adopter test per component: the
-control has no `aria-invalid` on an untouched form whose action is refused, gains it after an
-edit and after a press, and keeps it from the first keystroke for a collision. Every adopter
-test ADR 0078 lists still passes. `make check`, `pnpm build`.
-
 ### Slice 57 — The surfaces Milestone 12 did not reach, at 390 wide
 
 - [ ] The shop indexes' tables (`routes/ProductsPage.tsx` and the other index pages on the same

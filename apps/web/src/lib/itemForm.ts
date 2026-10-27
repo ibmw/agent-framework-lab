@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useRefusalTouch } from "./refusalTouch";
 import { itemFormReason, useRegisterUnsavedWork } from "./unsavedWork";
 
 /**
@@ -108,6 +109,19 @@ export function useItemForm<FieldsT extends object>({
 
   const reset = () =>
     setState((now) => ({ editing: null, fields: blank, origin: blank, session: now.session + 1 }));
+
+  // Whether the operator has touched this filling of the form (ADR 0078): its refusal line and
+  // the field that line names follow it together. Every new filling — an Edit opened, a reset,
+  // an entry taken away under it — is a new attempt, so the session moving resets it. A stale
+  // edit is already drawn as the blank form the effect below will make it, so it is the next
+  // session already: the reset lands in the commit that empties the form, not one after.
+  const touch = useRefusalTouch();
+  const attempt = stale ? state.session + 1 : state.session;
+  const [touchedAttempt, setTouchedAttempt] = useState(attempt);
+  if (touchedAttempt !== attempt) {
+    setTouchedAttempt(attempt);
+    touch.reset();
+  }
   const typed = typedOf?.(fields).trim() ?? "";
 
   useRegisterUnsavedWork(
@@ -135,6 +149,8 @@ export function useItemForm<FieldsT extends object>({
      * is keyed by it, so nothing typed in one session is still there in the next.
      */
     session: state.session,
+    /** The form's touch: `ItemFormRow` watches and resets it, and its fields read `touched`. */
+    touch,
     update: (patch: Partial<FieldsT>) =>
       setState((now) => ({ ...now, fields: { ...now.fields, ...patch } })),
     begin: (id: string, loaded: FieldsT) =>
@@ -190,13 +206,42 @@ export function useEditButtons() {
   };
 }
 
-/** A form control's refusal wiring: invalid and described by the line after the buttons. */
+/**
+ * Where a refusal names a field: the id of the line that says it, and whether the form is
+ * touched (ADR 0078). A field is marked invalid, and described by the line, only while the line
+ * is drawn at the validation weight; on an untouched form the line is a hint and the field is
+ * not called invalid.
+ */
+export interface RefusedBy {
+  id: string;
+  touched: boolean;
+}
+
+/** The refusal's wiring for a field component that takes `refusedBy`, when it names `field`. */
+export function refusalOn<FieldT extends string>(
+  refusal: ItemRefusal<FieldT> | null,
+  field: FieldT,
+  reasonId: string,
+  touched: boolean,
+): RefusedBy | undefined {
+  return refusal?.field === field ? { id: reasonId, touched } : undefined;
+}
+
+/** The id a field is described by for a refusal, while that refusal is drawn as one. */
+export function refusalLineOf(refusedBy: RefusedBy | undefined): string | undefined {
+  return refusedBy?.touched ? refusedBy.id : undefined;
+}
+
+/**
+ * A form control's refusal wiring: invalid and described by the line after the buttons, once
+ * the form is touched.
+ */
 export function refusedProps<FieldT extends string>(
   refusal: ItemRefusal<FieldT> | null,
   field: FieldT,
   reasonId: string,
+  touched: boolean,
 ) {
-  return refusal?.field === field
-    ? { "aria-invalid": true as const, "aria-describedby": reasonId }
-    : {};
+  const line = refusalLineOf(refusalOn(refusal, field, reasonId, touched));
+  return line !== undefined ? { "aria-invalid": true as const, "aria-describedby": line } : {};
 }

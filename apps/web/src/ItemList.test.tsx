@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { type ReactNode, useId, useRef, useState } from "react";
+import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { ConfirmRemove, RemovalNotice } from "./components/ConfirmRemove";
 import { FieldHint } from "./components/FieldHint";
@@ -35,7 +35,12 @@ import {
   UnsavedWorkContext,
 } from "./lib/unsavedWork";
 import { wholeDescription } from "./test/app";
-import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import {
+  expectNotRefused,
+  expectRefusalWeight,
+  expectRefused,
+  submitWithoutPressing,
+} from "./test/refused";
 
 /**
  * The shared list (ADR 0074) on a harness of its own: notes with a name and a body, keyed by an
@@ -70,8 +75,16 @@ function noteRefusal(fields: NoteFields): ItemRefusal<"name" | "body"> | null {
   return null;
 }
 
-function Harness({ initial = NOTES }: { initial?: Note[] }) {
+function Harness({
+  initial = NOTES,
+  onCommit,
+}: {
+  initial?: Note[];
+  /** Read in every commit as it lands, before any effect of that commit has run. */
+  onCommit?: () => void;
+}) {
   const [notes, setNotes] = useState(initial);
+  useLayoutEffect(() => onCommit?.());
   const ids = notes.map((note) => note.id);
   const nameOf = (id: string) => notes.find((note) => note.id === id)?.name ?? id;
   const form = useItemForm<NoteFields>({
@@ -91,7 +104,7 @@ function Harness({ initial = NOTES }: { initial?: Note[] }) {
   const nameInput = useRef<HTMLInputElement>(null);
   const reasonId = useId();
   const refusal = noteRefusal(form.fields);
-  const marked = form.dirty ? refusal : null;
+  const touched = form.touch.touched;
 
   function submit() {
     if (refusal !== null) {
@@ -164,6 +177,7 @@ function Harness({ initial = NOTES }: { initial?: Note[] }) {
         addLabel="Add note"
         refusal={refusal}
         reasonId={reasonId}
+        touch={form.touch}
         onSubmit={submit}
         onCancel={() => {
           const editing = form.editing;
@@ -178,7 +192,7 @@ function Harness({ initial = NOTES }: { initial?: Note[] }) {
             ref={nameInput}
             className={`${fieldControlClasses} w-full`}
             value={form.fields.name}
-            {...refusedProps(marked, "name", reasonId)}
+            {...refusedProps(refusal, "name", reasonId, touched)}
             onChange={(event) => form.update({ name: event.target.value })}
           />
         </FieldHint>
@@ -186,7 +200,7 @@ function Harness({ initial = NOTES }: { initial?: Note[] }) {
           <input
             className={`${fieldControlClasses} w-full`}
             value={form.fields.body}
-            {...refusedProps(marked, "body", reasonId)}
+            {...refusedProps(refusal, "body", reasonId, touched)}
             onChange={(event) => form.update({ body: event.target.value })}
           />
         </FieldHint>
@@ -535,6 +549,90 @@ describe("the form row", () => {
     expect(region).toBeEmptyDOMElement();
     await user.click(add);
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
+  });
+  it("marks the field its refusal names only while the line is drawn as one (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const add = screen.getByRole("button", { name: "Add note" });
+    const name = screen.getByLabelText("Name");
+    const body = screen.getByLabelText("Body");
+
+    // Untouched: refused, the line a hint, and no field called invalid.
+    expectRefusalWeight(add, "hint");
+    expect(name).not.toHaveAttribute("aria-invalid");
+    expect(name).not.toHaveAccessibleDescription(expect.stringContaining(NAME_RULE));
+
+    // A press with nothing typed touches the form, so the field the line names is marked.
+    await user.click(add);
+    expectRefusalWeight(add, "touched");
+    expect(name).toHaveAttribute("aria-invalid", "true");
+    expect(name).toHaveAccessibleDescription(wholeDescription(NAME_RULE));
+    expect(body).not.toHaveAttribute("aria-invalid");
+
+    // Opening an entry and putting it back is a new attempt.
+    await user.click(screen.getByRole("button", { name: "Edit Returns" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expectRefusalWeight(add, "hint");
+    expect(screen.getByLabelText("Name")).not.toHaveAttribute("aria-invalid");
+
+    // An edit touches it, and an edit undone leaves it touched: what was typed was the
+    // operator's, though the form holds nothing now.
+    await user.type(screen.getByLabelText("Body"), "R");
+    await user.clear(screen.getByLabelText("Body"));
+    expectRefusalWeight(add, "touched");
+    expect(screen.getByLabelText("Name")).toHaveAttribute("aria-invalid", "true");
+
+    // An accepted add empties the form, which is untouched again.
+    await user.type(screen.getByLabelText("Name"), "FAQ");
+    await user.type(screen.getByLabelText("Body"), "Read me.");
+    await user.click(add);
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expectRefusalWeight(add, "hint");
+    expect(screen.getByLabelText("Name")).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("starts a new attempt when another entry is opened over a touched edit (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    // An entry stored without a body: opened, it is refused before anything is typed.
+    render(<Harness initial={[...NOTES, { id: "draft", name: "Draft", body: "" }]} />);
+
+    await user.click(screen.getByRole("button", { name: "Edit Returns" }));
+    await user.clear(screen.getByLabelText("Name"));
+    const save = screen.getByRole("button", { name: "Save changes" });
+    expectRefusalWeight(save, "touched");
+    expect(screen.getByLabelText("Name")).toHaveAttribute("aria-invalid", "true");
+
+    await user.click(screen.getByRole("button", { name: "Edit Draft" }));
+    expectRefused(screen.getByRole("button", { name: "Save changes" }), BODY_RULE);
+    expectRefusalWeight(screen.getByRole("button", { name: "Save changes" }), "hint");
+    expect(screen.getByLabelText("Body")).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("is untouched in the very commit that empties it of an entry taken away (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    const marks: (string | null)[] = [];
+    render(
+      <Harness
+        onCommit={() => {
+          // The input the "Name" label is wired to, whatever it holds.
+          marks.push(screen.getByLabelText("Name").getAttribute("aria-invalid"));
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit Returns" }));
+    await user.clear(screen.getByLabelText("Name"));
+    expect(screen.getByLabelText("Name")).toHaveAttribute("aria-invalid", "true");
+
+    marks.length = 0;
+    await user.click(screen.getByRole("button", { name: "Drop returns elsewhere" }));
+    const add = screen.getByRole("button", { name: "Add note" });
+    expectRefusalWeight(add, "hint");
+    expect(screen.getByLabelText("Name")).not.toHaveAttribute("aria-invalid");
+    // No commit drew the emptied form with its name marked, not even the one before the
+    // form's own effect moved its session on.
+    expect(marks.length).toBeGreaterThan(0);
+    expect(marks).not.toContain("true");
   });
 });
 

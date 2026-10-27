@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { savedAsPreview } from "../lib/fieldPreviews";
 import { alreadyTakenMessage, tooLongMessage } from "../lib/fieldRules";
+import { type RefusedBy, refusalLineOf } from "../lib/itemForm";
 import { fieldControlClasses, idControlClasses } from "../lib/ui";
 import { type Arrangement, FieldHint } from "./FieldHint";
 
@@ -112,11 +113,13 @@ export function DerivedIdField({
    */
   extraId?: string;
   /**
-   * The id of a line elsewhere on the form that says why the value in the field is refused —
-   * the method forms' one reason line after their buttons (ADR 0072). The field is marked
-   * invalid and described by that line, and says nothing of its own about it.
+   * The line elsewhere on the form that says why the value in the field is refused — the
+   * method forms' one reason line after their buttons (ADR 0072) — and whether that form is
+   * touched. Once it is, the field is marked invalid and described by that line; until then
+   * the line is a hint and the field is not called invalid (ADR 0078). It says nothing of its
+   * own about it either way.
    */
-  refusedBy?: string;
+  refusedBy?: RefusedBy;
   /** An identifier is read character by character, so it is drawn in the monospace face. */
   monospace?: boolean;
   onChange: (value: string, by: "operator" | "suggestion") => void;
@@ -242,6 +245,7 @@ export function DerivedIdField({
   }
 
   const refused = !pending && !colliding && refusal !== undefined && refusal !== "";
+  const refusalLine = refusalLineOf(refusedBy);
   const extra = pending ? (
     `Reading what is already ${takenPlace}…`
   ) : colliding ? (
@@ -281,8 +285,10 @@ export function DerivedIdField({
         // opens, so there is no moment in which this input is both open and empty.
         disabled={pending}
         aria-busy={pending || undefined}
-        aria-invalid={colliding || refused || tooLong || refusedBy !== undefined || undefined}
-        aria-describedby={refusedBy}
+        // Its own refusals — a collision, the parent's, a value too long — are said on its own
+        // line from the first keystroke; the form's only once that line is (ADR 0078).
+        aria-invalid={colliding || refused || tooLong || refusalLine !== undefined || undefined}
+        aria-describedby={refusalLine}
         onChange={(event) => change(event.target.value)}
         // Stepping into a field with nothing in it is the operator's first act there, as
         // emptying one is: it is theirs from here, and a suggestion arriving now — nothing was

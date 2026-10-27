@@ -6,6 +6,10 @@ import { ChipListField } from "./components/ChipListField";
 import { CHIP_LABEL_MAX_LENGTH } from "./lib/fieldRules";
 import { normalizeTag } from "./lib/tickets";
 import { controlHeightClasses, itemFormGridClasses, itemFormTracksClasses } from "./lib/ui";
+import { expectRefusalWeight } from "./test/refused";
+import { RefusingForm } from "./test/refusingForm";
+
+const FORM_REFUSAL = "Fill the field before adding.";
 
 function Harness({
   initial = [] as string[],
@@ -250,5 +254,65 @@ describe("ChipListField", () => {
 
     expect(written).toEqual([]);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+/** An option's values in the form below the options, whose *Add* the list refuses. */
+function RefusedValues({ field }: { field?: string }) {
+  const [values, setValues] = useState(["Ocean Blue"]);
+  return (
+    <RefusingForm reason={FORM_REFUSAL} field={field}>
+      {(refusedBy) => (
+        <ChipListField
+          legend="Values"
+          label="New value"
+          hint="One value per chip."
+          addLabel="Add value"
+          placement="item-form"
+          values={values}
+          maxLength={CHIP_LABEL_MAX_LENGTH}
+          takenPlace="a value of this option"
+          refusedBy={refusedBy}
+          onChange={setValues}
+        />
+      )}
+    </RefusingForm>
+  );
+}
+
+describe("ChipListField named by a form's refusal (ADR 0078)", () => {
+  it("is invalid only while the form's line is drawn as the refusal", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<RefusedValues />);
+    const add = screen.getByRole("button", { name: "Add entry" });
+    const field = group().getByRole("textbox", { name: "Values New value" });
+    expectRefusalWeight(add, "hint");
+    expect(field).not.toHaveAttribute("aria-invalid");
+
+    await user.type(field, "S");
+    expectRefusalWeight(add, "touched");
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(field).toHaveAccessibleDescription(expect.stringContaining(FORM_REFUSAL));
+    unmount();
+
+    render(<RefusedValues />);
+    const pressed = screen.getByRole("button", { name: "Add entry" });
+    await user.click(pressed);
+    expectRefusalWeight(pressed, "touched");
+    expect(group().getByRole("textbox", { name: "Values New value" })).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+  });
+
+  it("says a value already in the list from the first keystroke, whatever the form's refusal names", async () => {
+    const user = userEvent.setup();
+    render(<RefusedValues field="name" />);
+    const field = group().getByRole("textbox", { name: "Values New value" });
+    expect(field).not.toHaveAttribute("aria-invalid");
+
+    await user.type(field, "Ocean Blue");
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(group().getByText("Ocean Blue is already a value of this option.")).toBeVisible();
   });
 });

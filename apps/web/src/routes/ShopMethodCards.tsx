@@ -16,6 +16,7 @@ import { labelOf, PAYMENT_METHOD_KIND } from "../lib/enumLabels";
 import {
   formTitle,
   type ItemFormWords,
+  refusalOn,
   refusedProps,
   useEditButtons,
   useFocusAfterCommit,
@@ -141,6 +142,7 @@ function MethodIdField({
   taken,
   refusal,
   reasonId,
+  touched,
   onChange,
 }: {
   editing: boolean;
@@ -149,6 +151,7 @@ function MethodIdField({
   taken: readonly string[];
   refusal: MethodRefusal | null;
   reasonId: string;
+  touched: boolean;
   onChange: (id: string) => void;
 }) {
   const suggested = uniqueSuggestion(slugify(name, ""), taken);
@@ -166,7 +169,7 @@ function MethodIdField({
       preview={false}
       monospace
       maxLength={SLUG_MAX_LENGTH}
-      refusedBy={refusal?.field === "id" ? reasonId : undefined}
+      refusedBy={refusalOn(refusal, "id", reasonId, touched)}
       onChange={onChange}
     />
   );
@@ -194,9 +197,9 @@ export function PaymentMethodsCard() {
   const lastLineId = useId();
   const lastEnabled = lastEnabledPaymentId(methods);
   const refusal = paymentRefusal(form.fields, ids, form.editing);
-  // A blank form is refused and says why, but no field of it is marked wrong until the operator
-  // has put something in it.
-  const marked = form.dirty ? refusal : null;
+  // A blank form is refused and says why; a field is marked by it only once the form is
+  // touched, when the line says it at the validation weight (ADR 0078).
+  const touched = form.touch.touched;
   const title = formTitle(form.editing, nameOf, METHOD_ENTRY);
 
   function toggle(method: PaymentMethodSchema) {
@@ -328,6 +331,7 @@ export function PaymentMethodsCard() {
           addLabel="Add payment method"
           refusal={refusal}
           reasonId={reasonId}
+          touch={form.touch}
           onSubmit={submit}
           onCancel={() => {
             const editing = form.editing;
@@ -341,7 +345,8 @@ export function PaymentMethodsCard() {
             inputRef={nameInput}
             value={form.fields.name}
             placeholder="Apple Pay"
-            refusal={marked}
+            refusal={refusal}
+            touched={touched}
             reasonId={reasonId}
             onChange={(name) => form.update({ name })}
           />
@@ -350,7 +355,8 @@ export function PaymentMethodsCard() {
             value={form.fields.id}
             name={form.fields.name}
             taken={ids}
-            refusal={marked}
+            refusal={refusal}
+            touched={touched}
             reasonId={reasonId}
             onChange={(id) => form.update({ id })}
           />
@@ -381,6 +387,7 @@ function NameField({
   placeholder,
   refusal,
   reasonId,
+  touched,
   onChange,
 }: {
   inputRef: RefObject<HTMLInputElement | null>;
@@ -388,6 +395,7 @@ function NameField({
   placeholder: string;
   refusal: MethodRefusal | null;
   reasonId: string;
+  touched: boolean;
   onChange: (name: string) => void;
 }) {
   return (
@@ -398,7 +406,7 @@ function NameField({
         value={value}
         placeholder={placeholder}
         maxLength={METHOD_LABEL_MAX_LENGTH}
-        {...refusedProps(refusal, "name", reasonId)}
+        {...refusedProps(refusal, "name", reasonId, touched)}
         onChange={(event) => onChange(event.target.value)}
       />
     </FieldHint>
@@ -411,6 +419,7 @@ function DaysField({
   field,
   refusal,
   reasonId,
+  touched,
   onChange,
 }: {
   label: string;
@@ -418,6 +427,7 @@ function DaysField({
   field: "min" | "max";
   refusal: MethodRefusal | null;
   reasonId: string;
+  touched: boolean;
   onChange: (days: string) => void;
 }) {
   return (
@@ -430,7 +440,7 @@ function DaysField({
         inputMode="numeric"
         className={`${fieldControlClasses} w-full`}
         value={value}
-        {...refusedProps(refusal, field, reasonId)}
+        {...refusedProps(refusal, field, reasonId, touched)}
         onChange={(event) => onChange(event.target.value)}
       />
     </FieldHint>
@@ -457,7 +467,8 @@ export function FulfilmentMethodsCard() {
   const nameInput = useRef<HTMLInputElement>(null);
   const reasonId = useId();
   const refusal = fulfilmentRefusal(form.fields, ids, form.editing);
-  const marked = form.dirty ? refusal : null;
+  // A field is marked by the refusal only once the form is touched (ADR 0078).
+  const touched = form.touch.touched;
   const title = formTitle(form.editing, nameOf, METHOD_ENTRY);
 
   function drop(id: string) {
@@ -561,6 +572,7 @@ export function FulfilmentMethodsCard() {
           addLabel="Add fulfillment method"
           refusal={refusal}
           reasonId={reasonId}
+          touch={form.touch}
           onSubmit={submit}
           onCancel={() => {
             const editing = form.editing;
@@ -574,7 +586,8 @@ export function FulfilmentMethodsCard() {
             inputRef={nameInput}
             value={form.fields.name}
             placeholder="Click and collect"
-            refusal={marked}
+            refusal={refusal}
+            touched={touched}
             reasonId={reasonId}
             onChange={(name) => form.update({ name })}
           />
@@ -583,7 +596,8 @@ export function FulfilmentMethodsCard() {
             value={form.fields.id}
             name={form.fields.name}
             taken={ids}
-            refusal={marked}
+            refusal={refusal}
+            touched={touched}
             reasonId={reasonId}
             onChange={(id) => form.update({ id })}
           />
@@ -593,7 +607,7 @@ export function FulfilmentMethodsCard() {
               value={form.fields.carrier}
               placeholder="Nordic Post"
               maxLength={METHOD_LABEL_MAX_LENGTH}
-              {...refusedProps(marked, "carrier", reasonId)}
+              {...refusedProps(refusal, "carrier", reasonId, touched)}
               onChange={(event) => form.update({ carrier: event.target.value })}
             />
           </FieldHint>
@@ -602,7 +616,8 @@ export function FulfilmentMethodsCard() {
               label="Min days"
               value={form.fields.min}
               field="min"
-              refusal={marked}
+              refusal={refusal}
+              touched={touched}
               reasonId={reasonId}
               onChange={(min) => form.update({ min })}
             />
@@ -610,7 +625,8 @@ export function FulfilmentMethodsCard() {
               label="Max days"
               value={form.fields.max}
               field="max"
-              refusal={marked}
+              refusal={refusal}
+              touched={touched}
               reasonId={reasonId}
               onChange={(max) => form.update({ max })}
             />

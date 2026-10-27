@@ -38,6 +38,7 @@ import {
 import {
   formTitle,
   type ItemFormWords,
+  refusalOn,
   refusedProps,
   useEditButtons,
   useFocusAfterCommit,
@@ -355,8 +356,9 @@ export function ToneOfVoicePage() {
   const nameInput = useRef<HTMLInputElement>(null);
   const reasonId = useId();
   const refusal = toneRefusal(form.fields, ids, form.editing);
-  // A blank form is refused and says why, but marks nothing until something is in it.
-  const marked = form.dirty ? refusal : null;
+  // A blank form is refused and says why; a field is marked by it only once the form is
+  // touched, when the line says it at the validation weight (ADR 0078).
+  const touched = form.touch.touched;
   const suggested = uniqueSuggestion(slugify(pythonStrip(form.fields.name), ""), ids);
 
   function setDefault(id: string) {
@@ -515,6 +517,7 @@ export function ToneOfVoicePage() {
             addLabel="Add tone of voice"
             refusal={refusal}
             reasonId={reasonId}
+            touch={form.touch}
             onSubmit={submit}
             onCancel={cancel}
           >
@@ -525,7 +528,7 @@ export function ToneOfVoicePage() {
                 className={`${fieldControlClasses} w-full`}
                 value={form.fields.name}
                 placeholder="Warm and precise"
-                {...refusedProps(marked, "name", reasonId)}
+                {...refusedProps(refusal, "name", reasonId, touched)}
                 onChange={(event) => form.update({ name: event.target.value })}
               />
             </FieldHint>
@@ -544,7 +547,7 @@ export function ToneOfVoicePage() {
                 takenPlace={TONE_TAKEN_PLACE}
                 monospace
                 maxLength={SLUG_MAX_LENGTH}
-                refusedBy={marked?.field === "id" ? reasonId : undefined}
+                refusedBy={refusalOn(refusal, "id", reasonId, touched)}
                 onChange={(id) => form.update({ id })}
               />
             )}
@@ -554,7 +557,7 @@ export function ToneOfVoicePage() {
                   maxLength={TEXT_MAX_LENGTH}
                   className={`${textAreaClasses} w-full`}
                   value={form.fields.guidance}
-                  {...refusedProps(marked, "guidance", reasonId)}
+                  {...refusedProps(refusal, "guidance", reasonId, touched)}
                   onChange={(event) => form.update({ guidance: event.target.value })}
                 />
               </FieldHint>

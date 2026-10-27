@@ -748,7 +748,8 @@ function AddressBook({
     country: countryForLocale(content.identity.locale),
   });
   const refusal = addressRefusal(resolved, mode);
-  const marked = form.dirty ? refusal : null;
+  // A field is marked by the refusal only once the form is touched (ADR 0078).
+  const touched = form.touch.touched;
 
   // *Make default* is not drawn on the default, so the press removes the button that had
   // focus. Focus goes to the new default's pencil, the control that stays on the item it
@@ -801,7 +802,7 @@ function AddressBook({
           className={`${fieldControlClasses} w-full`}
           value={form.fields[field]}
           placeholder={field === "label" ? "Home, Office, Parent's house…" : undefined}
-          {...refusedProps(marked, field, reasonId)}
+          {...refusedProps(refusal, field, reasonId, touched)}
           onChange={(event) => form.update({ [field]: event.target.value })}
         />
       </FieldHint>
@@ -897,6 +898,7 @@ function AddressBook({
         addLabel="Add address"
         refusal={refusal}
         reasonId={reasonId}
+        touch={form.touch}
         onSubmit={submit}
         onCancel={() => {
           const editing = form.editing;
@@ -911,7 +913,7 @@ function AddressBook({
             <CountryField
               key={field}
               value={resolved.country}
-              refused={refusedProps(marked, "country", reasonId)}
+              refused={refusedProps(refusal, "country", reasonId, touched)}
               onChange={(country) => form.update({ country })}
             />
           ) : (
@@ -983,7 +985,8 @@ function BackgroundList({
   const kindSelect = useRef<HTMLSelectElement>(null);
   const reasonId = useId();
   const refusal = backgroundRefusal(form.fields);
-  const marked = form.dirty ? refusal : null;
+  // A field is marked by the refusal only once the form is touched (ADR 0078).
+  const touched = form.touch.touched;
 
   function drop(id: string) {
     edit({ ...content, background: background.filter((entry) => entry.id !== id) });
@@ -1076,6 +1079,7 @@ function BackgroundList({
         addLabel="Add entry"
         refusal={refusal}
         reasonId={reasonId}
+        touch={form.touch}
         onSubmit={submit}
         onCancel={() => {
           const editing = form.editing;
@@ -1104,7 +1108,7 @@ function BackgroundList({
             className={`${fieldControlClasses} w-full`}
             type="date"
             value={form.fields.occurredOn}
-            {...refusedProps(marked, "occurredOn", reasonId)}
+            {...refusedProps(refusal, "occurredOn", reasonId, touched)}
             onChange={(event) => form.update({ occurredOn: event.target.value })}
           />
         </FieldHint>
@@ -1114,7 +1118,7 @@ function BackgroundList({
               maxLength={TEXT_MAX_LENGTH}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.note}
-              {...refusedProps(marked, "note", reasonId)}
+              {...refusedProps(refusal, "note", reasonId, touched)}
               onChange={(event) => form.update({ note: event.target.value })}
             />
           </FieldHint>
@@ -1157,7 +1161,8 @@ function HiddenFacts({
   const factInput = useRef<HTMLInputElement>(null);
   const reasonId = useId();
   const refusal = hiddenFactRefusal(form.fields);
-  const marked = form.dirty ? refusal : null;
+  // A field is marked by the refusal only once the form is touched (ADR 0078).
+  const touched = form.touch.touched;
 
   function drop(id: string) {
     edit({ ...content, hidden_facts: facts.filter((fact) => fact.id !== id) });
@@ -1244,6 +1249,7 @@ function HiddenFacts({
         addLabel="Add fact"
         refusal={refusal}
         reasonId={reasonId}
+        touch={form.touch}
         onSubmit={submit}
         onCancel={() => {
           const editing = form.editing;
@@ -1259,7 +1265,7 @@ function HiddenFacts({
             ref={factInput}
             className={`${fieldControlClasses} w-full`}
             value={form.fields.note}
-            {...refusedProps(marked, "note", reasonId)}
+            {...refusedProps(refusal, "note", reasonId, touched)}
             onChange={(event) => form.update({ note: event.target.value })}
           />
         </FieldHint>

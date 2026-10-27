@@ -42,3 +42,6 @@ export function useRefusalTouch(edited = false) {
   );
   return { touched, touch, reset, watch };
 }
+
+/** A form's touch, handed to the form that draws its refusal line (`ItemFormRow`). */
+export type RefusalTouch = ReturnType<typeof useRefusalTouch>;

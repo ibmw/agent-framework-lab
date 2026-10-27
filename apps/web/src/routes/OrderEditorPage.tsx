@@ -804,9 +804,9 @@ function LineItems({
     addable: addable.map((variant) => variant.sku),
     nothingLeft,
   });
-  // A blank form is refused and says why, but no field of it is marked wrong until the operator
-  // has put something in it.
-  const marked = form.dirty ? refusal : null;
+  // A blank form is refused and says why; a field is marked by it only once the form is
+  // touched, when the line says it at the validation weight (ADR 0078).
+  const touched = form.touch.touched;
 
   function drop(id: string) {
     edit({ ...content, lines: lines.filter((entry) => entry.id !== id) });
@@ -937,6 +937,7 @@ function LineItems({
         addLabel="Add line"
         refusal={refusal}
         reasonId={reasonId}
+        touch={form.touch}
         onSubmit={submit}
         onCancel={() => {
           const editing = form.editing;
@@ -969,7 +970,7 @@ function LineItems({
             <select
               className={`${fieldControlClasses} w-full`}
               value={form.fields.variant}
-              {...refusedProps(marked, "variant", reasonId)}
+              {...refusedProps(refusal, "variant", reasonId, touched)}
               onChange={(event) => form.update({ variant: event.target.value })}
             >
               <option value="">Select a variant</option>
@@ -994,7 +995,7 @@ function LineItems({
             step={1}
             inputMode="numeric"
             value={form.fields.quantity}
-            {...refusedProps(marked, "quantity", reasonId)}
+            {...refusedProps(refusal, "quantity", reasonId, touched)}
             onChange={(event) => form.update({ quantity: event.target.value })}
           />
         </FieldHint>
@@ -1045,7 +1046,8 @@ function OrderEvents({
   const refusal = orderEventRefusal(form.fields, {
     full: form.editing === null && events.length >= MAX_ORDER_EVENTS,
   });
-  const marked = form.dirty ? refusal : null;
+  // A field is marked by the refusal only once the form is touched (ADR 0078).
+  const touched = form.touch.touched;
 
   function drop(id: string) {
     edit({ ...content, events: events.filter((candidate) => candidate.id !== id) });
@@ -1146,6 +1148,7 @@ function OrderEvents({
         addLabel="Add event"
         refusal={refusal}
         reasonId={reasonId}
+        touch={form.touch}
         onSubmit={submit}
         onCancel={() => {
           const editing = form.editing;
@@ -1174,7 +1177,7 @@ function OrderEvents({
             className={`${fieldControlClasses} w-full`}
             type="datetime-local"
             value={form.fields.occurredAt}
-            {...refusedProps(marked, "occurredAt", reasonId)}
+            {...refusedProps(refusal, "occurredAt", reasonId, touched)}
             onChange={(event) => form.update({ occurredAt: event.target.value })}
           />
         </FieldHint>
@@ -1185,7 +1188,7 @@ function OrderEvents({
               className={`${textAreaClasses} w-full`}
               value={form.fields.summary}
               placeholder="Customer asked by email to change the delivery address."
-              {...refusedProps(marked, "summary", reasonId)}
+              {...refusedProps(refusal, "summary", reasonId, touched)}
               onChange={(event) => form.update({ summary: event.target.value })}
             />
           </FieldHint>

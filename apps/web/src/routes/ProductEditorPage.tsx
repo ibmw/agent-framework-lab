@@ -85,6 +85,8 @@ import {
 import {
   formTitle,
   type ItemFormWords,
+  type RefusedBy,
+  refusalOn,
   refusedProps,
   useEditButtons,
   useFocusAfterCommit,
@@ -747,7 +749,7 @@ function OptionValuesField({
   onChange,
 }: {
   values: string[];
-  refusedBy?: string;
+  refusedBy?: RefusedBy;
   onChange: (values: string[]) => void;
 }) {
   return (
@@ -818,8 +820,9 @@ function OptionsCard({ product, onChange }: EditorProps) {
   const nameInput = useRef<HTMLInputElement>(null);
   const reasonId = useId();
   const refusal = optionRefusal(form.fields, ids, form.editing);
-  // A blank form is refused and says why, but marks nothing until something is in it.
-  const marked = form.dirty ? refusal : null;
+  // A blank form is refused and says why; a field is marked by it only once the form is
+  // touched, when the line says it at the validation weight (ADR 0078).
+  const touched = form.touch.touched;
   const suggested = uniqueSuggestion(slugify(form.fields.name, ""), ids);
 
   function submit() {
@@ -919,6 +922,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
           addLabel="Add option"
           refusal={refusal}
           reasonId={reasonId}
+          touch={form.touch}
           onSubmit={submit}
           onCancel={() => cancelEdit(form, focusAfterCommit, editButtons)}
         >
@@ -928,7 +932,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
               ref={nameInput}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.name}
-              {...refusedProps(marked, "name", reasonId)}
+              {...refusedProps(refusal, "name", reasonId, touched)}
               onChange={(event) => form.update({ name: event.target.value })}
             />
           </FieldHint>
@@ -948,7 +952,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
               takenPlace={KEY_TAKEN_PLACE}
               monospace
               maxLength={SLUG_MAX_LENGTH}
-              refusedBy={marked?.field === "key" ? reasonId : undefined}
+              refusedBy={refusalOn(refusal, "key", reasonId, touched)}
               onChange={(key) => form.update({ key })}
             />
           )}
@@ -956,7 +960,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
             <OptionValuesField
               key={form.session}
               values={form.fields.values}
-              refusedBy={marked?.field === "values" ? reasonId : undefined}
+              refusedBy={refusalOn(refusal, "values", reasonId, touched)}
               onChange={(values) => form.update({ values })}
             />
           </div>
@@ -1073,6 +1077,14 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
           : skuMisshapen
             ? VARIANT_SKU_RENAME_RULE
             : null;
+  // The open row's SKU is invalid, and described by the line, exactly while that line is drawn
+  // as the refusal (ADR 0078). A misshapen SKU's line says the rename rule the field is already
+  // described by, so it is not added a second time: the rule is heard once.
+  const skuMarked = skuTouch.touched && skuRefusal !== null;
+  const skuDescribedBy =
+    skuMarked && skuRefusal !== VARIANT_SKU_RENAME_RULE
+      ? `${skuRuleId} ${skuRefusalId}`
+      : skuRuleId;
 
   return (
     <Card title="Variants">
@@ -1143,8 +1155,11 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                           pattern={REFERENCE_PATTERN}
                           maxLength={SLUG_MAX_LENGTH}
                           title={VARIANT_SKU_RENAME_RULE}
-                          aria-describedby={skuRuleId}
-                          aria-invalid={skuCollides || skuMisshapen || undefined}
+                          aria-describedby={skuDescribedBy}
+                          // Marked with the refusal its line says, and only once that line
+                          // is drawn as one: a row opened on a stored SKU of the wrong shape
+                          // is not called invalid while the line is a hint (ADR 0078).
+                          aria-invalid={skuMarked || undefined}
                           onChange={(event) =>
                             editor.change({
                               ...rowEdit.fields,
@@ -1516,7 +1531,8 @@ function MediaCard({ product, onChange }: EditorProps) {
   const replaceButtons = useEditButtons();
   const pickerInput = useRef<HTMLInputElement>(null);
   const refusal = mediaRefusal(form.fields, ids, form.editing, nameOf, replacing);
-  const marked = form.dirty ? refusal : null;
+  // A field is marked by the refusal only once the form is touched (ADR 0078).
+  const touched = form.touch.touched;
   const location = useLocation();
   const cardRef = useRef<HTMLElement>(null);
 
@@ -1729,6 +1745,7 @@ function MediaCard({ product, onChange }: EditorProps) {
           saveLabel={replacing ? "Replace image" : undefined}
           refusal={refusal}
           reasonId={reasonId}
+          touch={form.touch}
           onSubmit={submit}
           onCancel={() =>
             cancelEdit(form, focusAfterCommit, replacing ? replaceButtons : editButtons)
@@ -1742,8 +1759,7 @@ function MediaCard({ product, onChange }: EditorProps) {
             uploading={upload.running}
             status={upload.summary}
             refused={upload.refused}
-            invalid={marked?.field === "reference"}
-            describedBy={reasonId}
+            refusedBy={refusalOn(refusal, "reference", reasonId, touched)}
             onFile={(file) => void choose(file)}
             pickerRef={pickerInput}
             library={
@@ -1768,7 +1784,7 @@ function MediaCard({ product, onChange }: EditorProps) {
               ref={altTextInput}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.altText}
-              {...refusedProps(marked, "altText", reasonId)}
+              {...refusedProps(refusal, "altText", reasonId, touched)}
               onChange={(event) => form.update({ altText: event.target.value })}
             />
           </FieldHint>
@@ -1841,7 +1857,8 @@ function AttributesCard({ product, onChange }: EditorProps) {
   const labelInput = useRef<HTMLInputElement>(null);
   const reasonId = useId();
   const refusal = attributeRefusal(form.fields, ids, form.editing);
-  const marked = form.dirty ? refusal : null;
+  // A field is marked by the refusal only once the form is touched (ADR 0078).
+  const touched = form.touch.touched;
   const suggested = uniqueSuggestion(slugify(form.fields.label, ""), ids);
   const type = form.fields.attributeType;
 
@@ -1939,6 +1956,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
           addLabel="Add attribute"
           refusal={refusal}
           reasonId={reasonId}
+          touch={form.touch}
           onSubmit={submit}
           onCancel={() => cancelEdit(form, focusAfterCommit, editButtons)}
         >
@@ -1948,7 +1966,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
               ref={labelInput}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.label}
-              {...refusedProps(marked, "label", reasonId)}
+              {...refusedProps(refusal, "label", reasonId, touched)}
               onChange={(event) => form.update({ label: event.target.value })}
             />
           </FieldHint>
@@ -1964,7 +1982,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
               takenPlace={KEY_TAKEN_PLACE}
               monospace
               maxLength={SLUG_MAX_LENGTH}
-              refusedBy={marked?.field === "key" ? reasonId : undefined}
+              refusedBy={refusalOn(refusal, "key", reasonId, touched)}
               onChange={(key) => form.update({ key })}
             />
           )}
@@ -1990,7 +2008,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
               maxLength={LABEL_MAX_LENGTH}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.value}
-              {...refusedProps(marked, "value", reasonId)}
+              {...refusedProps(refusal, "value", reasonId, touched)}
               onChange={(event) => form.update({ value: event.target.value })}
             />
           </FieldHint>
@@ -2000,7 +2018,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
                 maxLength={LABEL_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={form.fields.unit}
-                {...refusedProps(marked, "unit", reasonId)}
+                {...refusedProps(refusal, "unit", reasonId, touched)}
                 onChange={(event) => form.update({ unit: event.target.value })}
               />
             </FieldHint>
@@ -2018,7 +2036,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
                 placement="item-form"
                 values={form.fields.choices}
                 takenPlace="a choice of this attribute"
-                refusedBy={marked?.field === "choices" ? reasonId : undefined}
+                refusedBy={refusalOn(refusal, "choices", reasonId, touched)}
                 onChange={(choices) => form.update({ choices })}
               />
             </div>
@@ -2062,7 +2080,8 @@ function ReviewsCard({ product, onChange }: EditorProps) {
   const authorInput = useRef<HTMLInputElement>(null);
   const reasonId = useId();
   const refusal = reviewRefusal(form.fields);
-  const marked = form.dirty ? refusal : null;
+  // A field is marked by the refusal only once the form is touched (ADR 0078).
+  const touched = form.touch.touched;
 
   function submit() {
     if (refusal !== null) {
@@ -2155,6 +2174,7 @@ function ReviewsCard({ product, onChange }: EditorProps) {
           addLabel="Add review"
           refusal={refusal}
           reasonId={reasonId}
+          touch={form.touch}
           onSubmit={submit}
           onCancel={() => cancelEdit(form, focusAfterCommit, editButtons)}
         >
@@ -2164,7 +2184,7 @@ function ReviewsCard({ product, onChange }: EditorProps) {
               ref={authorInput}
               className={`${fieldControlClasses} w-full`}
               value={form.fields.author}
-              {...refusedProps(marked, "author", reasonId)}
+              {...refusedProps(refusal, "author", reasonId, touched)}
               onChange={(event) => form.update({ author: event.target.value })}
             />
           </FieldHint>
@@ -2178,7 +2198,7 @@ function ReviewsCard({ product, onChange }: EditorProps) {
                 maxLength={TEXT_MAX_LENGTH}
                 className={`${fieldControlClasses} w-full`}
                 value={form.fields.body}
-                {...refusedProps(marked, "body", reasonId)}
+                {...refusedProps(refusal, "body", reasonId, touched)}
                 onChange={(event) => form.update({ body: event.target.value })}
               />
             </FieldHint>

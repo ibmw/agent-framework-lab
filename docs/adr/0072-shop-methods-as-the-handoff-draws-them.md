@@ -46,7 +46,9 @@ form breaks, in the handoff's order — name, ID shape, ID unique (the method be
 excluded), carrier, then the window — and the one `RefusalLine` stands where the handoff draws its
 error, after the buttons, in a polite live region. The field that breaks the rule is
 `aria-invalid` and described by that line; a blank form is refused and says why, and marks no
-field until something is typed. Each submit handler checks the refusal too.
+field until something is typed. Each submit handler checks the refusal too. (Amended by ADR 0078,
+27 October 2026: a field is marked only once the form is touched, which a press with nothing
+typed also does.)
 
 The handoff's last rule, `max ≥ min ≥ 0`, is said as three: Min days, then Max days, as a whole
 number from 0 to 365 (the contract's bound), then the lab's transit sentence, character for

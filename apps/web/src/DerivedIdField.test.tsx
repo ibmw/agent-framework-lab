@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 import { DerivedIdField } from "./components/DerivedIdField";
 import { SLUG_MAX_LENGTH, uniqueSuggestion } from "./lib/entryIds";
 import { tooLongMessage } from "./lib/fieldRules";
+import { expectRefusalWeight } from "./test/refused";
+import { RefusingForm } from "./test/refusingForm";
+
+const FORM_REFUSAL = "Fill the field before adding.";
 
 /**
  * A suggestion that is not derived from what the operator is typing but from something still
@@ -488,5 +492,64 @@ describe("DerivedIdField", () => {
     // their emptied value here and fill itself in a commit later — open, empty, and about to
     // be written over, which is the state this component exists to never be in.
     expect(seen[0]).toEqual({ value: "T-205", disabled: false });
+  });
+});
+
+/** The method forms' ID: derived from nothing here, so the operator types it. */
+function RefusedId({ field }: { field?: string }) {
+  const [value, setValue] = useState("");
+  return (
+    <RefusingForm reason={FORM_REFUSAL} field={field}>
+      {(refusedBy) => (
+        <DerivedIdField
+          label="ID"
+          hint="Lowercase with hyphens."
+          value={value}
+          suggested=""
+          taken={["card"]}
+          takenPlace="used by another method"
+          preview={false}
+          maxLength={SLUG_MAX_LENGTH}
+          refusedBy={refusedBy}
+          onChange={setValue}
+        />
+      )}
+    </RefusingForm>
+  );
+}
+
+describe("DerivedIdField named by a form's refusal (ADR 0078)", () => {
+  it("is invalid only while the form's line is drawn as the refusal", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<RefusedId />);
+    const add = screen.getByRole("button", { name: "Add entry" });
+    const id = screen.getByRole("textbox", { name: "ID" });
+    expectRefusalWeight(add, "hint");
+    expect(id).not.toHaveAttribute("aria-invalid");
+
+    await user.type(id, "x");
+    expectRefusalWeight(add, "touched");
+    expect(id).toHaveAttribute("aria-invalid", "true");
+    expect(id).toHaveAccessibleDescription(expect.stringContaining(FORM_REFUSAL));
+    unmount();
+
+    render(<RefusedId />);
+    const pressed = screen.getByRole("button", { name: "Add entry" });
+    await user.click(pressed);
+    expectRefusalWeight(pressed, "touched");
+    expect(screen.getByRole("textbox", { name: "ID" })).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("says a collision of its own from the first keystroke, whatever the form's refusal names", async () => {
+    const user = userEvent.setup();
+    render(<RefusedId field="name" />);
+    const id = screen.getByRole("textbox", { name: "ID" });
+    expect(id).not.toHaveAttribute("aria-invalid");
+
+    await user.type(id, "card");
+    expect(id).toHaveAttribute("aria-invalid", "true");
+    expect(id).toHaveAccessibleDescription(
+      expect.stringContaining("card is already used by another method."),
+    );
   });
 });

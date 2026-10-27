@@ -3183,12 +3183,18 @@ describe("editing a saved entry in place", () => {
 
     await user.click(variants.getByRole("button", { name: "Edit NS ASJ ODD" }));
     let save = variants.getByRole("button", { name: "Save NS ASJ ODD" });
+    const sku = () => variants.getByLabelText("SKU for NS ASJ ODD");
     expectRefused(save, VARIANT_SKU_RENAME_RULE);
     expectRefusalWeight(save, "hint");
+    // The SKU the line names is not called invalid while the line is a hint.
+    expect(sku()).not.toHaveAttribute("aria-invalid");
     const before = refusalFacts(save);
     // An edit of another field of the open row leaves the SKU, and so the refusal, as it was.
     await user.selectOptions(variants.getByLabelText("Size for NS ASJ ODD"), "L");
     expectRefusalWeight(save, "touched");
+    expect(sku()).toHaveAttribute("aria-invalid", "true");
+    // Its line is the rename rule the field is already described by: heard once, not twice.
+    expect(describedText(sku()).split(VARIANT_SKU_RENAME_RULE)).toHaveLength(2);
     expect(refusalFacts(save)).toEqual(before);
 
     // Put back and opened again: a new attempt, then a press on the refused Save.
@@ -3196,9 +3202,11 @@ describe("editing a saved entry in place", () => {
     await user.click(variants.getByRole("button", { name: "Edit NS ASJ ODD" }));
     save = variants.getByRole("button", { name: "Save NS ASJ ODD" });
     expectRefusalWeight(save, "hint");
+    expect(sku()).not.toHaveAttribute("aria-invalid");
     const again = refusalFacts(save);
     await user.click(save);
     expectRefusalWeight(save, "touched");
+    expect(sku()).toHaveAttribute("aria-invalid", "true");
     expect(refusalFacts(save)).toEqual(again);
   });
 
@@ -3216,10 +3224,16 @@ describe("editing a saved entry in place", () => {
     expect(region).toHaveAttribute("aria-live", "polite");
     expect(region).toHaveAttribute("aria-atomic", "true");
     expect(region).toBeEmptyDOMElement();
+    expect(sku).not.toHaveAttribute("aria-invalid");
 
     await user.clear(sku);
     const save = variants.getByRole("button", { name: "Save NS-ASJ-OB-M" });
     expectRefused(save, "A variant needs a SKU.");
+    // Emptied, the row is touched: the line is the refusal, and the SKU it names is marked and
+    // described by it (ADR 0078).
+    expectRefusalWeight(save, "touched");
+    expect(sku).toHaveAttribute("aria-invalid", "true");
+    expect(describedText(sku)).toContain("A variant needs a SKU.");
     expect(refusalElement(save).parentElement).toBe(region);
     expect(region).toHaveTextContent("A variant needs a SKU.");
     expect(screen.queryByRole("alert")).toBeNull();
@@ -3236,6 +3250,9 @@ describe("editing a saved entry in place", () => {
     await user.type(sku, "NS-ASJ-OB-L");
 
     expect(sku).toBeInvalid();
+    expect(sku).toHaveAttribute("aria-invalid", "true");
+    // Described by the refusal's line as well as by the rename rule.
+    expect(describedText(sku)).toContain("NS-ASJ-OB-L is already in the draft.");
     expect(variants.getByText("NS-ASJ-OB-L is already in the draft.")).toBeVisible();
     const save = variants.getByRole("button", { name: "Save NS-ASJ-OB-M" });
     expectRefused(save, "NS-ASJ-OB-L is already in the draft.");
@@ -3264,6 +3281,8 @@ describe("editing a saved entry in place", () => {
     // constraint validation — which is the whole reason the shape is checked in the gate.
     expect(sku).toHaveAttribute("aria-invalid", "true");
     expect(sku).toBeInvalid();
+    // The refusal's words are the rename rule the field is described by, said once.
+    expect(describedText(sku).split(VARIANT_SKU_RENAME_RULE)).toHaveLength(2);
     expectRefused(
       variants.getByRole("button", { name: "Save NS-ASJ-OB-M" }),
       VARIANT_SKU_RENAME_RULE,

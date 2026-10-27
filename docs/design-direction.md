@@ -605,7 +605,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   `RefusalLine`, `PublishReasons`, Start's list — reads at the README's hint, 13px 400
   `#42474c`, until the operator has edited the form or pressed the refused action, and at the
   validation weight after; `useRefusalTouch` is how a form knows, and the button, its `title`
-  and its description never move. A keyboard
+  and its description never move. The field the line names is `aria-invalid` exactly while
+  the line is at the validation weight; a refusal a field says on its own line — a collision,
+  a value past its cap — marks it from the keystroke that causes it. A keyboard
   reader lands on the refused control and is told why; a press, a key or Enter in its form does
   nothing, because `PrimaryAction` swallows the activation. `blockedButtonClasses` in `lib/ui.ts`
   is the weight — deliberately outside the button table, with a focus ring and no hover — and

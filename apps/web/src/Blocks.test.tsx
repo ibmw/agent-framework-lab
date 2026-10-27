@@ -1536,12 +1536,27 @@ describe("a template's parameters", () => {
     const button = add.getByRole("button", { name: "Add parameter" });
     expectRefused(button, PARAMETER_LABEL_RULE);
     expectRefusalWeight(button, "hint");
+    // The label the line names is not called invalid while the line is a hint.
+    expect(add.getByLabelText("Label")).not.toHaveAttribute("aria-invalid");
     const before = refusalFacts(button);
 
     // An edit that leaves the label empty: the reason stands, now at the refusal's weight.
     await user.type(add.getByLabelText(DESCRIPTION), "Typed first.");
     expectRefusalWeight(button, "touched");
+    expect(add.getByLabelText("Label")).toHaveAttribute("aria-invalid", "true");
     expect(refusalFacts(button)).toEqual(before);
+  });
+
+  it("marks the label at a press with nothing typed, as the line turns (ADR 0078)", async () => {
+    const user = userEvent.setup();
+    await openEditor();
+    const add = parameterForm("Add a parameter");
+    const button = add.getByRole("button", { name: "Add parameter" });
+    expect(add.getByLabelText("Label")).not.toHaveAttribute("aria-invalid");
+
+    await user.click(button);
+    expectRefusalWeight(button, "touched");
+    expect(add.getByLabelText("Label")).toHaveAttribute("aria-invalid", "true");
   });
 
   it("turns the add form's refusal at a press, and back to a hint when an entry is opened and put back", async () => {

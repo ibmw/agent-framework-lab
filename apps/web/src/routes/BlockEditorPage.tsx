@@ -405,8 +405,9 @@ function TemplateParameters<PayloadT extends BlockPayload>({
   const reasonId = useId();
   const findingId = useId();
   const refusal = parameterRefusal(form.fields, parameters.length, form.editing);
-  // A blank form is refused and says why, but marks nothing until something is in it.
-  const marked = form.dirty ? refusal : null;
+  // A blank form is refused and says why; a field is marked by it only once the form is
+  // touched, when the line says it at the validation weight (ADR 0078).
+  const touched = form.touch.touched;
   const identifier = uniqueParameterName(toIdentifier(form.fields.label), names);
   const literal = acceptsDefault(form.fields.kind);
   // The gate's `optional_parameter_without_default`, said under the checkbox while the form holds
@@ -588,6 +589,7 @@ function TemplateParameters<PayloadT extends BlockPayload>({
         addLabel="Add parameter"
         refusal={refusal}
         reasonId={reasonId}
+        touch={form.touch}
         onSubmit={submit}
         onCancel={cancel}
       >
@@ -603,7 +605,7 @@ function TemplateParameters<PayloadT extends BlockPayload>({
               className={`${fieldControlClasses} w-full`}
               value={form.fields.label}
               placeholder="Document"
-              {...refusedProps(marked, "label", reasonId)}
+              {...refusedProps(refusal, "label", reasonId, touched)}
               onChange={(event) => form.update({ label: event.target.value })}
             />
           </FieldHint>
