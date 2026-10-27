@@ -48,8 +48,10 @@ question by construction rather than by copying a turn.
 `scripted`, because that is what produced its turns, and the recorded driver is part of what
 explains a result (ADR 0025). One consequence is worth naming rather than hiding: the
 derived experiment's `resolution_fingerprint` therefore differs from its source's, in
-exactly that one input. Its `sandbox_fingerprint` does not, and that is the fingerprint the
-reproducibility claim rests on.
+exactly that one input — for a source recorded after ADR 0042's 2026-10-27 amendment; an older
+source whose arms pinned two versions of one support identity also differs in its stored
+`comparison_variables`, as that amendment says. Its `sandbox_fingerprint` does not, and that
+is the fingerprint the reproducibility claim rests on.
 
 **What is reproduced is the input, not the output.** Against the declared control runtime a
 replay reproduces the original turn for turn; against a model-backed one it does not, and

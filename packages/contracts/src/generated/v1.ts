@@ -2433,9 +2433,15 @@ export interface components {
      */
     ComparisonVariableSchema: {
       dimension: components["schemas"]["ComparisonDimension"];
-      /** Values */
+      /**
+       * Values
+       * @description One value per arm, in the arms' position order, as the setup matrix shows it. For `support_identity` the value is the support identity's id alone. The version each arm pinned is the `support_identity_version` its agent configuration version records. An experiment also serves it as that arm's `support_identity` entry in `arm_inputs`; a preview serves no pins.
+       */
       values: string[];
-      /** Differs */
+      /**
+       * Differs
+       * @description Whether the arms disagree along this dimension. For `support_identity` the arms are compared by identity and by the version each one pinned, so two arms on versions 1 and 2 of one identity differ although their values are equal.
+       */
       differs: boolean;
     };
     /**

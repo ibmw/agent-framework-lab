@@ -164,7 +164,9 @@ for two things (ADR 0025). A derived run's turns came from a script, so it recor
 
 The consequence is named rather than hidden: `resolution_fingerprint` covers the participant
 driver, so a replay of a human-driven run has a **different** resolution fingerprint from its
-source, differing in exactly that one input. Its `sandbox_fingerprint` is identical, and that
+source, differing in exactly that one input (for a source recorded before ADR 0042's
+2026-10-27 amendment, possibly in its `comparison_variables` too; that amendment says when). Its
+`sandbox_fingerprint` is identical, and that
 is the fingerprint the reproducibility claim rests on. Recording `human` on a run nobody typed
 would have made the two fingerprints agree by lying about the one thing that genuinely
 differs.

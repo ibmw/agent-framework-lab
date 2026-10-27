@@ -25,6 +25,7 @@ import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
 import { PrimaryAction } from "../components/PrimaryAction";
 import { Card, Fingerprint, IssueList, PageHeader } from "../components/WorkspaceChrome";
+import { pinnedIdentityLabel } from "../lib/comparison";
 import { COMPARISON_DIMENSION, labelOf } from "../lib/enumLabels";
 import {
   type ArmChoice,
@@ -80,10 +81,14 @@ interface PinnedNames {
   resolves: string | null;
 }
 
-/** What an arm's pinned version says: the provider it names and the name it was published under. */
+/**
+ * What an arm's pinned version says: the provider it names, the name it was published under, and
+ * the version of its support identity it pinned, which the matrix names the identity by.
+ */
 interface ArmPinned {
   provider: string;
   name: string;
+  supportIdentityVersion: number;
 }
 
 /**
@@ -109,6 +114,27 @@ interface ArmDraft extends ArmChoice {
 
 function emptyArm(): ArmDraft {
   return { id: crypto.randomUUID(), configurationId: "", version: "" };
+}
+
+/**
+ * One cell of the setup matrix. A support identity is named by the version that arm pinned, as
+ * the results name it, because two arms on two versions of one identity differ and a row reading
+ * the same id twice beside "Difference" would contradict itself. Until the arm's version read
+ * answers, or where it failed, the cell is the identity's id as the gate sent it.
+ */
+function setupMatrixValue(
+  dimension: ComparisonDimension,
+  value: string,
+  identityVersion: number | null,
+): { text: string; title?: string } {
+  if (value === "") {
+    return { text: "—" };
+  }
+  if (dimension === "support_identity" && identityVersion !== null) {
+    // The whole id as the tooltip, only where the cell shortens it to the pinned version.
+    return { text: pinnedIdentityLabel(identityVersion, value), title: value };
+  }
+  return { text: value };
 }
 
 function dimensionLabel(dimension: ComparisonDimension): string {
@@ -227,6 +253,24 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
       read.version === arm.version
       ? read
       : undefined;
+  };
+  /**
+   * The support identity version the arm at `index` of the judged setup pinned, or `null` until
+   * that arm's version read has answered, and if it failed. Read against the setup the matrix was
+   * judged for rather than the arms on screen, so a matrix still showing the previous choice is
+   * never labelled with the new one's version.
+   */
+  const identityVersionAt = (index: number): number | null => {
+    const chosen = judged?.setup.arms[index];
+    if (chosen === undefined) {
+      return null;
+    }
+    const read = Object.values(armReads).find(
+      (entry) =>
+        entry.configurationId === chosen.configuration_id &&
+        entry.version === String(chosen.version),
+    );
+    return read?.pinned?.supportIdentityVersion ?? null;
   };
   const reachability = useReachability();
   const unreachable = reachability.status === "loaded" ? reachability.unreachable : null;
@@ -795,16 +839,24 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
                   {preview.comparison.map((variable) => (
                     <tr key={variable.dimension}>
                       <td className={tableCellClasses}>{dimensionLabel(variable.dimension)}</td>
-                      {variable.values.map((value, index) => (
-                        <td
-                          // Values repeat across arms by design, so the cell is named by the
-                          // arm it belongs to rather than by what it happens to say.
-                          key={`${variable.dimension}:${preview.arm_labels[index]}`}
-                          className={`${tableCellClasses} break-words`}
-                        >
-                          {value === "" ? "—" : value}
-                        </td>
-                      ))}
+                      {variable.values.map((value, index) => {
+                        const cell = setupMatrixValue(
+                          variable.dimension,
+                          value,
+                          identityVersionAt(index),
+                        );
+                        return (
+                          <td
+                            // Values repeat across arms by design, so the cell is named by the
+                            // arm it belongs to rather than by what it happens to say.
+                            key={`${variable.dimension}:${preview.arm_labels[index]}`}
+                            className={`${tableCellClasses} break-words`}
+                            title={cell.title}
+                          >
+                            {cell.text}
+                          </td>
+                        );
+                      })}
                       <td className={tableCellClasses}>
                         {variable.differs ? (
                           <span className="font-semibold text-admin-draft-ink">Difference</span>
@@ -952,7 +1004,11 @@ function ArmPicker({
           reportRead.current({
             configurationId,
             version,
-            pinned: { provider: published.content.model.provider, name: published.content.name },
+            pinned: {
+              provider: published.content.model.provider,
+              name: published.content.name,
+              supportIdentityVersion: published.support_identity_version,
+            },
           });
         }
       })

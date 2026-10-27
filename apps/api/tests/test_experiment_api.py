@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from api_factories import (
     OBJECTIVE_TEMPLATE,
+    SUPPORT_IDENTITY,
     api_client,
     create_scenario,
     make_block,
@@ -210,6 +211,45 @@ async def test_the_setup_matrix_reports_every_dimension(
     # A preview freezes nothing.
     listed = await client.get(f"/api/v1/shops/{lab['shop_id']}/experiments")
     assert listed.json()["experiments"] == []
+
+
+async def test_two_versions_of_one_identity_are_the_matrix_s_one_difference(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The value names the identity; `differs` reads it with the version each arm pinned."""
+    scenario = await published_scenario(client, lab)
+    identity = await make_identity(client)
+    left = await published_configuration(client, identity)
+    identity_id = identity["support_identity_id"]
+    saved = await client.put(
+        f"/api/v1/support-identities/{identity_id}/draft",
+        json={
+            "payload": {
+                **SUPPORT_IDENTITY,
+                "escalation": {"escalate_to": "Tier 3 support", "conditions": []},
+            }
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    republished = await client.post(f"/api/v1/support-identities/{identity_id}/versions")
+    assert republished.status_code == 201, republished.text
+    right = await published_configuration(client, identity)
+
+    started = await start(client, lab, start_body(scenario, left, right))
+    read = await client.get(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{started['experiment_id']}"
+    )
+
+    assert read.status_code == 200, read.text
+    body = read.json()
+    assert [
+        [entry["version"] for entry in arm if entry["definition_type"] == "support_identity"]
+        for arm in body["arm_inputs"]
+    ] == [[1], [2]]
+    assert [row for row in body["comparison"] if row["differs"]] == [
+        {"dimension": "support_identity", "values": [identity_id, identity_id], "differs": True}
+    ]
+    assert body["comparison"] == started["comparison"]
 
 
 async def test_a_tone_override_the_shop_does_not_publish_is_reported_as_a_finding(

@@ -1451,6 +1451,162 @@ describe("experiment setup", () => {
     expect(within(architecture).getByText("Same")).toBeVisible();
   });
 
+  describe("a support identity on two versions", () => {
+    const identity = "8e9f0a1b-2c3d-4e5f-8a6b-7c8d9e0f1a2b";
+
+    /** The gate's answer for arms on two versions of one identity: one id, and a difference. */
+    function serveIdentityPreview() {
+      server.use(
+        http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, () =>
+          HttpResponse.json({
+            ...PREVIEW,
+            issues: [],
+            comparison: COMPARISON.map((entry) =>
+              entry.dimension === "support_identity"
+                ? { dimension: "support_identity", values: [identity, identity], differs: true }
+                : variable(entry.dimension, [entry.values[0], entry.values[0]]),
+            ),
+          } satisfies ExperimentPreviewResponse),
+        ),
+      );
+    }
+
+    function identityCells(matrix: HTMLElement) {
+      return within(within(matrix).getByRole("row", { name: /support identity/i }))
+        .getAllByRole("cell")
+        .slice(1)
+        .map((cell) => cell.textContent);
+    }
+
+    it("names each arm's identity by the version it pinned beside the difference", async () => {
+      const user = userEvent.setup();
+      serveIdentityPreview();
+      server.use(
+        http.get("*/api/v1/agent-configurations/:configurationId/versions/:version", ({ params }) =>
+          HttpResponse.json({
+            ...publishedVersion(String(params.configurationId), Number(params.version)),
+            support_identity_version: params.configurationId === BEACON_ID ? 2 : 1,
+          }),
+        ),
+      );
+      renderSetup();
+
+      await scenarioChosen();
+      await chooseArm(user, 0, "cfg-atlas");
+      await chooseArm(user, 1, "cfg-beacon");
+
+      const matrix = await screen.findByRole("table");
+      await waitFor(() =>
+        expect(identityCells(matrix)).toEqual(["v1 · 8e9f0a1b", "v2 · 8e9f0a1b", "Difference"]),
+      );
+      const row = within(matrix).getByRole("row", { name: /support identity/i });
+      expect(within(row).getByText("v2 · 8e9f0a1b")).toHaveAttribute("title", identity);
+    });
+
+    it("reads the identity's id where an arm's version could not be read", async () => {
+      const user = userEvent.setup();
+      serveIdentityPreview();
+      server.use(
+        http.get(
+          "*/api/v1/agent-configurations/:configurationId/versions/:version",
+          ({ params }) =>
+            params.configurationId === BEACON_ID
+              ? HttpResponse.json(
+                  { code: "unavailable", message: "down", request_id: "r" },
+                  { status: 500 },
+                )
+              : HttpResponse.json(
+                  publishedVersion(String(params.configurationId), Number(params.version)),
+                ),
+        ),
+      );
+      renderSetup();
+
+      await scenarioChosen();
+      await chooseArm(user, 0, "cfg-atlas");
+      await chooseArm(user, 1, "cfg-beacon");
+
+      const matrix = await screen.findByRole("table");
+      await waitFor(() =>
+        expect(identityCells(matrix)).toEqual(["v1 · 8e9f0a1b", identity, "Difference"]),
+      );
+      // The cell already reads the whole id, so no tooltip repeats it.
+      const row = within(matrix).getByRole("row", { name: /support identity/i });
+      expect(within(row).getByText(identity)).not.toHaveAttribute("title");
+    });
+
+    it("labels a matrix still judging the last choice with that choice's versions", async () => {
+      const user = userEvent.setup();
+      // Every preview after the first is held, so the matrix on screen is the last choice's.
+      let holding = false;
+      let release = () => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let newerRead = () => {};
+      const newerAnswered = new Promise<void>((resolve) => {
+        newerRead = resolve;
+      });
+      server.use(
+        http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, async () => {
+          if (holding) {
+            await held;
+          }
+          return HttpResponse.json({
+            ...PREVIEW,
+            issues: [],
+            comparison: COMPARISON.map((entry) =>
+              entry.dimension === "support_identity"
+                ? { dimension: "support_identity", values: [identity, identity], differs: true }
+                : variable(entry.dimension, [entry.values[0], entry.values[0]]),
+            ),
+          } satisfies ExperimentPreviewResponse);
+        }),
+        http.get(
+          "*/api/v1/agent-configurations/:configurationId/versions/:version",
+          ({ params }) => {
+            const beacon = params.configurationId === BEACON_ID;
+            const newer = beacon && Number(params.version) === 2;
+            if (newer && holding) {
+              queueMicrotask(newerRead);
+            }
+            return HttpResponse.json({
+              ...publishedVersion(String(params.configurationId), Number(params.version)),
+              // Beacon v1 pins the identity at v2; Beacon v2 pins it at v7.
+              support_identity_version: newer ? 7 : beacon ? 2 : 1,
+            });
+          },
+        ),
+      );
+      renderSetup();
+
+      await scenarioChosen();
+      await chooseArm(user, 0, "cfg-atlas");
+      await chooseArm(user, 1, "cfg-beacon");
+      const matrix = await screen.findByRole("table");
+      await waitFor(() =>
+        expect(identityCells(matrix)).toEqual(["v1 · 8e9f0a1b", "v2 · 8e9f0a1b", "Difference"]),
+      );
+
+      holding = true;
+      const armB = screen.getByRole("group", { name: "Arm B" });
+      await user.selectOptions(within(armB).getByLabelText("Published version"), "2");
+      await newerAnswered;
+
+      // Beacon v2's read has answered while its judgement has not: the matrix on screen is
+      // still Beacon v1's, so it never says v7. Beacon v1's own read has been replaced by the
+      // newer one, so arm B reads as the identity's id until the new judgement arrives.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(identityCells(matrix)).toEqual(["v1 · 8e9f0a1b", identity, "Difference"]);
+      expect(within(matrix).queryByText(/v7/)).toBeNull();
+
+      release();
+      await waitFor(() =>
+        expect(identityCells(matrix)).toEqual(["v1 · 8e9f0a1b", "v7 · 8e9f0a1b", "Difference"]),
+      );
+    });
+  });
+
   it("says what a seed is and what it may be, under the field", async () => {
     renderSetup();
 
@@ -7680,6 +7836,42 @@ describe("what the arms differed on", () => {
       `/lab/support-identities/${frontline}`,
     );
     expect(cellsOf(card, /^Support identity/)).toEqual(["v2 · aadf1767", "Same"]);
+  });
+
+  it("lists one support identity at v1 against v2 as the difference the server says it is", async () => {
+    const frontline = "aadf1767-4c8f-4e39-965a-f67ba16edbe0";
+    const pin = (version: number) => ({
+      definition_type: "support_identity",
+      definition_id: frontline,
+      version,
+      content_fingerprint: "9".repeat(64),
+    });
+    // The value is the identity's id in both arms; `differs` is the server's reading of the
+    // id with the version each arm pinned (ADR 0042's 2026-10-27 amendment).
+    serveExperiment({
+      comparison: differingOnly().map((entry) =>
+        entry.dimension === "support_identity"
+          ? { ...variable("support_identity", [frontline, frontline]), differs: true }
+          : entry,
+      ),
+      arm_inputs: [[pin(1)], [pin(2)]],
+    });
+    renderResults();
+
+    const card = await differedOn();
+    expect(cellsOf(card, /^Support identity/)).toEqual([
+      "v1 · aadf1767",
+      "v2 · aadf1767",
+      "Difference",
+    ]);
+    const row = within(card).getByRole("row", { name: /^Support identity/ });
+    expect(within(row).getByRole("link", { name: "v1 · aadf1767" })).toHaveAttribute(
+      "href",
+      `/lab/support-identities/${frontline}`,
+    );
+    expect(
+      within(card).getByText("One difference, so the behavior above is attributable to it."),
+    ).toBeVisible();
   });
 
   it("reads each value under the arm at its position, whatever order the runs arrive in", async () => {

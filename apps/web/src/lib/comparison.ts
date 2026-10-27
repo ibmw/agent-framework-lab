@@ -78,6 +78,15 @@ export function describeComparisonValue(dimension: ComparisonDimension, value: s
 }
 
 /**
+ * A support identity named by the version an arm pinned and the head of its id — "v1 · aadf1767"
+ * — the one spelling the setup matrix and the results both use, so two arms on two versions of
+ * one identity read apart wherever the comparison says they differ.
+ */
+export function pinnedIdentityLabel(version: number, id: string): string {
+  return `v${version} · ${id.slice(0, 8)}`;
+}
+
+/**
  * A support identity as the version this arm pinned — "v1 · aadf1767", opening its editor —
  * rather than a bare id: the version is frozen on the run, so naming it renames nothing, and two
  * identities both at v1 still read apart by their ids.
@@ -95,7 +104,7 @@ function supportIdentityValue(
     return { value: describeComparisonValue("support_identity", id) };
   }
   return {
-    value: `v${pin.version} · ${id.slice(0, 8)}`,
+    value: pinnedIdentityLabel(pin.version, id),
     title: id,
     to: versionPath(pin.definition_type, pin.definition_id, pin.version, shopId) ?? undefined,
   };

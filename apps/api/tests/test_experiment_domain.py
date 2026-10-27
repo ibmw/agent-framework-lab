@@ -8,6 +8,7 @@ import pytest
 
 from agent_factories import publishable_configuration
 from capability_lab.domain.agent_configuration import (
+    AgentConfigurationPayload,
     ToneOfVoiceSelection,
     ToneOfVoiceSource,
 )
@@ -17,7 +18,9 @@ from capability_lab.domain.experiment import (
     MAX_PARTICIPANT_TURN_LENGTH,
     MAX_TAGS,
     ArmAwaiting,
+    ComparedArm,
     ComparisonDimension,
+    ComparisonVariable,
     ExperimentConfigurationError,
     ExperimentNote,
     ParticipantDriverType,
@@ -31,6 +34,11 @@ from capability_lab.domain.experiment import (
     replay_script,
     stand_arm,
 )
+
+
+def arm(payload: AgentConfigurationPayload, identity_version: int = 1) -> ComparedArm:
+    """One arm as a comparison reads it, pinned to the named version of its identity."""
+    return ComparedArm(configuration=payload, support_identity_version=identity_version)
 
 
 def turn(**overrides: object) -> ParticipantTurn:
@@ -187,14 +195,14 @@ def test_two_identical_configurations_differ_nowhere() -> None:
     identity_id = uuid4()
     payload = publishable_configuration(identity_id)
 
-    comparison = compare_configurations((payload, payload))
+    comparison = compare_configurations((arm(payload), arm(payload)))
 
     assert [variable.dimension for variable in comparison] == list(ComparisonDimension)
     assert [variable for variable in comparison if variable.differs] == []
 
 
 def test_one_arm_is_reported_dimension_by_dimension_and_differs_nowhere() -> None:
-    comparison = compare_configurations((publishable_configuration(uuid4()),))
+    comparison = compare_configurations((arm(publishable_configuration(uuid4())),))
 
     assert len(comparison) == len(ComparisonDimension)
     assert all(len(variable.values) == 1 and not variable.differs for variable in comparison)
@@ -206,7 +214,9 @@ def test_a_changed_framework_is_the_only_dimension_that_differs() -> None:
     right = publishable_configuration(identity_id, framework_id="fake")
 
     differing = [
-        variable.dimension for variable in compare_configurations((left, right)) if variable.differs
+        variable.dimension
+        for variable in compare_configurations((arm(left), arm(right)))
+        if variable.differs
     ]
 
     assert differing == [ComparisonDimension.FRAMEWORK]
@@ -221,7 +231,9 @@ def test_the_runtime_settings_are_part_of_the_model_arms_are_compared_on() -> No
     )
 
     differing = [
-        variable.dimension for variable in compare_configurations((left, right)) if variable.differs
+        variable.dimension
+        for variable in compare_configurations((arm(left), arm(right)))
+        if variable.differs
     ]
 
     assert differing == [ComparisonDimension.MODEL]
@@ -237,7 +249,7 @@ def test_the_tool_set_is_compared_as_a_set_not_as_an_authoring_order() -> None:
     )
 
     assert [
-        variable for variable in compare_configurations((left, right)) if variable.differs
+        variable for variable in compare_configurations((arm(left), arm(right))) if variable.differs
     ] == []
 
 
@@ -252,7 +264,9 @@ def test_the_tone_selection_is_compared_by_what_it_names() -> None:
     )
 
     differing = [
-        variable.dimension for variable in compare_configurations((left, right)) if variable.differs
+        variable.dimension
+        for variable in compare_configurations((arm(left), arm(right)))
+        if variable.differs
     ]
 
     assert differing == [ComparisonDimension.TONE_OF_VOICE]
@@ -263,6 +277,56 @@ def test_a_comparison_needs_something_to_compare() -> None:
         compare_configurations(())
 
 
+def support_identity_of(comparison: tuple[ComparisonVariable, ...]) -> ComparisonVariable:
+    return next(
+        variable
+        for variable in comparison
+        if variable.dimension is ComparisonDimension.SUPPORT_IDENTITY
+    )
+
+
+def test_one_support_identity_at_two_versions_is_a_difference() -> None:
+    """Two versions of one identity can say different things to the customer (ADR 0042)."""
+    identity_id = uuid4()
+    payload = publishable_configuration(identity_id)
+
+    comparison = compare_configurations((arm(payload, 1), arm(payload, 2)))
+
+    assert [variable.dimension for variable in comparison if variable.differs] == [
+        ComparisonDimension.SUPPORT_IDENTITY
+    ]
+    # The value is still the identity's id: the version is what each arm's pins say.
+    assert support_identity_of(comparison).values == (str(identity_id), str(identity_id))
+
+
+def test_one_support_identity_at_one_version_agrees() -> None:
+    identity_id = uuid4()
+    payload = publishable_configuration(identity_id)
+
+    comparison = compare_configurations((arm(payload, 2), arm(payload, 2)))
+
+    assert not support_identity_of(comparison).differs
+
+
+def test_two_support_identities_differ_even_at_one_version_number() -> None:
+    left = publishable_configuration(uuid4())
+    right = publishable_configuration(uuid4())
+
+    comparison = compare_configurations((arm(left, 1), arm(right, 1)))
+
+    assert [variable.dimension for variable in comparison if variable.differs] == [
+        ComparisonDimension.SUPPORT_IDENTITY
+    ]
+
+
+def test_a_compared_arm_names_a_published_identity_version() -> None:
+    payload = publishable_configuration(uuid4())
+
+    for version in (0, -1, True):
+        with pytest.raises(ExperimentConfigurationError, match="support identity version"):
+            arm(payload, version)  # type: ignore[arg-type]
+
+
 # -- what a derivation moved from the run it came from -------------------------
 
 
@@ -271,7 +335,7 @@ def test_a_derivation_that_moved_one_arm_one_way_moved_one_dimension() -> None:
     before = publishable_configuration(identity_id)
     after = publishable_configuration(identity_id, prompt="Read the policy before acting.")
 
-    assert derivation_variables(((before, after),)) == (ComparisonDimension.PROMPT,)
+    assert derivation_variables(((arm(before), arm(after)),)) == (ComparisonDimension.PROMPT,)
 
 
 def test_two_arms_moved_the_same_way_are_one_variable() -> None:
@@ -280,7 +344,9 @@ def test_two_arms_moved_the_same_way_are_one_variable() -> None:
     before = publishable_configuration(identity_id)
     after = publishable_configuration(identity_id, prompt="Read the policy before acting.")
 
-    assert derivation_variables(((before, after), (before, after))) == (ComparisonDimension.PROMPT,)
+    assert derivation_variables(((arm(before), arm(after)), (arm(before), arm(after)))) == (
+        ComparisonDimension.PROMPT,
+    )
 
 
 def test_two_arms_moved_different_ways_are_two_variables_in_the_enums_own_order() -> None:
@@ -295,7 +361,7 @@ def test_two_arms_moved_different_ways_are_two_variables_in_the_enums_own_order(
         identity_id, model=replace(before.model, temperature=Decimal("0.90"))
     )
 
-    assert derivation_variables(((prompted, before), (before, warmer))) == (
+    assert derivation_variables(((arm(prompted), arm(before)), (arm(before), arm(warmer)))) == (
         ComparisonDimension.MODEL,
         ComparisonDimension.PROMPT,
     )
@@ -313,7 +379,16 @@ def test_an_arm_repinned_to_content_that_compares_equal_moved_nothing() -> None:
     identity_id = uuid4()
     payload = publishable_configuration(identity_id)
 
-    assert derivation_variables(((payload, payload),)) == ()
+    assert derivation_variables(((arm(payload), arm(payload)),)) == ()
+
+
+def test_a_derivation_that_moved_only_the_identity_version_moved_support_identity() -> None:
+    """A configuration republished onto v2 of its identity is a fork along that one row."""
+    payload = publishable_configuration(uuid4())
+
+    assert derivation_variables(((arm(payload, 1), arm(payload, 2)),)) == (
+        ComparisonDimension.SUPPORT_IDENTITY,
+    )
 
 
 # -- what an operator writes on a run ------------------------------------------

@@ -108,6 +108,7 @@ from capability_lab.domain.definitions import (
 )
 from capability_lab.domain.experiment import (
     ArmStanding,
+    ComparedArm,
     ComparisonDimension,
     ComparisonVariable,
     DerivationKind,
@@ -532,7 +533,8 @@ class ExperimentService:
         runs = self._runs.list_for_experiment(experiment_id)
         # Resolved once and read twice: the matrix compares the arms, and each arm's own
         # framework and model label it.
-        payloads = tuple(self._arm_payload(run) for run in runs)
+        arms = tuple(self._run_arm(run) for run in runs)
+        payloads = tuple(arm.payload for arm in arms)
         turns = self._turns.list_for_experiment(experiment_id)
         agent_turns = self._agent_turns.list_for_experiment(experiment_id)
         tool_events = self._tool_events.list_for_experiment(experiment_id)
@@ -549,7 +551,7 @@ class ExperimentService:
             resolution=record.content(snapshot.content.pins).resolution,
             scenario=scenario,
             starting_state=snapshot.content.state,
-            comparison=compare_configurations(payloads),
+            comparison=compare_configurations(tuple(arm.compared for arm in arms)),
             arm_runtimes=tuple(
                 ArmRuntime(
                     run_id=run.run_id,
@@ -580,7 +582,7 @@ class ExperimentService:
                 )
                 for run, sandbox in zip(runs, sandboxes, strict=True)
             ),
-            derived_from=self._origin(shop_id, experiment_id, runs, payloads),
+            derived_from=self._origin(shop_id, experiment_id, runs, arms),
             runs=runs,
             sandboxes=sandboxes,
             turns=turns,
@@ -602,7 +604,7 @@ class ExperimentService:
         arms = self._selected(command)
         return ExperimentPreview(
             validation=self._gate(shop_id, command, arms).validation,
-            comparison=compare_configurations(tuple(arm.payload for arm in arms)),
+            comparison=compare_configurations(tuple(arm.compared for arm in arms)),
             arm_labels=_arm_labels(command),
         )
 
@@ -643,7 +645,7 @@ class ExperimentService:
             else self._recorded_state(shop_id, starting_state, command)
         )
         resolution = judged.resolution
-        comparison = compare_configurations(tuple(arm.payload for arm in arms))
+        comparison = compare_configurations(tuple(arm.compared for arm in arms))
         fingerprint = fingerprint_experiment(
             resolution,
             sandbox_fingerprint=snapshot.sandbox_fingerprint,
@@ -854,7 +856,7 @@ class ExperimentService:
         shop_id: UUID,
         experiment_id: UUID,
         runs: tuple[RunRecord, ...],
-        payloads: tuple[AgentConfigurationPayload, ...],
+        arms: tuple[_SelectedArm, ...],
     ) -> ExperimentOrigin | None:
         """The experiment this one came from, named by the row it was derived through.
 
@@ -873,14 +875,14 @@ class ExperimentService:
             experiment_id=source.experiment_id,
             label=source.label,
             kind=derivation.kind,
-            changed=self._moved(source.experiment_id, runs, payloads),
+            changed=self._moved(source.experiment_id, runs, arms),
         )
 
     def _moved(
         self,
         source_experiment_id: UUID,
         runs: tuple[RunRecord, ...],
-        payloads: tuple[AgentConfigurationPayload, ...],
+        arms: tuple[_SelectedArm, ...],
     ) -> tuple[ComparisonDimension, ...]:
         """What this derivation changed about the arms, read against the run it came from.
 
@@ -895,8 +897,8 @@ class ExperimentService:
             return ()
         return derivation_variables(
             tuple(
-                (self._arm_payload(before), after)
-                for before, run, after in zip(source_runs, runs, payloads, strict=True)
+                (self._run_arm(before).compared, after.compared)
+                for before, run, after in zip(source_runs, runs, arms, strict=True)
                 if (before.agent_configuration_id, before.agent_configuration_version)
                 != (run.agent_configuration_id, run.agent_configuration_version)
             )
@@ -1023,15 +1025,21 @@ class ExperimentService:
                 f"agent configuration {selection.configuration_id} has no published version "
                 f"{selection.version}"
             )
-        return _SelectedArm(selection=selection, ref=ref, payload=record.payload)
+        return _SelectedArm(
+            selection=selection,
+            ref=ref,
+            payload=record.payload,
+            support_identity_version=_pinned_identity_version(record),
+        )
 
-    def _arm_payload(self, run: RunRecord) -> AgentConfigurationPayload:
+    def _run_arm(self, run: RunRecord) -> _SelectedArm:
+        """The arm a recorded run ran, resolved to the configuration version it pinned."""
         return self._arm(
             ArmSelection(
                 configuration_id=run.agent_configuration_id,
                 version=run.agent_configuration_version,
             )
-        ).payload
+        )
 
     def _scenario_version(
         self, shop_id: UUID, command: StartExperiment
@@ -1115,6 +1123,40 @@ class _SelectedArm:
     selection: ArmSelection
     ref: VersionRef
     payload: AgentConfigurationPayload
+    support_identity_version: int
+
+    @property
+    def compared(self) -> ComparedArm:
+        return ComparedArm(
+            configuration=self.payload, support_identity_version=self.support_identity_version
+        )
+
+
+def _pinned_identity_version(record: DefinitionVersionRecord[AgentConfigurationPayload]) -> int:
+    """The support identity version this configuration version pinned when it was published.
+
+    Read off the configuration version rather than out of an experiment's resolution, and
+    deliberately: it is the very pin the resolution copies into each arm's closure (a
+    published version is immutable, so the two cannot disagree), and it is there for every
+    caller — including a preview whose resolution failed on a conflicting pin elsewhere in
+    the closure, which still has to draw the matrix beside the finding that refuses it.
+    """
+    identity = record.payload.support_identity_id
+    pin = next(
+        (
+            reference
+            for reference in record.published.references
+            if reference.definition.definition_type is DefinitionType.SUPPORT_IDENTITY
+            and reference.definition.id == identity
+        ),
+        None,
+    )
+    if pin is None:  # pragma: no cover - the publish gate pins the identity the payload names
+        raise MissingReferenceVersionError(
+            f"agent configuration {record.published.definition.id} version "
+            f"{record.published.version} pins no version of support identity {identity}"
+        )
+    return pin.version
 
 
 def _thread(
@@ -1197,7 +1239,7 @@ def _comparison_issues(arms: tuple[_SelectedArm, ...]) -> tuple[DefinitionIssue,
         return ()
     differing = [
         variable
-        for variable in compare_configurations(tuple(arm.payload for arm in arms))
+        for variable in compare_configurations(tuple(arm.compared for arm in arms))
         if variable.differs
     ]
     if len(differing) < 2:

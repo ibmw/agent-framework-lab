@@ -74,6 +74,7 @@ from workspace_factories import (
     published_identity,
     published_judge,
     read_check,
+    republished_identity,
     seed_workspace,
 )
 
@@ -290,6 +291,26 @@ async def test_a_fork_reports_the_one_dimension_it_moved(
     assert derived.derived_from is not None
     assert derived.derived_from.kind is DerivationKind.FORK
     assert derived.derived_from.changed == (ComparisonDimension.PROMPT,)
+
+
+@pytest.mark.asyncio
+async def test_a_fork_that_adopted_a_newer_identity_version_moved_support_identity(
+    session: Session, workspace: Workspace
+) -> None:
+    """Republished only to pin v2 of the same identity, the arm runs a different identity."""
+    adopted = published_identity(session)
+    arm = control_arm(session, adopted)
+    source = start(session, workspace, arm)
+    await run_arm(session, source)
+    republished_identity(session, adopted)
+    newer = republish(session, arm)
+
+    derived = await build_derivations(session).fork(
+        workspace.shop_id, source.record.experiment_id, moving(source, 0, newer)
+    )
+
+    assert derived.derived_from is not None
+    assert derived.derived_from.changed == (ComparisonDimension.SUPPORT_IDENTITY,)
 
 
 @pytest.mark.asyncio

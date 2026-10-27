@@ -336,8 +336,25 @@ class ComparisonVariableSchema(StrictApiModel):
     """One dimension of the setup matrix: what each arm holds, and whether they disagree."""
 
     dimension: ComparisonDimension
-    values: list[str]
-    differs: bool
+    values: Annotated[
+        list[str],
+        Field(
+            description="One value per arm, in the arms' position order, as the setup matrix "
+            "shows it. For `support_identity` the value is the support identity's id alone. The "
+            "version each arm pinned is the `support_identity_version` its agent configuration "
+            "version records. An experiment also serves it as that arm's `support_identity` "
+            "entry in `arm_inputs`; a preview serves no pins."
+        ),
+    ]
+    differs: Annotated[
+        bool,
+        Field(
+            description="Whether the arms disagree along this dimension. For "
+            "`support_identity` the arms are compared by identity and by the version each one "
+            "pinned, so two arms on versions 1 and 2 of one identity differ although their "
+            "values are equal."
+        ),
+    ]
 
     @classmethod
     def from_domain(cls, variable: ComparisonVariable) -> Self:

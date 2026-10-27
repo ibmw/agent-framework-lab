@@ -56,6 +56,7 @@ from workspace_factories import (
     publish_prerequisites,
     published_configuration,
     published_identity,
+    republished_identity,
     seed_workspace,
 )
 
@@ -369,6 +370,59 @@ def test_arms_differing_in_more_than_one_dimension_warn_but_still_run(
 
     assert codes == ["multiple_comparison_variables"]
     assert len(detail.runs) == 2
+
+
+def identity_pins(detail: ExperimentDetail) -> list[int]:
+    return [entry.version for arm in detail.resolution.arms for entry in arm.support_identities]
+
+
+def test_arms_on_two_versions_of_one_identity_differ_in_that_identity_alone(
+    session: Session, workspace: Workspace
+) -> None:
+    """A configuration names its identity, not its version: the arm's pin says which ran.
+
+    Read before this slice as no difference at all, so the run said nothing could be
+    attributed to anything. It is one difference, and attributable to it."""
+    first = published_identity(session)
+    left = published_configuration(session, first)
+    right = published_configuration(session, republished_identity(session, first))
+    setup = command(workspace, (left, right))
+    experiments = build_experiments(session)
+
+    preview = experiments.preview(workspace.shop_id, setup)
+    detail = experiments.start(workspace.shop_id, setup)
+    reread = experiments.get_experiment(workspace.shop_id, detail.record.experiment_id)
+
+    assert identity_pins(detail) == [1, 2]
+    for comparison in (preview.comparison, detail.comparison, reread.comparison):
+        assert [variable.dimension for variable in comparison if variable.differs] == [
+            ComparisonDimension.SUPPORT_IDENTITY
+        ]
+    assert preview.validation.issues == ()
+    # The stored envelope records the one difference too, inside the fingerprint.
+    assert detail.record.document["comparison_variables"] == ["support_identity"]
+
+
+def test_one_difference_beside_a_moved_identity_version_is_two(
+    session: Session, workspace: Workspace
+) -> None:
+    """Arms that differed in their prompt alone, until one of them adopted a newer identity."""
+    first = published_identity(session)
+    left = published_configuration(session, first)
+    right = published_configuration(
+        session,
+        republished_identity(session, first),
+        prompt="You are support for {{shop.name}}. Read the policy first.",
+    )
+
+    preview = build_experiments(session).preview(
+        workspace.shop_id, command(workspace, (left, right))
+    )
+
+    assert [issue.code for issue in preview.validation.warnings] == [
+        "multiple_comparison_variables"
+    ]
+    assert "(prompt, support identity)" in preview.validation.warnings[0].message
 
 
 def test_the_stored_schema_token_is_served_rather_than_the_build_s(

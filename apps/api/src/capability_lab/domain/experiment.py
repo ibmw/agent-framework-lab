@@ -74,6 +74,7 @@ __all__ = [
     "MAX_TAGS",
     "ArmAwaiting",
     "ArmStanding",
+    "ComparedArm",
     "ComparisonDimension",
     "ComparisonVariable",
     "DerivationKind",
@@ -494,6 +495,15 @@ class ComparisonVariable:
     reads in the setup matrix. A single-arm experiment produces one value per dimension and
     never differs — there is nothing to compare it to, which is a true statement about the
     experiment rather than an absence to hide.
+
+    `differs` is judged on what each value names, which is the value itself on every
+    dimension but one. The support identity's value is the identity's id, and the arms are
+    compared on that id *and* the version each arm pinned: a configuration names its
+    identity but not its version, so two arms can carry one id while running two different
+    published identities (ADR 0042's 2026-10-27 amendment). The version stays out of the
+    value because each arm's configuration version records it: an experiment's detail serves
+    it among that arm's pins, and the setup screen reads it off the configuration version it
+    already fetches for each arm, since a preview serves no pins.
     """
 
     dimension: ComparisonDimension
@@ -501,25 +511,45 @@ class ComparisonVariable:
     differs: bool
 
 
-def compare_configurations(
-    configurations: tuple[AgentConfigurationPayload, ...],
-) -> tuple[ComparisonVariable, ...]:
+@dataclass(frozen=True, slots=True)
+class ComparedArm:
+    """One arm as a comparison reads it: its configuration, and the identity it pinned.
+
+    The support identity's version travels beside the configuration rather than inside it.
+    An agent configuration's payload names the identity it adopts and nothing more; which
+    published version of that identity the arm runs is the configuration version's own pin
+    (ADR 0024), so the caller that resolved the arm is the one that knows it.
+    """
+
+    configuration: AgentConfigurationPayload
+    support_identity_version: int
+
+    def __post_init__(self) -> None:
+        if not _is_published_version(self.support_identity_version):
+            raise ExperimentConfigurationError(
+                "a compared arm must name the published support identity version it pinned"
+            )
+
+
+def _is_published_version(value: object) -> bool:
+    """A published version number, guarded for callers that bypass static checking."""
+    return not isinstance(value, bool) and isinstance(value, int) and value >= 1
+
+
+def compare_configurations(arms: tuple[ComparedArm, ...]) -> tuple[ComparisonVariable, ...]:
     """Read the arms' configurations dimension by dimension, in declaration order.
 
     Every dimension is reported, agreeing ones included: an operator setting an experiment
     up needs to see that the model is the same as much as that the framework is not, and a
     matrix that listed only the differences would make "same" and "not checked" look alike.
     """
-    if not configurations:
+    if not arms:
         raise ExperimentConfigurationError("a comparison needs at least one configuration")
-    return tuple(
-        _variable(dimension, tuple(_value(dimension, payload) for payload in configurations))
-        for dimension in ComparisonDimension
-    )
+    return tuple(_variable(dimension, arms) for dimension in ComparisonDimension)
 
 
 def derivation_variables(
-    moved: tuple[tuple[AgentConfigurationPayload, AgentConfigurationPayload], ...],
+    moved: tuple[tuple[ComparedArm, ComparedArm], ...],
 ) -> tuple[ComparisonDimension, ...]:
     """Which dimensions a derivation moved, over the arms whose pins it actually changed.
 
@@ -535,10 +565,11 @@ def derivation_variables(
     different model is two, and no difference between the derived run and its source can be
     attributed to either.
 
-    Each pair is one arm's configuration before and after, and only the arms whose published
-    version the derivation changed belong here: an arm pinned to the exact version its source
-    ran cannot have moved along any dimension, so comparing it with itself would be work done
-    to prove an identity.
+    Each pair is one arm before and after, and only the arms whose published version the
+    derivation changed belong here: an arm pinned to the exact version its source ran cannot
+    have moved along any dimension, so comparing it with itself would be work done to prove
+    an identity. An arm whose configuration was republished only to adopt a newer version of
+    the same support identity has moved exactly one dimension, and is read as having done so.
     """
     changed = {
         variable.dimension
@@ -551,8 +582,26 @@ def derivation_variables(
     return tuple(dimension for dimension in ComparisonDimension if dimension in changed)
 
 
-def _variable(dimension: ComparisonDimension, values: tuple[str, ...]) -> ComparisonVariable:
-    return ComparisonVariable(dimension=dimension, values=values, differs=len(set(values)) > 1)
+def _variable(dimension: ComparisonDimension, arms: tuple[ComparedArm, ...]) -> ComparisonVariable:
+    return ComparisonVariable(
+        dimension=dimension,
+        values=tuple(_value(dimension, arm.configuration) for arm in arms),
+        differs=len({_compared_on(dimension, arm) for arm in arms}) > 1,
+    )
+
+
+def _compared_on(dimension: ComparisonDimension, arm: ComparedArm) -> tuple[str, int | None]:
+    """What a difference along one dimension is judged on, which the value alone may not say.
+
+    Only the support identity needs more than its value. Two versions of one identity can
+    say different things to the customer, so an arm that adopted v2 is not running what an
+    arm on v1 runs, and a matrix that read "same" on that row would be reporting the
+    identity's name instead of the identity.
+    """
+    value = _value(dimension, arm.configuration)
+    if dimension is ComparisonDimension.SUPPORT_IDENTITY:
+        return value, arm.support_identity_version
+    return value, None
 
 
 def _value(dimension: ComparisonDimension, payload: AgentConfigurationPayload) -> str:

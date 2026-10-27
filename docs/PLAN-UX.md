@@ -106,36 +106,8 @@ named in the tests and the tokens are paid. The operator took the milestone's de
 - **A field's `aria-invalid` follows ADR 0078's touch**, the same as the line that names its
   refusal.
 
-One slice touches the backend: Slice 55 changes the comparison. The covered journeys are
+No open slice touches the backend. The covered journeys are
 `experiment-start.spec.ts`, `workspace-shell.spec.ts` and `sticky-header.spec.ts`.
-
-### Slice 55 — Two versions of one support identity are a difference
-
-- [ ] `compare_configurations` (`domain/experiment.py:504`) compares the support identity by
-  definition and pinned version, not by id alone (`:588–589`). The version is the one the
-  experiment's snapshot pins for each arm. A configuration names its identity
-  (`AgentConfigurationPayload.support_identity_id`) but not its version, so the comparison
-  takes the pins it needs from the caller's resolution (`application/experiments.py:552`,
-  `:605`, `:646`, `:1200`).
-- [ ] `derivation_variables` reads the same value, so a fork that moved only the identity's
-  version counts as having moved *support identity* (ADR 0039).
-- [ ] The v1 contract's description of the support identity's comparison value says what it
-  holds. The frontend already names each arm's pinned version (`lib/comparison.ts:85–102`) and
-  draws `differs` as the server sends it, so no consumer change is needed beyond what the tests
-  show. If a comparison is stored with an experiment, ADR 0042's amendment says what a run
-  recorded before this slice reads.
-
-Frames: none.
-
-Authority: ADR 0039, ADR 0042, ADR 0035.
-
-Departures to record: none.
-
-Branch: `fix/compare-identity-version`. Checks: pytest for the domain comparison (one id at v1
-and v2 differs, the same version agrees, two ids differ), the derivation, and the experiment
-endpoint's comparison; the contract check; Vitest `Experiments.test.tsx`, where *What the arms
-differed on* lists the identity for v1 against v2. `make check`, `pnpm build`; `pnpm test:e2e`
-for `experiment-start.spec.ts`.
 
 ### Slice 56 — A field is invalid when its refusal is shown
 

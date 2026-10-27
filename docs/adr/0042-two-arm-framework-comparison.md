@@ -12,6 +12,37 @@ isolation sweep names the runtime file explicitly — and the structural check t
 declaration beside it reaches for no framework reads the module it imports rather than a
 sibling path.
 
+Amendment: 2026-10-27 — The support identity is compared by the version each arm pinned, not
+by its id alone. A configuration names the identity it adopts and not its version; the version is
+the configuration version's own pin, which the experiment's resolution copies into each arm. Two
+arms on v1 and v2 of one identity now differ along `support_identity`, and a fork whose arm was
+republished only to adopt a newer version of its identity reports that dimension as moved
+(ADR 0039). The matrix's value is still the identity's id, which is what a client resolves an
+arm's pin by; the contract's `differs` says it is judged on the id and the version. This section's
+claim is unchanged: the two arms here adopt one published identity *version*, so the framework is
+still their one difference. A run recorded before this amendment reads as follows. Its matrix,
+the setup gate's count and `derived_from.changed` are computed on every read and are not stored,
+so they follow the new rule: a run whose arms pinned two versions of one identity now shows that
+row as a difference. What *is* stored is the experiment document's `comparison_variables`, written
+once at start inside the hashed envelope; that list and the `resolution_fingerprint` stay exactly
+as recorded and are never rewritten. The two can therefore disagree for exactly that kind of run,
+whose stored list lacks `support_identity` while its matrix shows it. The operator does not see
+the disagreement: nothing serves the stored list or reads it back, and nothing compares it with a
+recomputed set. The results card, the setup matrix and the derivation reading all show the
+recomputed matrix. The count can move both ways. Arms that differed only in the identity's
+version read as no difference before and as one now, and are attributable to it. Arms that
+differed in one dimension and also in the identity's version read as one difference before and
+as two now, and the setup gate warns about them. A replay of such a run starts through the gate
+again, so it starts with that warning, which never refuses a start, and stores the new count in
+its own envelope. It already had a `resolution_fingerprint` of its own (ADR 0038), and its
+`derived_from.changed` stays empty because its pins equal its source's. ADR 0038 says a replay's
+`resolution_fingerprint` differs from its source's in exactly one input, the participant driver.
+That holds for a source recorded after this amendment. A replay of an older source whose arms
+pinned two versions of one identity also differs from its source in its stored
+`comparison_variables`. The setup matrix names each arm's identity by the version it pinned, as
+the results do. A preview serves no pins, so the setup screen reads the version off the
+configuration version it already fetches for each arm.
+
 Closes `docs/PLAN.md` Milestone 6's last outcome — "prove the wrong-address scenario in a
 two-arm comparison" — and with it the milestone and the last open implementation outcome on
 this roadmap. It consumes ADR 0041's second framework, ADR 0025's experiment envelope and

@@ -62,7 +62,7 @@ from capability_lab.domain.scenario import (
     ScenarioPayload,
 )
 from capability_lab.domain.shop import ShopDocumentKind, SupportChannel
-from capability_lab.domain.support_identity import SupportIdentityPayload
+from capability_lab.domain.support_identity import EscalationPolicy, SupportIdentityPayload
 from capability_lab.domain.ticket import SuggestedDocument
 from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
 from capability_lab.infrastructure.judges import ControlJudgeRuntime
@@ -411,6 +411,28 @@ def published_identity(
     identities.replace_draft(identity_id, publishable_identity() if payload is None else payload)
     published = identities.publish(identity_id)
     return ToolActor(support_identity_id=identity_id, version=published.published.version)
+
+
+def republished_identity(session: Session, actor: ToolActor) -> ToolActor:
+    """The next published version of one support identity, saying something new.
+
+    What a configuration adopts by being republished after it: the configuration names the
+    identity, and its own publication pins whichever version of it is newest (ADR 0024).
+    """
+    identities = SupportIdentityService(support_identity_repository(session), AdvancingClock())
+    identities.replace_draft(
+        actor.support_identity_id,
+        publishable_identity(
+            escalation=EscalationPolicy(
+                escalate_to="Tier 2 support",
+                conditions=("The customer asks for a refund above 100 EUR",),
+            )
+        ),
+    )
+    published = identities.publish(actor.support_identity_id)
+    return ToolActor(
+        support_identity_id=actor.support_identity_id, version=published.published.version
+    )
 
 
 def profile_with_two_addresses() -> CustomerProfilePayload:
