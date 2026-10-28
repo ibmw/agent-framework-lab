@@ -62,6 +62,7 @@ import {
   sheetStripClasses,
   sheetTitleClasses,
   subtleFieldButtonClasses,
+  tagRemoveClasses,
   textAreaClasses,
   validationMessageClasses,
 } from "./ui";
@@ -539,9 +540,7 @@ describe("the width of a field", () => {
     // Asserted first: a glob or a pattern that matched nothing would make the cases below pass.
     expect(Object.keys(consumers).length).toBeGreaterThan(50);
     expect(composed.length).toBeGreaterThan(150);
-    expect(composed.some((entry) => entry.includes("ExperimentResultsPage.tsx: w-auto"))).toBe(
-      true,
-    );
+    expect(composed.some((entry) => entry.includes("RunTags.tsx: w-[160px]"))).toBe(true);
   });
 
   it("is declared by neither shared control", () => {
@@ -599,13 +598,15 @@ describe("the width of a field", () => {
   });
 
   it("is narrow where the prototype draws it narrow", () => {
-    // :2650 draws the tag input as the rest of its strip at a 130px floor. The order's two
+    // The sheet mockup draws the tag input 160px wide beside *Add tag* in the header's *Filed
+    // under* row (`results-sheet-mockup.dc.html` :63), where :2650 drew it as the rest of the
+    // rail's strip at a 130px floor (ADR 0080). The order's two
     // narrow fields left their narrow places: a line's quantity its table's column for the form
     // below the list (ADR 0074), and the shipping fee the totals for a row of the payment run
     // (ADR 0069, amended 2026-10-04), both at the full width every row's control takes.
     expect(composed).not.toContain("../routes/OrderEditorPage.tsx: w-32");
     expect(composed).not.toContain("../routes/OrderEditorPage.tsx: w-20");
-    expect(composed).toContain("../routes/ExperimentResultsPage.tsx: w-auto min-w-[130px] flex-1");
+    expect(composed).toContain("../components/RunTags.tsx: w-[160px] min-w-0");
   });
 });
 
@@ -1261,10 +1262,11 @@ describe("the add form", () => {
       ),
     ).toBe(false);
     const drawing = consumers.filter(([, source]) => /\baddFormClasses\b/.test(codeOf(source)));
-    // Five since the guidelines and the editor's parameters moved to the form below their list
-    // (ADR 0074): the new-block page's parameters, a scenario's picker, a ticket's thread, the
-    // results' tag form and the product's variants.
-    expect(drawing).toHaveLength(5);
+    // Four since the guidelines and the editor's parameters moved to the form below their list
+    // (ADR 0074), and the results' note composer became the first thing in its section, which
+    // opens on no list above it (ADR 0080): the new-block page's parameters, a scenario's
+    // picker, a ticket's thread and the product's variants.
+    expect(drawing).toHaveLength(4);
   });
 });
 
@@ -1643,5 +1645,12 @@ describe("the workspace's Inter", () => {
 
   it("is the first family of the workspace's stack, ahead of its fallbacks", () => {
     expect(themeSource).toMatch(/font-family:\s*Inter, ui-sans-serif, system-ui,/);
+  });
+});
+
+describe("a tag's remove", () => {
+  it("turns to the error ink on hover only while it can be pressed", () => {
+    expect(tagRemoveClasses).toContain("not-aria-disabled:hover:text-lab-error");
+    expect(tagRemoveClasses.split(" ").filter((name) => name.startsWith("hover:"))).toEqual([]);
   });
 });

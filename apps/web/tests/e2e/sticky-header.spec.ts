@@ -768,4 +768,15 @@ test("the results pin the arm strip over the sheet, and let their header scroll 
   expect(usage.y).toBeGreaterThanOrEqual(held.y + held.height);
   const clearance = Number.parseFloat(await main.evaluate((pane) => pane.style.scrollPaddingTop));
   expect(clearance).toBeGreaterThanOrEqual(held.height);
+
+  // The header is taller with the run's facts and its tags (ADR 0080), and still scrolls away:
+  // its Notes, followed from the top, lands the last section under the strip with the header
+  // gone.
+  await main.evaluate((pane) => pane.scrollTo(0, 0));
+  await expect(header).toBeInViewport();
+  await header.getByRole("link", { name: /^Notes · \d+$/ }).click();
+  await expect(page.getByRole("region", { name: "Notes" })).toBeFocused();
+  await expect(header).not.toBeInViewport();
+  const notes = await box(page.getByRole("heading", { level: 2, name: "Notes" }));
+  expect(notes.y).toBeGreaterThanOrEqual((await box(strip)).y + held.height);
 });

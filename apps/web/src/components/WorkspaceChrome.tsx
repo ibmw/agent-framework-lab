@@ -132,6 +132,8 @@ export function PageHeader({
   reasons,
   description,
   back,
+  lead,
+  below,
   sticky = false,
 }: {
   title: string;
@@ -139,6 +141,11 @@ export function PageHeader({
   actions?: ReactNode;
   /** What the header's actions report — a failure, a publish, a refusal — beneath them. */
   reasons?: ReactNode;
+  /**
+   * Rows of the header's own under everything else, where a line of text would not hold them:
+   * the results' facts as chips and the tags they are filed under (ADR 0080).
+   */
+  below?: ReactNode;
   /** Pin the header to the top of the scrolling pane: true on an editor. */
   sticky?: boolean;
 } & (
@@ -147,11 +154,17 @@ export function PageHeader({
       back: HeaderBackTarget;
       /** The line above the title is the header's one line: what it says goes in `back.detail`. */
       description?: never;
+      lead?: never;
     }
   | {
       back?: undefined;
       /** The line under the title, on a page with no way back. */
       description?: ReactNode;
+      /**
+       * A line above the title on a page whose way back is not to an index: the results' way
+       * back to the live bench it was driven on (ADR 0080).
+       */
+      lead?: ReactNode;
     }
 )) {
   // The chain step of a tour lights the page's own name: it is the one element every surface
@@ -166,6 +179,7 @@ export function PageHeader({
       ref={sticky ? clearStickyHeader : undefined}
       className={sticky ? `${stickyHeaderClasses} ${pageHeaderClasses}` : pageHeaderClasses}
     >
+      {lead ? <div className="mb-1.5">{lead}</div> : null}
       <div className="flex flex-wrap items-center gap-3">
         {back ? (
           <HeaderBack {...back}>
@@ -187,6 +201,7 @@ export function PageHeader({
       </div>
       {reasons ? <HeaderReport>{reasons}</HeaderReport> : null}
       {description ? <p className="text-[13px] text-admin-muted">{description}</p> : null}
+      {below}
     </header>
   );
 }

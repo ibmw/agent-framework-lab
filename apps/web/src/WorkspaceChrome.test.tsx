@@ -262,6 +262,46 @@ describe("an editor's way back", () => {
   });
 });
 
+describe("a header's lead and its rows below", () => {
+  it("reads the lead above the title and the rows below under everything else, inside the header", () => {
+    render(
+      <PageHeader
+        title="Wrong address"
+        lead={<a href="/lab/bench/run">Back to the live bench</a>}
+        actions={<button type="button">Replay</button>}
+        description="A finished run."
+        below={<ul aria-label="About this run" />}
+      />,
+    );
+
+    const header = screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement;
+    const inOrder = [
+      within(header).getByRole("link", { name: "Back to the live bench" }),
+      within(header).getByRole("heading", { level: 1 }),
+      within(header).getByRole("button", { name: "Replay" }),
+      within(header).getByText("A finished run."),
+      within(header).getByRole("list", { name: "About this run" }),
+    ];
+    for (const [before, after] of inOrder.slice(0, -1).map((el, i) => [el, inOrder[i + 1]])) {
+      expect(before.compareDocumentPosition(after as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    }
+    // The rows below are their own, never inside the one line of text the description is.
+    expect(within(header).getByText("A finished run.")).not.toContainElement(
+      within(header).getByRole("list", { name: "About this run" }),
+    );
+  });
+
+  it("draws nothing for either where the page gives neither", () => {
+    render(<PageHeader title="Shop details" />);
+
+    const header = screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement;
+    // The title's row is the header's only child.
+    expect(header.children).toHaveLength(1);
+  });
+});
+
 describe("a card's first line", () => {
   it("is the first thing under the title, saying what the card is for, in 13px muted ink", () => {
     render(

@@ -59,8 +59,7 @@ its span's start.
 
 The sheet's sections are built over Milestone 14's four slices, in order: the frame with Outcome,
 Configuration and Usage first; then Objectives and Business state; then Provenance, Notes and the
-header; then the depth tabs. Until a card is converted it stays in the one column, in the sheet's
-order, and carries its section's `id`, so its chip already reaches it.
+header; then the depth tabs. General is the whole sheet once the third has landed.
 
 ### The sheet
 
@@ -190,6 +189,63 @@ sheet does, the added column's cell last under a line naming it. Each table's `s
 stacks too. Laid out as a row, the field table's four headers ran past the viewport's edge inside
 their clipped box, and `pastTheViewport` found them there.
 
+### The record: Provenance, Notes, and the header
+
+*Provenance* replaces the rail's card. Its note is the card's old footer, "Every arm was cloned
+from one snapshot, so the arms began at the same fingerprint and moved apart only when something
+wrote." Its rows span the arms, because they are facts about the run: *Derived from*, where the
+run has a source, the source's results as a link after "A fork of" or "A replay of", and what
+the derivation changed on a line of its own, in the draft ink with "no difference from that run
+can be attributed to any one of them" where it changed several things; *Starting state* and
+*Inputs*, each fingerprint cut to twelve characters with the whole in its `title`, and a press
+named "Copy the starting-state fingerprint" or "Copy the inputs fingerprint" that writes the
+whole value to the clipboard and says "Copied the … fingerprint." in a `status` beside it, or
+"This browser refused the copy."; *Participant*; *Scenario and fixtures*, the scenario once and
+every other pin that is not a block, each a link to what it pinned where this build has an editor
+for it (ADR 0068), and its words otherwise; *Blocks*, each by
+the name its version was published under with its kind beside it, or by its kind and version
+until that name is read or where it cannot be. *Each arm's versions* is the last row, in the
+arms' columns: the configuration by name, then the other pins. The section carries
+`data-tour="results-provenance"`. The bench's card is unchanged, and both read the pins through
+one helper, `provenancePins` (`lib/provenance.ts`), with the change's words (`describeChange`).
+
+*Notes* is the last section, `id` `notes`, carrying `data-tour="results-notes"`. It is
+`SheetCard`, the section's card without the rows, because a composer and a list are not facts
+per arm. Its note is the card's old footer, "What a reviewer concluded, stored beside the record
+rather than in it." The composer comes first: the field labelled "Add a note", *Add note* with
+its refusal (ADR 0063) as a hint until touched (ADR 0078), and a failed write said beside the
+press, the box kept. Then the list "Notes on this run", each note's body over its time. The
+*Notes & tags* card is gone.
+
+The header reads, top to bottom: "Back to the live bench" above the title; *Notes · N*, Replay and
+*Fork…* as the actions; then the run's facts as a list named "About this run" — the standing with
+its glyph (✓ when every arm completed, · otherwise), the scenario's version as a link to the
+scenario, the seed, when it started (`formatTimestamp`); then *Filed under*, a group named by those
+words, holding each tag with its remove ("Remove tag {tag}") and *+ Tag*. *+ Tag* opens the tag form
+in its place, focus in the field: "Add a tag", *Add tag* with its refusal as today, and *Cancel*.
+*Cancel* or Escape folds it, drops what was typed and any failed tag write's alert — an add's or a
+removal's — and returns focus to *+ Tag*. An accepted tag leaves the form open for the next one,
+focus back in the emptied field whether Enter or *Add tag* sent it. A failed tag write is said in
+the header, under *Filed under*. A tag's remove is a `BusyButton`, held while any write is out —
+`aria-disabled`, its press swallowed, no hover ink — rather than disabled, which would drop a
+keyboard reader's focus (ADR 0065); once its chip is gone, focus still on it moves to *+ Tag*, or to
+the field where the form is open when the answer lands. `PageHeader` gains two slots for this,
+`lead` above the title row and `below` under everything else, since a chip list and a form cannot
+sit in its one line of description. *Notes · N* is a link to `…/results#notes` from every tab, named
+"Notes · N"; the router lands it as a chip's jump. The line on Replay and Fork, the reach line, the
+derivation queue and the Fork panel are unchanged, under the header. Inventory H4 for this direction
+— one line, the long-action note only while one runs — is what they already draw: `ActionStatus`
+draws its note only while the derivation runs.
+
+The two writes now sit apart, so the layout sends them: `annotate` and `annotating` are handed to
+the header and to Notes through the outlet's context. One goes at a time, because each answers
+with the whole annotation and two in flight could answer out of order, the later answer drawing
+the run without what the earlier one wrote. An answer that arrives after the operator moved to
+another run is not drawn over that run, and the box it came from is left as it was.
+
+The tour's last two steps anchor on the two sections and take their titles, *Provenance* and
+*Notes*. The second says the tags are in the header.
+
 ### One page scroll, with a strip pinned and not the header
 
 Nothing scrolls inside the page and nothing covers it: no nested scrolling region, no overlay,
@@ -262,8 +318,10 @@ its heading, which no tour anchor can select (`lib/tours.test.ts` holds anchors 
   390.
 - **ADR 0036.** The tags are drawn in the header and the notes are the last section, `id`
   `notes`, with the composer first. Storage, folding, the append-only note and the replaced tag
-  set are unchanged. Until Milestone 14's third slice lands, the *Notes & tags* card stands where
-  the Notes section will be.
+  set are unchanged. The layout sends both writes, one at a time.
+- **ADR 0068.** On the results each pinned version is a link that is its row's value, not a chip,
+  and opens the same address. The bench's card keeps its unlinked chips; `RunProvenance` is the
+  bench's alone and loses its `linked` option.
 - **`docs/design-direction.md`.** *Three evidence layers, kept distinct* now says that on the
   results the layers are labelled groups and sections of one sheet, not cards. *Desktop first,
   usable narrower* now says that the results sheet stacks below the breakpoint.
@@ -299,6 +357,38 @@ Each is recorded in `docs/design-direction.md`, *Departures from the handoff, in
   footer under its heading, and the section's note is new.
 - A scoring failure is said at the section's foot, beside the press that failed, where the page
   said it above the sections.
+- The mockup's way back reads "← Live bench". Here it reads "Back to the live bench", its
+  accessible name, which specs reach it by (rule 5).
+- The mockup draws Fork as a pine button opening a dialog, `aria-haspopup="dialog"`. Here it keeps
+  the outline weight beside Replay and opens the panel under the header (*Fork stays the panel
+  under the header*).
+- The mockup names a tag's remove "Remove the tag {tag}", the tag field "New tag" and the note
+  field "New note". Here they stay "Remove tag {tag}", "Add a tag" and "Add a note", the names the
+  specs and the tour reach (rule 5). The note field's label is drawn, as the mockup draws it.
+- The mockup's *+ Tag* draws a "+" in its text. Here the plus is the `create` glyph, hidden, so the
+  press is named "Tag".
+- The mockup folds the tag form on *Add tag*. Here an accepted tag leaves it open, the box
+  emptied, so a second tag is typed straight after the first; *Cancel* and Escape fold it.
+- The mockup draws *Notes · 2*'s count as a badge and the link's name would run the two together.
+  Here the link is named "Notes · N" in an `aria-label`, its words and count the ones drawn.
+- The mockup draws the copy press as a 32px glyph. Here it is the small subtle button reading
+  "Copy", named for its fingerprint, since copying is no verb of the closed glyph vocabulary.
+- The mockup's Provenance note is two sentences, "What this run pinned." and the card's footer;
+  its Notes note adds "A note is added, never edited.". Here each is the card's footer alone, one
+  sentence, as every section's note is; the rest is in the tour.
+- The mockup has no *Derived from* row and draws *Each arm's versions* as "Configuration v1".
+  Here a derived run's source leads the rows, and an arm's configuration is named as its summary
+  row names it, by the configuration's name where it is not the arm's label. Where it is, both
+  arms' cells hold a link named "configuration v1"; each cell sits under its arm's column header
+  (`SheetTable`), so the link is heard with its arm, as on the summary row.
+- The plan and the mockup give each form its own press. Here *Add note*, *Add tag* and each
+  tag's remove share one hold, `annotating`, as the *Notes & tags* card's one writer did: each
+  write answers with the whole annotation, and two in flight could answer out of order. The hold
+  is the layout's, so it also holds them on the next run while the previous run's write is still
+  out.
+- The mockup shows nothing for a run filed under no tag. Here *Filed under* says "no tag yet".
+- The mockup's tag field is 160px; the rail's was the rest of its row at a 130px floor. Here it is
+  the mockup's 160px.
 - The brief and the mockup draw a divergent comparison as a row per divergent turn under the
   label *Input divergence*. Here the *Input divergence* row is present in both states, a spanning
   row, so the old card's footer can be its cell's second line without entering the divergent
@@ -314,6 +404,10 @@ Each is recorded in `docs/design-direction.md`, *Departures from the handoff, in
   read the same projections, and no request was added.
 - `ComparisonTable` and *Quantitative* are gone. `ConfigurationSection` and *Usage* read the same
   projections, and no request was added.
+- `RunProvenance` is the bench's card alone. `provenancePins`, `pinLabel` and `describeChange`
+  (`lib/provenance.ts`) group and word the pins for it and for `ProvenanceSection`. The results'
+  annotation forms are `RunTags` in the header and `NotesSection`; `Annotate` (`lib/annotate.ts`)
+  is the layout's writer they share.
 - The summary row is now under the tabs. The tour's first two steps keep their anchors
   (`results-arms`, `nav[aria-label="Results views"]`). The first step says the figures are in
   Usage, and the provenance step says Outcome lists the input divergence.
@@ -358,9 +452,35 @@ Each is recorded in `docs/design-direction.md`, *Departures from the handoff, in
   `busy` alone; the added column's header, `col` and cell, a heading row and a spanning row across
   it, and the added cell stacked last under its header's line at a phone's width.
 - `lib/tours.test.ts`: the two evidence steps titled after their sections and anchored on their
-  hooks.
+  hooks; the last two, *Provenance* and *Notes*, likewise, the second saying the tags are in the
+  header.
+- `Experiments.test.tsx`, for the record: Provenance's rows in order, the run's spanning and each
+  arm's versions in its column, the fingerprints, the participant, the scenario once and a fixture
+  as links, each block by its name with its kind and its address, a block not read kept as its
+  kind and version, each version read once across tabs; a copy writing the whole fingerprint to
+  the clipboard and saying so in its `status`, and a refused copy said; a derived run's source
+  first, its change on a line of its own, several changes in the draft ink, and no source for a
+  run with none; every section's note one sentence. The header in order — the way back, the
+  title, *Notes · N*, Replay, *Fork…*, "About this run", *Filed under* — the facts' chips with the
+  scenario's link; *Notes · N*'s count and its target followed from the timeline, landing focused
+  on Notes, and its count after a note is added. The tags in the header with their removes, *+
+  Tag* opening the form with focus in it, *Cancel* and Escape folding it with focus back on *+
+  Tag*; the refusals muted then red, again a hint after an add and after a fold; a removal leaving
+  a half-typed tag alone; a failed tag write said in the header alone; a note held while a tag
+  write is in flight; an answer about a run left behind not drawn over the next, waited for on
+  the hold it releases; the composer before the notes, each body over its time; and the writes'
+  existing guarantees. A tag's remove held and keeping focus while a tag or a note write is out,
+  and focus on *+ Tag* once its chip is gone, or in the field where the form was opened while
+  the removal was out; focus back in the field after *Add tag* is pressed;
+  a failed tag write's alert dropped on *Cancel* and on Escape; the scenario's chip a link whose
+  words are the chip's; Provenance's column headers naming the arms. On the bench, the
+  unlinked chips by name: "Objective block · {name} v1" in "What this run pinned", and an arm's
+  configuration as its chip names it in "What Arm A pinned".
+- `WorkspaceChrome.test.tsx`: `PageHeader`'s lead above the title and its rows below everything
+  else, and neither drawn when not given.
 - `lib/stickyHeader.test.ts`: the strip's clearance follows its height and is given back.
-- `lib/ui.test.ts`: the sheet's columns, spacing, tint token, strip and letter.
+- `lib/ui.test.ts`: the sheet's columns, spacing, tint token, strip and letter; a tag's remove
+  inked on hover only while it can be pressed.
 - `tests/e2e/experiment-start.spec.ts`: no figures on the summary, Usage's rows, the strip, the
   phone width with no strip, stacked Usage and nothing past the viewport, and the divergence in
   Outcome; and at 390×844, Chromium's accessibility tree holding the stacked Usage table's rows
@@ -378,6 +498,12 @@ Each is recorded in `docs/design-direction.md`, *Departures from the handoff, in
   from a stacked results cell…*, reaches arm B's link at 390×844 under the line naming its arm,
   with no scroller above it and inside the viewport's width, passes nothing past the viewport,
   and lands focused on that call in the timeline.
+- `tests/e2e/experiment-start.spec.ts`, for the record: a tag filed from *+ Tag* in the header,
+  folded to its spelling, the form folded by Escape with focus back on *+ Tag*; a note added in
+  *Notes* and counted in the header's *Notes · 1*; a fork's *Derived from* row naming what it
+  changed. `tests/e2e/sticky-header.spec.ts`: the taller header still scrolls away, and its
+  *Notes* lands the section under the strip. `tests/e2e/tour-anchors.spec.ts`: the last two
+  steps' `results-provenance` and `results-notes` each resolve to one visible element.
 
 ## Migration
 

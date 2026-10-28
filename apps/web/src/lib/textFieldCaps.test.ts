@@ -133,10 +133,10 @@ const CONTROLS: Record<string, Cap | { forwards: string } | { none: string }> = 
   "DocumentsPage.tsx · DerivedIdField Slug": "SLUG_MAX_LENGTH",
 
   "ExperimentBenchPage.tsx · message": "TEXT_MAX_LENGTH",
-  "ExperimentResultsPage.tsx · tag": {
+  "RunTags.tsx · tag": {
     none: "folded before it is stored (`fold_tag`), so its typed length is not the length kept",
   },
-  "ExperimentResultsPage.tsx · note": "NOTE_MAX_LENGTH",
+  "NotesSection.tsx · note": "NOTE_MAX_LENGTH",
   "ExperimentSetupPage.tsx · DerivedIdField Name": "EXPERIMENT_LABEL_MAX_LENGTH",
 
   "JudgeConfigurationEditorPage.tsx · content.name": "LABEL_MAX_LENGTH",
@@ -334,7 +334,7 @@ const RULES: Record<string, { cap: Cap; typed: readonly string[] } | { notTyped:
   },
   "domain/experiment.py · note body": {
     cap: "NOTE_MAX_LENGTH",
-    typed: ["ExperimentResultsPage.tsx · note"],
+    typed: ["NotesSection.tsx · note"],
   },
   "domain/judge.py · judge model ID": {
     cap: "LABEL_MAX_LENGTH",

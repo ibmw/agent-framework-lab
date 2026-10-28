@@ -318,7 +318,7 @@ export const TOURS: Record<TourId, Tour> = {
     route: "/lab/bench/:shopId/:experimentId/results",
     // The four tabs are one surface: the tab row and the arms' summary row under it belong to
     // the layout and are on screen whichever tab is open, so their steps are every tab's. The
-    // cards the other steps light are the General tab's — its sheet (ADR 0080) — and those
+    // sections the other steps light are the General tab's — its sheet (ADR 0080) — and those
     // steps say so with `at`, so a reader on another tab is walked only what is there (ADR 0055,
     // amended).
     alsoAt: ["conversation", "timeline", "traces"],
@@ -357,19 +357,19 @@ export const TOURS: Record<TourId, Tour> = {
       },
       {
         anchor: '[data-tour="results-provenance"]',
-        title: "What this run pinned",
+        title: "Provenance",
         at: [""],
         body: [
-          "Everything in this card is something this run froze before it started — the starting state, the fingerprint of every input it resolved, the scenario version and the published inputs behind it, each block by its own name, and what each [[run|arm]] ran. A derived run names the run it came from and what it changed. What the arms differ along is under the evidence: behavior can be attributed to a dimension only while exactly one differs, and with two nothing can say which of them moved the result.",
+          "Everything in this section is something this run froze before it started — the starting state, the fingerprint of every input it resolved, the scenario version and the published inputs behind it, each block by its own name, and what each [[run|arm]] ran. A derived run names the run it came from and what it changed. What the arms differ along is under the evidence: behavior can be attributed to a dimension only while exactly one differs, and with two nothing can say which of them moved the result.",
           "Who drove the customer matters as much: one send is one composition however many arms it reaches, and two compositions at the same turn are two questions even when the words match — from there the arms are answering different conversations, which Outcome's input divergence lists turn by turn.",
         ],
       },
       {
-        anchor: '[aria-label="Notes & tags"]',
-        title: "Notes & tags",
+        anchor: '[data-tour="results-notes"]',
+        title: "Notes",
         at: [""],
         body: [
-          "What a reviewer concluded, stored beside the record rather than in it, so annotating a run never moves the versions or the starting state it pinned. A note is kept as written; the tags are how this run is filed now, and history narrows by them.",
+          "What a reviewer concluded, stored beside the record rather than in it, so annotating a run never moves the versions or the starting state it pinned. A note is kept as written. The tags are in the header, under the run's facts: how this run is filed now, and history narrows by them.",
         ],
       },
     ],

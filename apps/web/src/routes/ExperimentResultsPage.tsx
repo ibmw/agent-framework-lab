@@ -1,15 +1,12 @@
 import type {
   ArmMetricsSchema,
-  ExperimentAnnotationsResponse,
   ExperimentEvaluationResponse,
   ExperimentResponse,
   ExperimentRunSchema,
   ParticipantTurnSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { describeApiError } from "../api/client";
-import { addExperimentNote, setExperimentTags } from "../api/experiments";
 import { AttributionLine, ConfigurationSection } from "../components/ArmComparison";
 import {
   ArmStrip,
@@ -18,12 +15,10 @@ import {
   SheetSection,
   SheetSpanningRow,
 } from "../components/ArmSheet";
-import { ButtonIcon } from "../components/ButtonIcon";
+import { NotesSection } from "../components/NotesSection";
 import { ObjectivesSection } from "../components/ObjectivesSection";
-import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
-import { RunProvenance } from "../components/RunProvenance";
+import { ProvenanceSection } from "../components/ProvenanceSection";
 import { BusinessStateSection } from "../components/StateDiff";
-import { Card } from "../components/WorkspaceChrome";
 import { armsInOrder } from "../lib/comparison";
 import {
   describeArmStanding,
@@ -33,20 +28,12 @@ import {
   formatTokens,
   turnNumber,
 } from "../lib/evidence";
-import { NOTE_MAX_LENGTH } from "../lib/fieldRules";
-import { pythonStrip } from "../lib/pythonText";
-import { useRefusalTouch } from "../lib/refusalTouch";
 import { type SheetArm, sheetArmsOf } from "../lib/sheet";
 import {
-  addFormClasses,
-  fieldControlClasses,
-  focusRingClasses,
-  formatTimestamp,
   sheetCellDetailClasses,
   sheetFigureClasses,
   sheetFigureDiffersClasses,
   sheetSectionChipClasses,
-  textAreaClasses,
 } from "../lib/ui";
 import { useExperimentResults } from "./useExperimentResults";
 
@@ -92,8 +79,16 @@ type Measure = (typeof MEASURES)[number];
  * can never describe a run differently from the bench it was driven on.
  */
 export function ExperimentResultsPage() {
-  const { shopId, experimentId, experiment, evaluation, annotations, onEvaluated, onAnnotated } =
-    useExperimentResults();
+  const {
+    shopId,
+    experimentId,
+    experiment,
+    evaluation,
+    annotations,
+    onEvaluated,
+    annotate,
+    annotating,
+  } = useExperimentResults();
   const runs = armsInOrder(experiment);
   const sheetArms = sheetArmsOf(runs);
 
@@ -126,9 +121,7 @@ export function ExperimentResultsPage() {
       </nav>
 
       {/* One column in the sheet's order (ADR 0080). The strip is this column's first child, so
-          it holds at the pane's top for as long as the sections are on screen. The cards not
-          yet drawn as sheet sections carry their section's id, so their chip already reaches
-          them. */}
+          it holds at the pane's top for as long as the sections are on screen. */}
       <div className="grid min-w-0 gap-6">
         <ArmStrip label="General" arms={sheetArms} />
 
@@ -150,42 +143,24 @@ export function ExperimentResultsPage() {
 
         <Usage runs={runs} arms={sheetArms} />
 
-        <div
-          tabIndex={-1}
-          id="provenance"
-          data-tour="results-provenance"
-          className={`min-w-0 ${focusRingClasses}`}
-        >
-          <Card
-            title="Provenance"
-            footer={
-              <p className="text-xs text-admin-muted">
-                Every arm was cloned from one snapshot, so the arms began at the same fingerprint
-                and moved apart only when something wrote.
-              </p>
-            }
-          >
-            <RunProvenance experiment={experiment} shopId={shopId} linked />
-          </Card>
-        </div>
+        <ProvenanceSection experiment={experiment} shopId={shopId} arms={sheetArms} />
 
-        <div tabIndex={-1} id="notes" className={`min-w-0 ${focusRingClasses}`}>
-          <NotesAndTags
-            shopId={shopId}
-            experimentId={experimentId}
-            annotations={annotations}
-            onAnnotated={onAnnotated}
-          />
-        </div>
+        {/* Keyed by the run, so a note half-written on one run is not left in the box of the
+            next. */}
+        <NotesSection
+          key={experimentId}
+          shopId={shopId}
+          experimentId={experimentId}
+          notes={annotations.notes}
+          annotate={annotate}
+          annotating={annotating}
+        />
       </div>
     </>
   );
 }
 
-/**
- * The sheet's sections in its order, each the target of a chip (ADR 0080). A card not yet drawn
- * as a section carries its section's id, so every chip reaches what it names.
- */
+/** The sheet's sections in its order, each the target of a chip (ADR 0080). */
 const SECTIONS = [
   { id: "outcome", label: "Outcome" },
   { id: "objectives", label: "Objectives" },
@@ -245,234 +220,6 @@ function Outcome({
         <AttributionLine comparison={experiment.comparison} />
       </SheetSpanningRow>
     </SheetSection>
-  );
-}
-
-/** Why *Add tag* is refused: there is no tag to file the run under yet. */
-const TAG_EMPTY = "Type the tag to file this run under.";
-
-/** Why *Add note* is refused: an empty note says nothing about the run. */
-const NOTE_EMPTY = "Write the note before adding it.";
-
-/**
- * Frame 9's notes-and-tags card, in the rail: what an operator concluded, beside what the run
- * did.
- *
- * The only thing on this screen that is written rather than read, and the only thing that is
- * not evidence. A note is appended and never edited, because it is what a reviewer thought
- * when they read this run; the tags are replaced as a set, because how a run is filed is a
- * current classification rather than a record of what happened to it (ADR 0036).
- *
- * Both writes answer with everything written on the run, so this component never merges a
- * response into a list of its own — the backend's answer replaces what is on screen.
- */
-function NotesAndTags({
-  shopId,
-  experimentId,
-  annotations,
-  onAnnotated,
-}: {
-  shopId: string;
-  experimentId: string;
-  annotations: ExperimentAnnotationsResponse;
-  onAnnotated: (annotations: ExperimentAnnotationsResponse) => void;
-}) {
-  const [note, setNote] = useState("");
-  const [tag, setTag] = useState("");
-  const tagReasonId = useId();
-  const noteReasonId = useId();
-  const tagEmpty = pythonStrip(tag) === "";
-  const noteEmpty = pythonStrip(note) === "";
-  // Each form's refusal is a hint until the operator types in it or presses its action, and
-  // again once an add has emptied it (ADR 0078).
-  const tagTouch = useRefusalTouch();
-  const noteTouch = useRefusalTouch();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // One writer for both operations: whichever one ran, the answer is the whole annotation,
-  // and a failure leaves what the operator typed in the box rather than swallowing it.
-  const write = async (
-    change: () => Promise<ExperimentAnnotationsResponse>,
-    unavailable: string,
-    clear: () => void,
-  ) => {
-    setBusy(true);
-    setError(null);
-    try {
-      onAnnotated(await change());
-      clear();
-    } catch (cause: unknown) {
-      setError(describeApiError(cause, unavailable));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submitNote = (event: FormEvent) => {
-    event.preventDefault();
-    // The button refuses an empty note itself (ADR 0063), and holds while a write is in flight
-    // (ADR 0065); a submission that arrives some other way is refused here too, rather than
-    // sent for the lab to refuse or sent twice.
-    if (noteEmpty || busy) {
-      return;
-    }
-    void write(
-      () => addExperimentNote(shopId, experimentId, { body: pythonStrip(note) }),
-      "This note could not be saved.",
-      () => {
-        setNote("");
-        noteTouch.reset();
-      },
-    );
-  };
-
-  // `clear` is the caller's, because only the caller knows whether the box it would empty is
-  // the one this write came from: adding consumes what was typed, and removing a chip must
-  // leave a half-typed tag beside it alone.
-  const file = (tags: string[], clear: () => void) =>
-    write(
-      () => setExperimentTags(shopId, experimentId, { tags }),
-      "These tags could not be saved.",
-      clear,
-    );
-
-  const submitTag = (event: FormEvent) => {
-    event.preventDefault();
-    // As the note's: an empty tag and a second write while one is in flight go nowhere.
-    if (tagEmpty || busy) {
-      return;
-    }
-    // The whole set every time, because that is what the contract takes: the backend folds
-    // what was typed, so a tag already on the run comes back as the one chip it always was.
-    void file([...annotations.tags, pythonStrip(tag)], () => {
-      setTag("");
-      tagTouch.reset();
-    });
-  };
-
-  return (
-    <Card
-      title="Notes & tags"
-      footer={
-        <p className="text-xs text-admin-muted">
-          What a reviewer concluded, stored beside the record rather than in it.
-        </p>
-      }
-    >
-      {error ? (
-        <p role="alert" className="text-[13px] text-lab-error">
-          {error}
-        </p>
-      ) : null}
-
-      <div className="flex flex-wrap items-center gap-2">
-        {annotations.tags.length === 0 ? (
-          <p className="text-[13px] text-admin-muted">Not filed under any tag yet.</p>
-        ) : (
-          annotations.tags.map((entry) => (
-            <span
-              key={entry}
-              className="inline-flex items-center gap-1.5 rounded-full border border-admin-border px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink"
-            >
-              {entry}
-              <button
-                type="button"
-                aria-label={`Remove tag ${entry}`}
-                disabled={busy}
-                className="text-admin-muted hover:text-lab-error"
-                onClick={() =>
-                  void file(
-                    annotations.tags.filter((kept) => kept !== entry),
-                    () => {},
-                  )
-                }
-              >
-                ×
-              </button>
-            </span>
-          ))
-        )}
-        <form
-          className="flex flex-wrap items-center gap-2"
-          onSubmit={submitTag}
-          {...tagTouch.watch}
-        >
-          <label className="sr-only" htmlFor="experiment-tag">
-            Add a tag
-          </label>
-          <input
-            id="experiment-tag"
-            // `h-8` used to shrink this to the small button beside it; the shared control is a
-            // 44px floor now (UI-7) and a fixed height under a floor is dead code, so it is
-            // gone rather than left to read as a metric this field still has. The width is the
-            // prototype's for the tag input (`Workspace.dc.html`:2650): the rest of the row at a
-            // 130px floor, so it sits beside Add tag rather than above it (ADR 0069).
-            className={`${fieldControlClasses} w-auto min-w-[130px] flex-1`}
-            placeholder="read-check-gap"
-            value={tag}
-            onChange={(event) => setTag(event.target.value)}
-          />
-          {/* The form's one submit, so a primary action refused with its reason (ADR 0063) —
-              at the outline weight *Add note* wears, which is also the height of the field. */}
-          <PrimaryAction
-            variant="outline"
-            type="submit"
-            refusal={tagEmpty ? { id: tagReasonId, reason: TAG_EMPTY } : null}
-            busy={busy}
-          >
-            <ButtonIcon verb="create" />
-            Add tag
-          </PrimaryAction>
-          {tagEmpty ? (
-            <RefusalLine id={tagReasonId} touched={tagTouch.touched} className="w-full">
-              {TAG_EMPTY}
-            </RefusalLine>
-          ) : null}
-        </form>
-      </div>
-
-      {annotations.notes.length > 0 ? (
-        <ul className="grid gap-2 border-t border-admin-border pt-3">
-          {annotations.notes.map((entry) => (
-            <li key={entry.note_id} className="grid gap-0.5">
-              <p className="text-[13px] text-admin-ink">{entry.body}</p>
-              <p className="text-xs text-admin-muted">{formatTimestamp(entry.created_at)}</p>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      <form className={addFormClasses} onSubmit={submitNote} {...noteTouch.watch}>
-        <label className="sr-only" htmlFor="experiment-note">
-          Add a note
-        </label>
-        <textarea
-          maxLength={NOTE_MAX_LENGTH}
-          id="experiment-note"
-          className={`${textAreaClasses} w-full`}
-          placeholder="What this run showed, in your own words…"
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-        />
-        <div className="grid justify-items-start gap-1.5">
-          <PrimaryAction
-            variant="outline"
-            type="submit"
-            refusal={noteEmpty ? { id: noteReasonId, reason: NOTE_EMPTY } : null}
-            busy={busy}
-          >
-            <ButtonIcon verb="create" />
-            Add note
-          </PrimaryAction>
-          {noteEmpty ? (
-            <RefusalLine id={noteReasonId} touched={noteTouch.touched}>
-              {NOTE_EMPTY}
-            </RefusalLine>
-          ) : null}
-        </div>
-      </form>
-    </Card>
   );
 }
 

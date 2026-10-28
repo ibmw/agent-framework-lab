@@ -193,6 +193,40 @@ export function SheetSection({
   tour?: string;
 }) {
   const narrow = useNarrowViewport();
+  return (
+    <SheetCard id={id} title={title} note={note} tour={tour}>
+      <SheetContext.Provider value={{ arms, narrow, labelHeader }}>
+        {grouped ? (
+          children
+        ) : (
+          <SheetTable label={title}>
+            <SheetBody>{children}</SheetBody>
+          </SheetTable>
+        )}
+        {after}
+      </SheetContext.Provider>
+    </SheetCard>
+  );
+}
+
+/**
+ * A section's card without its rows: the title, the note and the `id` a chip jumps to, around
+ * whatever the section holds. `SheetSection` draws its rows in it; *Notes*, which is a composer
+ * and a list rather than facts per arm, draws them directly.
+ */
+export function SheetCard({
+  id,
+  title,
+  note,
+  tour,
+  children,
+}: {
+  id: string;
+  title: string;
+  note?: ReactNode;
+  tour?: string;
+  children: ReactNode;
+}) {
   const titleId = useId();
   return (
     // Focusable from script alone, so a chip's jump moves the reader's place to it; ringed as every
@@ -210,16 +244,7 @@ export function SheetSection({
         </h2>
         {note ? <p className={sheetNoteClasses}>{note}</p> : null}
       </div>
-      <SheetContext.Provider value={{ arms, narrow, labelHeader }}>
-        {grouped ? (
-          children
-        ) : (
-          <SheetTable label={title}>
-            <SheetBody>{children}</SheetBody>
-          </SheetTable>
-        )}
-        {after}
-      </SheetContext.Provider>
+      {children}
     </section>
   );
 }

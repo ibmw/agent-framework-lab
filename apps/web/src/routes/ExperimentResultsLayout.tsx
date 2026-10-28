@@ -24,6 +24,7 @@ import {
 import { ActionStatus } from "../components/ActionStatus";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { BusyButton, PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { RunTags } from "../components/RunTags";
 import { PageHeader } from "../components/WorkspaceChrome";
 import {
   type ActionStatusRow,
@@ -33,8 +34,14 @@ import {
   derivationReport,
   derivedRows,
 } from "../lib/actionStatus";
+import type { Annotate } from "../lib/annotate";
 import { armsInOrder } from "../lib/comparison";
-import { configurationChip, describeArmStanding, MISSED_REQUIREMENT } from "../lib/evidence";
+import {
+  configurationChip,
+  describeArmStanding,
+  MISSED_REQUIREMENT,
+  OUTCOMES,
+} from "../lib/evidence";
 import { unreachableArmsNote } from "../lib/modelConnections";
 import { useRefusalTouch } from "../lib/refusalTouch";
 import { sheetArmsOf } from "../lib/sheet";
@@ -44,7 +51,13 @@ import {
   fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
+  notesCountClasses,
   outlineButtonClasses,
+  resultsBackLinkClasses,
+  resultsHeaderRowsClasses,
+  runFactClasses,
+  runFactLinkClasses,
+  runFactListClasses,
   sheetArmLetterClasses,
   sheetCellArmClasses,
   sheetColumns,
@@ -54,7 +67,7 @@ import {
 import { frameworkName, labelNamesFramework, useFrameworkLabels } from "../lib/useFrameworkLabels";
 import { pinKey, publishedNameOf, usePinnedVersions } from "../lib/usePinnedVersions";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
-import { definitionPath } from "../lib/versionLinks";
+import { definitionPath, versionPath } from "../lib/versionLinks";
 import { useNarrowViewport } from "../lib/viewport";
 
 const UNAVAILABLE = "This experiment's results are unavailable.";
@@ -79,8 +92,10 @@ export interface ExperimentResults {
   annotations: ExperimentAnnotationsResponse;
   /** Replace the evaluation after a scoring pass answered with the whole of it. */
   onEvaluated: (evaluation: ExperimentEvaluationResponse) => void;
-  /** Replace the annotation after a write answered with the whole of it. */
-  onAnnotated: (annotations: ExperimentAnnotationsResponse) => void;
+  /** Write on this run: a note on General, the tags in the header (`Annotate`). */
+  annotate: Annotate;
+  /** A note or a tag write is in flight, from the header or from General. */
+  annotating: boolean;
 }
 
 /**
@@ -121,6 +136,10 @@ export function ExperimentResultsLayout() {
     [],
   );
   const [forking, setForking] = useState(false);
+  // One annotation write at a time, whether a note from General or the tags from the header: each
+  // answers with the whole annotation, and two in flight could answer out of order, the later
+  // answer drawing the run without what the earlier one wrote.
+  const [annotating, setAnnotating] = useState(false);
   const navigate = useNavigate();
   // Replay and Fork both run their arms before they answer, so an arm naming a provider this
   // lab cannot reach is refused there with 422 — said here first, as setup's Start says it
@@ -210,6 +229,25 @@ export function ExperimentResultsLayout() {
     [shopId, experimentId, answered],
   );
 
+  const annotate = useCallback<Annotate>(
+    async (change) => {
+      const sourceId = experimentId;
+      setAnnotating(true);
+      try {
+        const answer = await change();
+        // An answer about a run the operator has since left is not drawn over the one they are on.
+        if (here.current !== sourceId) {
+          return false;
+        }
+        setAnnotations(answer);
+        return true;
+      } finally {
+        setAnnotating(false);
+      }
+    },
+    [experimentId],
+  );
+
   const load = useCallback(
     async (signal?: AbortSignal) => {
       // Together, for the reason the bench reads them together: what an arm did and how it
@@ -294,15 +332,42 @@ export function ExperimentResultsLayout() {
     evaluation,
     annotations,
     onEvaluated: setEvaluation,
-    onAnnotated: setAnnotations,
+    annotate,
+    annotating,
   };
+
+  const resultsPath = `/lab/bench/${shopId}/${experimentId}/results`;
+  const completed = experiment.runs.every((run) => run.standing.awaiting === "completed");
+  const scenarioPath = versionPath(
+    "scenario",
+    experiment.scenario_id,
+    experiment.scenario_version,
+    shopId,
+  );
 
   return (
     <>
       <PageHeader
         title={experiment.label}
+        lead={
+          <Link className={resultsBackLinkClasses} to={`/lab/bench/${shopId}/${experimentId}`}>
+            <span aria-hidden>← </span>
+            Back to the live bench
+          </Link>
+        }
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* To the last section of General from any tab, where the router lands it as a chip's
+                jump. Named with its count, so a run with notes on it says so from every tab: the
+                label spells the count's separator, which the drawn badge only implies. */}
+            <Link
+              className={outlineButtonClasses}
+              to={{ pathname: resultsPath, hash: "notes" }}
+              aria-label={`Notes · ${annotations.notes.length}`}
+            >
+              Notes
+              <span className={notesCountClasses}>{annotations.notes.length}</span>
+            </Link>
             <BusyButton
               className={outlineButtonClasses}
               type="button"
@@ -344,17 +409,40 @@ export function ExperimentResultsLayout() {
             </button>
           </div>
         }
-        description={
-          <>
-            <Link
-              className="font-semibold text-lab-ink"
-              to={`/lab/bench/${shopId}/${experimentId}`}
-            >
-              Back to the live bench
-            </Link>{" "}
-            · {describeStanding(experiment)} · scenario v{experiment.scenario_version} · seed{" "}
-            {experiment.seed} · started {formatTimestamp(experiment.created_at)}
-          </>
+        below={
+          <div className={resultsHeaderRowsClasses}>
+            <ul aria-label="About this run" className={runFactListClasses}>
+              <li className={runFactClasses[completed ? "completed" : "open"]}>
+                <span aria-hidden>{completed ? OUTCOMES.met.mark : OUTCOMES.pending.mark}</span>
+                {describeStanding(experiment)}
+              </li>
+              <li className={runFactClasses.fact}>
+                {/* The chip's words are the link's, so it is heard once as what it opens. */}
+                {scenarioPath === null ? (
+                  `Scenario v${experiment.scenario_version}`
+                ) : (
+                  <Link className={runFactLinkClasses} to={scenarioPath}>
+                    Scenario v{experiment.scenario_version}
+                  </Link>
+                )}
+              </li>
+              <li className={runFactClasses.fact}>
+                Seed <span className="font-mono">{experiment.seed}</span>
+              </li>
+              <li className={runFactClasses.fact}>
+                Started {formatTimestamp(experiment.created_at)}
+              </li>
+            </ul>
+            {/* Keyed by the run, so a form opened on one run is not left open over the next. */}
+            <RunTags
+              key={experimentId}
+              shopId={shopId}
+              experimentId={experimentId}
+              tags={annotations.tags}
+              annotate={annotate}
+              annotating={annotating}
+            />
+          </div>
         }
       />
 
@@ -876,9 +964,9 @@ function ArmSummary({
 function describeStanding(experiment: ExperimentResponse): string {
   const completed = experiment.runs.filter((run) => run.standing.awaiting === "completed").length;
   if (completed === experiment.runs.length) {
-    return "every arm completed";
+    return "Every arm completed";
   }
   return completed === 0
-    ? "still running"
+    ? "Still running"
     : `${completed} of ${experiment.runs.length} arms completed`;
 }

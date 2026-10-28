@@ -771,15 +771,22 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(fields.getByRole("row", { name: /^fulfilment\.status unfulfilled / })).toBeVisible();
 
   // And what the operator concluded, written beside the evidence rather than into it: the
-  // shelf this run is filed on and the sentence explaining why.
-  const written = card(page, "Notes & tags");
-  await written.getByLabel("Add a tag").fill("Read check gap");
-  await written.getByRole("button", { name: "Add tag" }).click();
+  // shelf this run is filed on, in the header, and the sentence explaining why, in Notes, the
+  // sheet's last section (ADR 0080).
+  const filed = page.getByRole("group", { name: "Filed under" });
+  await filed.getByRole("button", { name: "Tag", exact: true }).click();
+  await filed.getByLabel("Add a tag").fill("Read check gap");
+  await filed.getByRole("button", { name: "Add tag" }).click();
   // Folded to one spelling, because it is what history narrows by.
-  await expect(written.getByRole("button", { name: "Remove tag read-check-gap" })).toBeVisible();
+  await expect(filed.getByRole("button", { name: "Remove tag read-check-gap" })).toBeVisible();
+  await filed.getByLabel("Add a tag").press("Escape");
+  await expect(filed.getByRole("button", { name: "Tag", exact: true })).toBeFocused();
+  const written = card(page, "Notes");
   await written.getByLabel("Add a note").fill(`Beacon never opened the policy ${unique}.`);
   await written.getByRole("button", { name: "Add note" }).click();
   await expect(written.getByText(`Beacon never opened the policy ${unique}.`)).toBeVisible();
+  // Counted in the header, which reaches the note from any tab.
+  await expect(page.getByRole("link", { name: "Notes · 1" })).toBeVisible();
 
   // And the turn only one arm heard is what makes everything after it two conversations: said
   // in Outcome, above the evidence, with what each arm heard in its own column.
@@ -983,7 +990,11 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(forkPanel).toHaveCount(0);
   // The provenance names the run it came from and the one dimension it moved, which is what
   // makes "the thing it changed is the only thing that changed" a claim anyone can check.
-  await expect(page.getByText("· changed prompt")).toBeVisible();
+  await expect(
+    card(page, "Provenance")
+      .getByRole("row", { name: /^Derived from/ })
+      .getByText("changed prompt", { exact: true }),
+  ).toBeVisible();
   // And it holds everything else still: the same starting state, and the same script, so the
   // arms end where the source's did rather than where a different conversation would.
   await expect(

@@ -477,9 +477,10 @@ export function ExperimentBenchPage() {
               </p>
             }
           >
-            {/* The results' rail reads the same body, so the two describe one run alike; a run
-                in progress is not what a reviewer reads, so nothing here is a link (ADR 0068). */}
-            <RunProvenance experiment={experiment} shopId={shopId} linked={false} />
+            {/* The results' Provenance section groups the same pins through the same helper, so
+                the two describe one run alike; a run in progress is not what a reviewer reads,
+                so nothing here is a link (ADR 0068). */}
+            <RunProvenance experiment={experiment} />
           </Card>
 
           <Objectives

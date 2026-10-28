@@ -8,6 +8,12 @@ keeps the arm, its configuration chip, its count and its standing; the figures a
 zero still in the error ink. *An arm's card carries four figures* below is the record of what
 the card drew until then.
 
+Amendment: 2026-10-28 — ADR 0080 draws the results' provenance as a sheet section. Each pinned
+version is a link that is its row's value rather than a chip — the scenario and its fixtures in
+one row, the blocks by their published names in another, each arm's versions in its column — and
+it opens the same address this record gives it. The live bench's card still draws the chips,
+none of them a link.
+
 The results screen names every version a run pinned: each arm's agent configuration, the
 scenario, and the sandbox inputs (the shop, the ticket, the customer, the support identity, the
 blocks). None of those names led anywhere. The prototype draws each arm's card under the

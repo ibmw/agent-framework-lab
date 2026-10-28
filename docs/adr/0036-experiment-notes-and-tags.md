@@ -4,7 +4,9 @@ Status: accepted — 2026-09-05
 
 Amendment: 2026-10-28 — ADR 0080 places what an operator writes on the results: the tags in the
 header under *Filed under*, and the notes as the sheet's last section, the composer first.
-Nothing this record decides about storing, folding or writing them changes.
+Nothing this record decides about storing, folding or writing them changes. The two forms now
+sit apart, so the results' layout sends the writes: one at a time for both, and an answer about
+a run the operator has since left is not drawn over the run they are on.
 
 Delivers the notes-and-tags quarter of `docs/PLAN.md` Milestone 5's seventh outcome, which
 that outcome splits from traces, replay, and fork provenance by name. Records the annotation

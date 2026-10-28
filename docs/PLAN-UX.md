@@ -88,9 +88,8 @@ Milestones 8, 9, 10, 11, 12 and 13 are delivered. Their record is the commits an
 `docs/history/PLAN-UX-2026-09-28.md`, `docs/history/PLAN-UX-2026-09-29.md`,
 `docs/history/PLAN-UX-2026-10-02.md`, `docs/history/PLAN-UX-2026-10-22.md` and
 `docs/history/PLAN-UX-2026-10-27.md`. Milestone 14 is open. Its slices land in the order they
-are numbered, because each reads the page the one before it left: until Slice 61 the General tab
-holds the sheet's sections and the cards not yet converted, in one column and in the sheet's
-order.
+are numbered, because each reads the page the one before it left: General is the whole sheet, and
+the depth tabs keep their cards until Slice 62 converts them.
 
 ## Milestone 14 — The results are one sheet, arm beside arm
 
@@ -131,7 +130,7 @@ The plan's decisions, where the operator's left a point open:
 - **At a phone's width the rows stack** (below 48rem, ADR 0079): a row's label on a line, then
   each arm's cell under a line naming its arm. No strip there; Traces' one-line strip stays, cut
   with an ellipsis.
-- **Fork stays the panel under the header** (`ExperimentResultsLayout.tsx:443–609`), not the
+- **Fork stays the panel under the header** (`ExperimentResultsLayout.tsx:535–701`), not the
   sheet mockup's dialog, and offers no one-arm fork.
 - **The tabs stay links** in `nav[aria-label="Results views"]`, not a `tablist`.
 - **Accessible names stay** where a spec or the tour reaches them — "Arm A summary", "Back to the
@@ -140,62 +139,9 @@ The plan's decisions, where the operator's left a point open:
   sheet mockup draws others. A card that becomes a section takes the section's name.
 
 No slice touches the backend or a contract. The covered journeys are `experiment-start.spec.ts`
-(the results from :650 to :842, from History's *Open results* at :921 to :1017, and the
-deciding-call journey at :1025–1120), `tour-anchors.spec.ts` (the results tour,
-`lib/tours.ts:316–376`) and `sticky-header.spec.ts` (:686–691).
-
-### Slice 61 — The record on the sheet: provenance, notes, and tags in the header
-
-- [ ] **Provenance** replaces the rail's card (`ExperimentResultsPage.tsx:153–170`): spanning
-  rows — *Derived from* when `derived_from` is set (the source's link, and what it changed on a
-  line of its own; `components/RunProvenance.tsx:77–92`, :157–169), *Starting state* and
-  *Inputs* each with a copy button named for its fingerprint that says it copied in a polite
-  status, *Participant*, *Scenario and fixtures* (the scenario and every other pin that is not a
-  block, each a link, ADR 0068), *Blocks* (each by its published name, `usePinnedBlockNames`,
-  with its kind) — then *Each arm's versions* in the arm columns. It carries
-  `data-tour="results-provenance"` (`lib/tours.ts:359`). The bench's `RunProvenance` card is
-  unchanged, and both read one helper for the pin groups.
-- [ ] **Notes**, the last section, id `notes`: the composer first ("Add a note", *Add note*,
-  ADR 0078's touch), then each note's body over its time (`ExperimentResultsPage.tsx:435–443`).
-  The *Notes & tags* card (:269–477) goes, its footer (:357–361) the section's note, as
-  Provenance's footer (:161–166) is Provenance's.
-- [ ] The header: the way back above the title, still "Back to the live bench"; the run's facts
-  (`ExperimentResultsLayout.tsx:345–356`) as a list named "About this run" — the standing with
-  its glyph, the scenario's version as a link, the seed, when it started (`formatTimestamp`);
-  then *Filed under*, each tag with its remove ("Remove tag {tag}") and *+ Tag*, which opens the
-  tag form in place ("Add a tag", *Add tag*, its refusal as today,
-  `ExperimentResultsPage.tsx:396–432`) and folds it on *Cancel* or Escape, focus returned to
-  *+ Tag*; a failed tag write is said in the header.
-- [ ] *Notes · N* among the header's actions, before Replay, a link to `#notes` on General from
-  every tab, named with its count.
-- [ ] The line on Replay and Fork (`ExperimentResultsLayout.tsx:361–364`), the reach line
-  (:366–370), the derivation queue (:372–387) and the Fork panel (:395–404) are unchanged,
-  under the header. The inventory's H4 for C — one line, the long-action note only while one
-  runs — is what they already draw: the line is one, and `ActionStatus` draws its note only
-  while the derivation runs (`components/ActionStatus.tsx:83`).
-- [ ] The tour's last two steps (`lib/tours.ts:359–374`) anchor on Provenance and Notes, and say
-  that tags are in the header.
-
-Frames: sheet mockup :41–81 and :195–239; `Workspace.dc.html:2561–2575` and :2639–2653.
-
-Authority: ADR 0034, ADR 0036, ADR 0038, ADR 0039, ADR 0063, ADR 0065, ADR 0068, ADR 0078,
-ADR 0080.
-
-Departures to record: `docs/design-direction.md`'s row *The results' rail* (closed: provenance
-and notes are sections, tags in the header); the sheet mockup's Fork dialog, "Remove the tag",
-"New tag" and "New note", each kept as the codebase has it (rule 5, and the decisions above).
-
-Branch: `feat/results-sheet-record`. Checks: Vitest — `Experiments.test.tsx` (Provenance's rows,
-a derived run's source and change, a copy writing the fingerprint and saying so, the composer
-before the notes, the tags in the header with *+ Tag*, *Cancel* and Escape, a removal leaving a
-half-typed tag alone, a refusal muted then red, the *Notes · N* count and target from another
-tab); `WorkspaceChrome.test.tsx` if `PageHeader` gains a slot; `tours.test.ts`. `make check`,
-`pnpm build`; `pnpm test:e2e` for `experiment-start.spec.ts` (:775–782, :984–986),
-`tour-anchors.spec.ts` and `sticky-header.spec.ts` (:686–691: the taller header still scrolls
-away).
-
-Slice evidence: the seeded run's header, Provenance and Notes at 1440 and 390, and a forked run's
-*Derived from* row.
+(the results from :650 to :849, from History's *Open results* at :928 to :1028, and the
+deciding-call journey at :1036–1131), `tour-anchors.spec.ts` (the results tour,
+`lib/tours.ts:316–376`) and `sticky-header.spec.ts` (:736–782).
 
 ### Slice 62 — The depth tabs under the strip
 
@@ -213,7 +159,7 @@ Slice evidence: the seeded run's header, Provenance and Notes at 1440 and 390, a
   disclosure at the foot that stays the region "Executed project code" — a `section` carrying
   the name, with the `summary` and its count of functions inside — so
   `card(page, "Executed project code")` still resolves; the list inside it is as today, and the
-  journey opens it before it reads the list's items (`experiment-start.spec.ts:818–824`). The
+  journey opens it before it reads the list's items (`experiment-start.spec.ts:825–831`). The
   *Arms* card (:147–166) goes.
 - [ ] **Traces** (`ExperimentTracesPage.tsx:105–171`): the attempts as a list on the left,
   buttons with `aria-pressed` naming the arm, the turn and the attempt, in the group still named
@@ -243,8 +189,8 @@ and each arm's calls and reply in its column, a message one arm never received, 
 spanning row and lanes, the folded code and its count, a followed event landing, the traces'
 list, the waterfall's bars at their offsets, the span region and the one-line strip, no *Arms*
 card on either tab); `tours.test.ts`. `make check`, `pnpm build`; `pnpm test:e2e` for
-`experiment-start.spec.ts` (:798–842, the executed code opened before it is read),
-`sticky-header.spec.ts` (:688–691) and `tour-anchors.spec.ts`.
+`experiment-start.spec.ts` (:805–849, the executed code opened before it is read),
+`sticky-header.spec.ts` (:736–782) and `tour-anchors.spec.ts`.
 
 Slice evidence: the seeded run's three depth tabs at 1440 and 390, scrolled with the strip pinned.
 

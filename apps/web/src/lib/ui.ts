@@ -1051,6 +1051,115 @@ export const sheetArmLetterClasses =
 export const sheetSectionChipClasses = `rounded-full border border-admin-border bg-admin-surface px-3 py-1.5 text-[12.5px] font-semibold text-admin-ink-soft no-underline hover:text-admin-ink ${focusRingClasses}`;
 
 /**
+ * *Provenance* (sheet mockup :195–222): a pinned version as a link that is the cell's value, at
+ * the cell's size, rather than the bench's chip.
+ */
+export const sheetValueLinkClasses = `rounded font-semibold text-lab-primary underline underline-offset-[3px] hover:text-lab-primary-hover ${focusRingClasses}`;
+
+/** The scenario and its fixtures: links side by side, wrapping (sheet mockup :214). */
+export const sheetLinkRowClasses = "flex flex-wrap gap-x-4 gap-y-1.5";
+
+/** The blocks, and each arm's versions: a link a line (sheet mockup :218, :222). */
+export const sheetLinkListClasses = "grid justify-items-start gap-2";
+
+/** What a pin is, beside a block's published name: "objective block". */
+export const sheetLinkKindClasses = "ml-2 text-[12.5px] font-normal text-admin-muted";
+
+/** A fingerprint and its copy press on one line, the press's status after them. */
+export const sheetFingerprintRowClasses = "flex flex-wrap items-center gap-2.5";
+
+/** What a copy said, politely, beside its press. */
+export const sheetCopyStatusClasses = "text-[12.5px] text-admin-muted";
+
+/** A value written in the record's own lower case, read as a sentence: "Human operator". */
+export const sheetSentenceClasses = "first-letter:uppercase";
+
+/**
+ * What a derived run changed, on a line of its own under its source: muted for one dimension,
+ * the draft ink for several, which no difference from the source can be attributed to.
+ */
+export const sheetDerivedChangeClasses: Readonly<Record<"one" | "several", string>> = {
+  one: "text-[13px] text-admin-ink-soft first-letter:uppercase",
+  several: "text-[13px] font-semibold text-admin-draft-ink first-letter:uppercase",
+};
+
+/**
+ * *Notes* (sheet mockup :226–238): the composer and the list held to a reading width, each note
+ * a bordered card with its time under its body.
+ */
+export const sheetNotesBodyClasses = "border-t border-admin-border/60 px-5 py-[18px]";
+
+/** The composer and the notes inside it, held to the mockup's 760px reading width. */
+export const sheetNotesColumnClasses = "grid max-w-[760px] gap-4";
+
+export const sheetNoteFormClasses = "grid gap-2.5";
+
+export const sheetNoteLabelClasses = "text-[13.5px] font-semibold text-admin-ink";
+
+export const sheetNoteListClasses = "grid gap-3";
+
+export const sheetNoteItemClasses =
+  "grid gap-2.5 rounded-[10px] border border-admin-border/60 bg-admin-canvas/40 px-[18px] py-4";
+
+export const sheetNoteBodyClasses = "text-[14px] leading-[1.65] whitespace-pre-line text-admin-ink";
+
+export const sheetNoteTimeClasses = "text-xs text-admin-muted";
+
+/**
+ * The results header's rows under the title (sheet mockup :41–81): the way back above the title,
+ * the run's facts as chips, and *Filed under*, each row 14px from the next.
+ */
+export const resultsBackLinkClasses = `w-fit rounded text-[13px] font-semibold text-admin-muted no-underline hover:text-admin-ink ${focusRingClasses}`;
+
+export const resultsHeaderRowsClasses = "mt-2 grid gap-3";
+
+/** "About this run": the run's facts, one chip each. */
+export const runFactListClasses = "flex flex-wrap items-center gap-2";
+
+const runFactBaseClasses =
+  "inline-flex items-center gap-1.5 rounded-full px-[11px] py-1 text-[12.5px]";
+
+/** A fact chip: the standing on its ground, the rest bordered and neutral. */
+export const runFactClasses: Readonly<Record<"completed" | "open" | "fact", string>> = {
+  completed: `${runFactBaseClasses} bg-admin-published font-semibold text-admin-published-ink`,
+  open: `${runFactBaseClasses} bg-admin-border font-semibold text-admin-ink-soft`,
+  fact: `${runFactBaseClasses} border border-admin-border bg-admin-surface py-[3px] text-admin-ink-soft`,
+};
+
+/** A link inside a fact chip: the scenario's version. */
+export const runFactLinkClasses = `rounded font-semibold text-lab-primary underline underline-offset-2 hover:text-lab-primary-hover ${focusRingClasses}`;
+
+/** *Filed under*: its word, each tag with its remove, and *+ Tag* or the form it opens. */
+export const tagRowClasses = "flex flex-wrap items-center gap-2";
+
+export const tagRowLabelClasses = "mr-0.5 text-xs font-semibold text-admin-muted";
+
+/** What *Filed under* says while the run is filed under nothing. */
+export const tagRowEmptyClasses = "text-xs text-admin-muted";
+
+export const tagChipClasses =
+  "inline-flex items-center gap-0.5 rounded-lg bg-admin-border py-px pr-0.5 pl-2.5 text-[12.5px] font-semibold text-admin-ink-soft";
+
+/**
+ * A tag's remove: the error ink on hover only while it can be pressed, since a remove held while a
+ * write is out (`aria-disabled`, `BusyButton`) promises nothing.
+ */
+export const tagRemoveClasses = `inline-flex h-[26px] w-[26px] items-center justify-center rounded-md text-[14px] text-admin-muted not-aria-disabled:hover:text-lab-error aria-disabled:cursor-not-allowed aria-disabled:opacity-55 ${focusRingClasses}`;
+
+/** *+ Tag*: dashed, so it reads as a place a tag can go rather than as a tag. */
+export const tagAddClasses = `inline-flex min-h-[30px] items-center gap-1 rounded-lg border border-dashed border-admin-quiet-border px-2.5 text-[12.5px] font-semibold text-admin-ink-soft hover:bg-admin-canvas ${focusRingClasses}`;
+
+/** The tag form, opened in place of *+ Tag*. */
+export const tagFormClasses = "flex flex-wrap items-center gap-2";
+
+/** *Cancel*, beside *Add tag*: a quiet word, not a second action of weight. */
+export const tagCancelClasses = `rounded px-1 text-[12.5px] text-admin-muted underline underline-offset-2 hover:text-admin-ink ${focusRingClasses}`;
+
+/** *Notes · N*'s count, on the neutral ground (sheet mockup :46). */
+export const notesCountClasses =
+  "rounded-full bg-admin-border px-2 py-0.5 text-xs font-semibold text-admin-muted tabular-nums";
+
+/**
  * What a filter chip's glyph may mean.
  *
  * A second closed vocabulary beside `ButtonVerb`, and deliberately not an extension of it: a

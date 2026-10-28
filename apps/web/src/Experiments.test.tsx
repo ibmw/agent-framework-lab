@@ -4097,6 +4097,69 @@ describe("live bench", () => {
     expect(within(provenance).queryAllByRole("link")).toEqual([]);
   });
 
+  it("names each pin on the bench as a chip: an arm's configuration and a block by its name", async () => {
+    const BLOCK = "e3000000-0000-4000-8000-000000000001";
+    const IDENTITY = "e3000000-0000-4000-8000-000000000002";
+    const pinned = (definition_type: string, definition_id: string) => ({
+      definition_type,
+      definition_id,
+      version: 1,
+      content_fingerprint: "9".repeat(64),
+    });
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
+        const record = experiment(turns, agentTurns, toolEvents, mutationEvents);
+        return HttpResponse.json({
+          ...record,
+          sandbox_inputs: [
+            ...record.sandbox_inputs,
+            pinned("shop", SHOP_ID),
+            pinned("objective_block", BLOCK),
+          ],
+          arm_inputs: [
+            [pinned("agent_configuration", ATLAS_ID), pinned("support_identity", IDENTITY)],
+            [pinned("agent_configuration", BEACON_ID)],
+          ],
+        } satisfies ExperimentResponse);
+      }),
+      http.get(`*/api/v1/objective-blocks/${BLOCK}/versions/1`, () =>
+        HttpResponse.json({
+          block_id: BLOCK,
+          lifecycle_state: "published",
+          version: 1,
+          content_fingerprint: "9".repeat(64),
+          published_at: "2026-08-28T09:00:00+00:00",
+          content: {
+            name: "bench-read-document",
+            statement: "",
+            description: "",
+            parameters: [],
+          },
+        }),
+      ),
+    );
+    renderBench();
+
+    const provenance = await screen.findByRole("region", { name: "Provenance" });
+    const run = within(provenance).getByRole("list", { name: "What this run pinned" });
+    expect(await within(run).findByText("Objective block · bench-read-document v1")).toBeVisible();
+    expect(
+      within(run)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["scenario v1", "Shop v1", "Objective block · bench-read-document v1"]);
+    const armA = within(provenance).getByRole("list", { name: "What Arm A pinned" });
+    // The arm's configuration as its chip names it, by the configuration's name.
+    expect(
+      within(armA)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Atlas v1", "Support identity v1"]);
+    const armB = within(provenance).getByRole("list", { name: "What Arm B pinned" });
+    expect(within(armB).getByText("Beacon v1")).toBeVisible();
+    expect(within(provenance).queryAllByRole("link")).toEqual([]);
+  });
+
   it("names a derived run's source on the bench without linking it", async () => {
     renderApp(`/lab/bench/${SHOP_ID}/${FORK_ID}`);
 
@@ -5501,7 +5564,7 @@ describe("experiment results", () => {
     renderResults();
 
     const provenance = await screen.findByRole("region", { name: "Provenance" });
-    const strip = within(provenance).getByRole("link", { name: "scenario v1" });
+    const strip = within(provenance).getByRole("link", { name: "Scenario v1" });
 
     expect(strip).toHaveAttribute("href", `/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
     expect(within(provenance).getByRole("link", { name: "Shop v3" })).toHaveAttribute(
@@ -7389,14 +7452,95 @@ describe("traces", () => {
   });
 });
 
+/** The results header, which holds the tags the run is filed under (ADR 0080). */
+async function resultsHeader(): Promise<HTMLElement> {
+  const title = await screen.findByRole("heading", { level: 1 });
+  return title.closest("header") as HTMLElement;
+}
+
+/** *Filed under*, the header's row of tags. */
+async function filedUnder() {
+  return within(await screen.findByRole("group", { name: "Filed under" }));
+}
+
+/** Opens the tag form in place of *+ Tag*, and answers the row it opened in. */
+async function openTagForm(user: ReturnType<typeof userEvent.setup>) {
+  const row = await filedUnder();
+  await user.click(row.getByRole("button", { name: "Tag" }));
+  return row;
+}
+
+/** *Notes*, the sheet's last section. */
+async function notesSection() {
+  return within(await screen.findByRole("region", { name: "Notes" }));
+}
+
 describe("notes and tags", () => {
-  it("says a run has nothing written on it rather than showing an empty strip", async () => {
+  it("files the run under nothing and holds no note, saying so in the header", async () => {
     renderResults();
 
-    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+    const row = await filedUnder();
+    expect(row.getByText("no tag yet")).toBeVisible();
+    expect(row.queryByRole("button", { name: /^Remove tag/ })).toBeNull();
+    // The form is folded behind + Tag until the operator opens it.
+    expect(row.queryByLabelText("Add a tag")).toBeNull();
+    const notes = await notesSection();
+    expect(notes.queryByRole("list", { name: "Notes on this run" })).toBeNull();
+  });
 
-    expect(within(strip).getByText("Not filed under any tag yet.")).toBeVisible();
-    expect(within(strip).queryByRole("listitem")).toBeNull();
+  it("draws the tags in the header, under the run's facts, each with its remove", async () => {
+    annotations = { notes: [], tags: ["read-check-gap", "two-arm"] };
+    renderResults();
+
+    const header = await resultsHeader();
+    const group = await screen.findByRole("group", { name: "Filed under" });
+    expect(header).toContainElement(group);
+    const facts = within(header).getByRole("list", { name: "About this run" });
+    expect(facts.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    for (const tag of ["read-check-gap", "two-arm"]) {
+      expect(within(group).getByText(tag)).toBeVisible();
+      expect(within(group).getByRole("button", { name: `Remove tag ${tag}` })).toBeVisible();
+    }
+    // Nothing of the tags is left in Notes, and the old card is gone.
+    expect(within(screen.getByRole("region", { name: "Notes" })).queryByText("two-arm")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Notes & tags" })).toBeNull();
+  });
+
+  it("opens the tag form in place of + Tag, and folds it on Cancel with focus back on + Tag", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    const row = await openTagForm(user);
+
+    // Opened in place, focus in the field it opened.
+    const field = row.getByLabelText("Add a tag");
+    expect(field).toHaveFocus();
+    expect(row.queryByRole("button", { name: "Tag" })).toBeNull();
+    await user.type(field, "half");
+
+    await user.click(row.getByRole("button", { name: "Cancel" }));
+
+    expect(row.queryByLabelText("Add a tag")).toBeNull();
+    expect(row.getByRole("button", { name: "Tag" })).toHaveFocus();
+    expect(filed).toEqual([]);
+    // Folded, what was typed went with it, and the refusal is a hint again on the next attempt.
+    await user.click(row.getByRole("button", { name: "Tag" }));
+    expect(row.getByLabelText("Add a tag")).toHaveValue("");
+    expectRefusalWeight(row.getByRole("button", { name: "Add tag" }), "hint");
+  });
+
+  it("folds the tag form on Escape, focus back on + Tag", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    const row = await openTagForm(user);
+    await user.type(row.getByLabelText("Add a tag"), "half");
+
+    await user.keyboard("{Escape}");
+
+    expect(row.queryByLabelText("Add a tag")).toBeNull();
+    expect(row.getByRole("button", { name: "Tag" })).toHaveFocus();
+    expect(filed).toEqual([]);
   });
 
   it("refuses an empty tag and an empty note with a reason, and sends neither", async () => {
@@ -7409,15 +7553,16 @@ describe("notes and tags", () => {
       }),
     );
     renderResults();
-    const strip = within(await screen.findByRole("region", { name: "Notes & tags" }));
+    const row = await openTagForm(user);
+    const notes = await notesSection();
 
-    const addTag = strip.getByRole("button", { name: "Add tag" });
+    const addTag = row.getByRole("button", { name: "Add tag" });
     expectRefused(addTag, "Type the tag to file this run under.");
     await user.click(addTag);
-    await user.type(strip.getByLabelText("Add a tag"), "   {Enter}");
+    await user.type(row.getByLabelText("Add a tag"), "   {Enter}");
     expectRefused(addTag, "Type the tag to file this run under.");
 
-    const addNote = strip.getByRole("button", { name: "Add note" });
+    const addNote = notes.getByRole("button", { name: "Add note" });
     expectRefused(addNote, "Write the note before adding it.");
     await user.click(addNote);
     addNote.focus();
@@ -7429,25 +7574,27 @@ describe("notes and tags", () => {
     expect(filed).toEqual([]);
     expect(notesPosted).toBe(0);
 
-    await user.type(strip.getByLabelText("Add a tag"), "gap");
+    await user.type(row.getByLabelText("Add a tag"), "gap");
     expectNotRefused(addTag);
-    await user.type(strip.getByLabelText("Add a note"), "Something.");
+    await user.type(notes.getByLabelText("Add a note"), "Something.");
     expectNotRefused(addNote);
   });
 
   it("says an empty tag and an empty note as hints until their form is touched (ADR 0078)", async () => {
     const user = userEvent.setup();
     renderResults();
-    const strip = within(await screen.findByRole("region", { name: "Notes & tags" }));
-    const addTag = strip.getByRole("button", { name: "Add tag" });
-    const addNote = strip.getByRole("button", { name: "Add note" });
+    const row = await openTagForm(user);
+    const notes = await notesSection();
+    const addTag = row.getByRole("button", { name: "Add tag" });
+    const addNote = notes.getByRole("button", { name: "Add note" });
+    // Opening the form is not an attempt that failed: its refusal is muted until it is touched.
     expectRefusalWeight(addTag, "hint");
     expectRefusalWeight(addNote, "hint");
     const tagBefore = refusalFacts(addTag);
     const noteBefore = refusalFacts(addNote);
 
     // Typed into, and still empty once stripped: the tag's line turns, the note's does not.
-    await user.type(strip.getByLabelText("Add a tag"), "   ");
+    await user.type(row.getByLabelText("Add a tag"), "   ");
     expectRefusalWeight(addTag, "touched");
     expectRefusalWeight(addNote, "hint");
     expect(refusalFacts(addTag)).toEqual(tagBefore);
@@ -7462,15 +7609,18 @@ describe("notes and tags", () => {
   it("says the tag's refusal as a hint again once a tag was added and the box emptied", async () => {
     const user = userEvent.setup();
     renderResults();
-    const strip = within(await screen.findByRole("region", { name: "Notes & tags" }));
-    const addTag = strip.getByRole("button", { name: "Add tag" });
+    const row = await openTagForm(user);
+    const addTag = row.getByRole("button", { name: "Add tag" });
     await user.click(addTag);
     expectRefusalWeight(addTag, "touched");
 
-    await user.type(strip.getByLabelText("Add a tag"), "gap{Enter}");
+    await user.type(row.getByLabelText("Add a tag"), "gap{Enter}");
     await waitFor(() => expect(filed).toHaveLength(1));
     await waitFor(() => expectRefused(addTag, "Type the tag to file this run under."));
     expectRefusalWeight(addTag, "hint");
+    // The form stays open for the next tag, with the one just added beside it.
+    expect(row.getByLabelText("Add a tag")).toHaveValue("");
+    expect(row.getByRole("button", { name: "Remove tag gap" })).toBeVisible();
   });
 
   it("sends one note for a press made again while the first is in flight", async () => {
@@ -7486,9 +7636,9 @@ describe("notes and tags", () => {
       }),
     );
     renderResults();
-    const strip = await screen.findByRole("region", { name: "Notes & tags" });
-    await user.type(within(strip).getByLabelText("Add a note"), "Once only.");
-    const add = within(strip).getByRole("button", { name: "Add note" });
+    const section = await notesSection();
+    await user.type(section.getByLabelText("Add a note"), "Once only.");
+    const add = section.getByRole("button", { name: "Add note" });
     await user.click(add);
     await waitFor(() => expect(notes).toBe(1));
 
@@ -7499,7 +7649,7 @@ describe("notes and tags", () => {
     expect(notes).toBe(1);
 
     answer();
-    expect(await within(strip).findByText("Once only.")).toBeVisible();
+    expect(await section.findByText("Once only.")).toBeVisible();
     expect(notes).toBe(1);
   });
 
@@ -7516,9 +7666,9 @@ describe("notes and tags", () => {
       }),
     );
     renderResults();
-    const strip = await screen.findByRole("region", { name: "Notes & tags" });
-    await user.type(within(strip).getByLabelText("Add a tag"), "two-arm");
-    const add = within(strip).getByRole("button", { name: "Add tag" });
+    const row = await openTagForm(user);
+    await user.type(row.getByLabelText("Add a tag"), "two-arm");
+    const add = row.getByRole("button", { name: "Add tag" });
     await user.click(add);
     await waitFor(() => expect(writes).toBe(1));
 
@@ -7530,76 +7680,301 @@ describe("notes and tags", () => {
     expect(writes).toBe(1);
 
     answer();
-    expect(await within(strip).findByText("two-arm")).toBeVisible();
+    expect(await row.findByText("two-arm")).toBeVisible();
     expect(writes).toBe(1);
+  });
+
+  it("holds a note while a tag write is in flight, so the two answers cannot cross", async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => {};
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/tags`, async () => {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return HttpResponse.json({ ...annotations, tags: ["two-arm"] });
+      }),
+    );
+    renderResults();
+    const row = await openTagForm(user);
+    const notes = await notesSection();
+    await user.type(notes.getByLabelText("Add a note"), "Later.");
+    await user.type(row.getByLabelText("Add a tag"), "two-arm{Enter}");
+
+    await waitFor(() => expectBusy(notes.getByRole("button", { name: "Add note" })));
+
+    answer();
+    await waitFor(() => expectNotRefused(notes.getByRole("button", { name: "Add note" })));
+  });
+
+  it("puts the composer before the notes, each note's body over its time", async () => {
+    annotations = {
+      notes: [
+        { note_id: "n-1", body: "Beacon acts first.", created_at: "2026-09-05T18:20:00+00:00" },
+        { note_id: "n-2", body: "Atlas reads first.", created_at: "2026-09-05T18:25:00+00:00" },
+      ],
+      tags: [],
+    };
+    renderResults();
+    const section = await screen.findByRole("region", { name: "Notes" });
+
+    const composer = within(section).getByLabelText("Add a note");
+    const list = within(section).getByRole("list", { name: "Notes on this run" });
+    expect(composer.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    const items = within(list).getAllByRole("listitem");
+    expect(items.map((item) => item.firstElementChild?.textContent)).toEqual([
+      "Beacon acts first.",
+      "Atlas reads first.",
+    ]);
+    for (const item of items) {
+      const [body, time] = [...item.children];
+      expect(time?.textContent).not.toBe("");
+      expect(body?.compareDocumentPosition(time as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    }
+    // The last section of the sheet, which its chip and the header's Notes reach.
+    expect(section).toHaveAttribute("id", "notes");
+    expect(section).toHaveAttribute("data-tour", "results-notes");
+    const sections = within(screen.getByRole("navigation", { name: "Sections" })).getAllByRole(
+      "link",
+    );
+    expect(sections.at(-1)).toHaveAttribute("href", expect.stringMatching(/#notes$/));
   });
 
   it("keeps a note as written and answers with everything on the run", async () => {
     const user = userEvent.setup();
     renderResults();
-    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+    const section = await notesSection();
 
-    await user.type(
-      within(strip).getByLabelText("Add a note"),
-      "Beacon acts before reading the policy.",
-    );
-    await user.click(within(strip).getByRole("button", { name: "Add note" }));
+    await user.type(section.getByLabelText("Add a note"), "Beacon acts before reading the policy.");
+    await user.click(section.getByRole("button", { name: "Add note" }));
 
-    expect(await within(strip).findByText("Beacon acts before reading the policy.")).toBeVisible();
+    expect(await section.findByText("Beacon acts before reading the policy.")).toBeVisible();
     // The box empties only because the write was accepted, so nothing typed is ever lost.
-    expect(within(strip).getByLabelText("Add a note")).toHaveValue("");
+    expect(section.getByLabelText("Add a note")).toHaveValue("");
   });
 
   it("files the run by sending the whole tag set, never one tag at a time", async () => {
     const user = userEvent.setup();
     renderResults();
-    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+    const row = await openTagForm(user);
 
-    await user.type(within(strip).getByLabelText("Add a tag"), "read-check-gap");
-    await user.click(within(strip).getByRole("button", { name: "Add tag" }));
-    await within(strip).findByText("read-check-gap");
-    await user.type(within(strip).getByLabelText("Add a tag"), "two-arm");
-    await user.click(within(strip).getByRole("button", { name: "Add tag" }));
-    await within(strip).findByText("two-arm");
+    await user.type(row.getByLabelText("Add a tag"), "read-check-gap");
+    await user.click(row.getByRole("button", { name: "Add tag" }));
+    await row.findByText("read-check-gap");
+    await user.type(row.getByLabelText("Add a tag"), "two-arm");
+    await user.click(row.getByRole("button", { name: "Add tag" }));
+    await row.findByText("two-arm");
 
     expect(filed).toEqual([["read-check-gap"], ["read-check-gap", "two-arm"]]);
+  });
+
+  it("keeps a keyboard reader's place through a tag removal, on + Tag once the chip is gone", async () => {
+    const user = userEvent.setup();
+    annotations = { notes: [], tags: ["read-check-gap", "two-arm"] };
+    let answer: () => void = () => {};
+    let writes = 0;
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/tags`, async () => {
+        writes += 1;
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return HttpResponse.json({ notes: [], tags: ["read-check-gap"] });
+      }),
+    );
+    renderResults();
+    const row = await filedUnder();
+    const remove = row.getByRole("button", { name: "Remove tag two-arm" });
+    remove.focus();
+    await user.keyboard("{Enter}");
+
+    // Held, not disabled, while the write is out: the press keeps focus, and a second goes nowhere.
+    await waitFor(() => expect(remove).toHaveAttribute("aria-disabled", "true"));
+    expect(remove).not.toBeDisabled();
+    expect(remove).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(row.getByRole("button", { name: "Remove tag read-check-gap" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(writes).toBe(1);
+
+    answer();
+
+    await waitFor(() => expect(row.queryByText("two-arm")).toBeNull());
+    expect(row.getByRole("button", { name: "Tag" })).toHaveFocus();
+    expect(row.getByText("read-check-gap")).toBeVisible();
+  });
+
+  it("moves focus into the field when the form was opened while a removal was out", async () => {
+    const user = userEvent.setup();
+    annotations = { notes: [], tags: ["two-arm"] };
+    let answer: () => void = () => {};
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/tags`, async () => {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return HttpResponse.json({ notes: [], tags: [] });
+      }),
+    );
+    renderResults();
+    const row = await filedUnder();
+    const remove = row.getByRole("button", { name: "Remove tag two-arm" });
+    remove.focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(remove).toHaveAttribute("aria-disabled", "true"));
+
+    // By keyboard, with the write still out: on to + Tag, open the form, and back onto the remove.
+    await user.tab();
+    expect(row.getByRole("button", { name: "Tag" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    const field = row.getByLabelText("Add a tag");
+    expect(field).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(remove).toHaveFocus();
+
+    answer();
+
+    // The form is what is drawn when the answer lands, so focus goes into its field.
+    await waitFor(() => expect(row.queryByText("two-arm")).toBeNull());
+    await waitFor(() => expect(field).toHaveFocus());
+  });
+
+  it("holds the tags' removes while a note is being written, without taking focus from them", async () => {
+    const user = userEvent.setup();
+    annotations = { notes: [], tags: ["two-arm"] };
+    let answer: () => void = () => {};
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/notes`, async () => {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return HttpResponse.json(annotations, { status: 201 });
+      }),
+    );
+    renderResults();
+    const notes = await notesSection();
+    const row = await filedUnder();
+    await user.type(notes.getByLabelText("Add a note"), "Held.");
+    await user.click(notes.getByRole("button", { name: "Add note" }));
+    const remove = row.getByRole("button", { name: "Remove tag two-arm" });
+    await waitFor(() => expect(remove).toHaveAttribute("aria-disabled", "true"));
+
+    remove.focus();
+    await user.keyboard("{Enter}");
+    expect(remove).toHaveFocus();
+    expect(filed).toEqual([]);
+
+    answer();
+    await waitFor(() => expect(remove).not.toHaveAttribute("aria-disabled"));
+  });
+
+  it("returns to the emptied field after Add tag is pressed, for the next tag", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    const row = await openTagForm(user);
+    await user.type(row.getByLabelText("Add a tag"), "gap");
+
+    await user.click(row.getByRole("button", { name: "Add tag" }));
+
+    await row.findByRole("button", { name: "Remove tag gap" });
+    const field = row.getByLabelText("Add a tag");
+    expect(field).toHaveValue("");
+    await waitFor(() => expect(field).toHaveFocus());
+  });
+
+  it("drops a tag write's failure with the attempt it was about, on Cancel and on Escape", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/tags`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "the tag store is unavailable", request_id: "r-6" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderResults();
+    const header = await resultsHeader();
+
+    for (const fold of ["Cancel", "Escape"] as const) {
+      const row = await openTagForm(user);
+      await user.type(row.getByLabelText("Add a tag"), "gap{Enter}");
+      expect(await within(header).findByRole("alert")).toHaveTextContent(
+        "the tag store is unavailable",
+      );
+
+      if (fold === "Cancel") {
+        await user.click(row.getByRole("button", { name: "Cancel" }));
+      } else {
+        await user.keyboard("{Escape}");
+      }
+
+      expect(within(header).queryByRole("alert"), fold).toBeNull();
+    }
   });
 
   it("removes a tag by sending the set without it", async () => {
     const user = userEvent.setup();
     annotations = { notes: [], tags: ["read-check-gap", "two-arm"] };
     renderResults();
-    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+    const row = await filedUnder();
 
-    await user.click(within(strip).getByRole("button", { name: "Remove tag two-arm" }));
+    await user.click(row.getByRole("button", { name: "Remove tag two-arm" }));
 
     await waitFor(() => expect(filed).toEqual([["read-check-gap"]]));
-    expect(within(strip).queryByText("two-arm")).toBeNull();
+    expect(row.queryByText("two-arm")).toBeNull();
   });
 
   it("shows the tag as the backend folded it rather than as it was typed", async () => {
     const user = userEvent.setup();
     renderResults();
-    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+    const row = await openTagForm(user);
 
-    await user.type(within(strip).getByLabelText("Add a tag"), "Read-Check-Gap");
-    await user.click(within(strip).getByRole("button", { name: "Add tag" }));
+    await user.type(row.getByLabelText("Add a tag"), "Read-Check-Gap");
+    await user.click(row.getByRole("button", { name: "Add tag" }));
 
-    expect(await within(strip).findByText("read-check-gap")).toBeVisible();
+    expect(await row.findByText("read-check-gap")).toBeVisible();
   });
 
   it("leaves a half-typed tag alone when a chip beside it is removed", async () => {
     const user = userEvent.setup();
     annotations = { notes: [], tags: ["two-arm"] };
     renderResults();
-    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+    const row = await openTagForm(user);
 
-    await user.type(within(strip).getByLabelText("Add a tag"), "read-check");
-    await user.click(within(strip).getByRole("button", { name: "Remove tag two-arm" }));
+    await user.type(row.getByLabelText("Add a tag"), "read-check");
+    await user.click(row.getByRole("button", { name: "Remove tag two-arm" }));
 
     await waitFor(() => expect(filed).toEqual([[]]));
     // Removing a chip is not what consumed the box, so what was typed is still there.
-    expect(within(strip).getByLabelText("Add a tag")).toHaveValue("read-check");
+    expect(row.getByLabelText("Add a tag")).toHaveValue("read-check");
+  });
+
+  it("says why the tags could not be saved in the header, and keeps what was typed", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/tags`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "the tag store is unavailable", request_id: "r-5" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderResults();
+    const row = await openTagForm(user);
+
+    await user.type(row.getByLabelText("Add a tag"), "gap{Enter}");
+
+    const header = await resultsHeader();
+    expect(await within(header).findByRole("alert")).toHaveTextContent(
+      "the tag store is unavailable",
+    );
+    expect(row.getByLabelText("Add a tag")).toHaveValue("gap");
+    // Said where the write was made, and nowhere else.
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
 
   it("says why a note could not be saved and keeps what was typed", async () => {
@@ -7617,15 +7992,126 @@ describe("notes and tags", () => {
       ),
     );
     renderResults();
-    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+    const section = await notesSection();
 
-    await user.type(within(strip).getByLabelText("Add a note"), "Worth rerunning.");
-    await user.click(within(strip).getByRole("button", { name: "Add note" }));
+    await user.type(section.getByLabelText("Add a note"), "Worth rerunning.");
+    await user.click(section.getByRole("button", { name: "Add note" }));
 
-    expect(await within(strip).findByRole("alert")).toHaveTextContent(
+    expect(await section.findByRole("alert")).toHaveTextContent(
       "the annotation store is unavailable",
     );
-    expect(within(strip).getByLabelText("Add a note")).toHaveValue("Worth rerunning.");
+    expect(section.getByLabelText("Add a note")).toHaveValue("Worth rerunning.");
+  });
+
+  it("draws no answer about a run the operator has left over the run they are on", async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => {};
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/experiments/${FORK_ID}/tags`, async () => {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return HttpResponse.json({ notes: [], tags: ["fork-only"] });
+      }),
+    );
+    renderApp(`/lab/bench/${SHOP_ID}/${FORK_ID}/results`);
+    const row = await openTagForm(user);
+    await user.type(row.getByLabelText("Add a tag"), "fork-only{Enter}");
+
+    // Away to the run it was forked from while the write is still out.
+    const derived = await screen.findByRole("row", { name: /^Derived from/ });
+    await user.click(within(derived).getByRole("link"));
+    await screen.findByRole("heading", { level: 1, name: "Wrong address — framework comparison" });
+    // The source run's form opens on an empty box, and its Add tag is held while the fork's
+    // write is still out: one write at a time, whichever run it was sent from.
+    const source = await openTagForm(user);
+    expect(source.getByLabelText("Add a tag")).toHaveValue("");
+    await user.type(source.getByLabelText("Add a tag"), "x");
+    const add = source.getByRole("button", { name: "Add tag" });
+    expectBusy(add);
+
+    answer();
+
+    // Released once the answer is in, so it has been read; and it was not drawn here.
+    await waitFor(() => expectNotRefused(add));
+    expect(source.queryByText("fork-only")).toBeNull();
+    expect(screen.getByRole("link", { name: "Notes · 0" })).toBeVisible();
+  });
+});
+
+describe("the results header", () => {
+  it("reads the way back above the title, then the actions, the run's facts and the tags", async () => {
+    renderResults();
+
+    const header = await resultsHeader();
+    const back = within(header).getByRole("link", { name: "Back to the live bench" });
+    expect(back).toHaveAttribute("href", `/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}`);
+    const inOrder = [
+      back,
+      within(header).getByRole("heading", { level: 1 }),
+      within(header).getByRole("link", { name: "Notes · 0" }),
+      within(header).getByRole("button", { name: "Replay" }),
+      within(header).getByRole("button", { name: "Fork…" }),
+      within(header).getByRole("list", { name: "About this run" }),
+      within(header).getByRole("group", { name: "Filed under" }),
+    ];
+    for (const [before, after] of inOrder.slice(0, -1).map((el, i) => [el, inOrder[i + 1]])) {
+      expect(before.compareDocumentPosition(after as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    }
+  });
+
+  it("lists the run's facts as chips: the standing with its glyph, the scenario, the seed, the start", async () => {
+    renderResults();
+
+    const facts = within(await screen.findByRole("list", { name: "About this run" })).getAllByRole(
+      "listitem",
+    );
+    expect(facts.map((fact) => fact.textContent)).toEqual([
+      expect.stringMatching(/^.(Every arm completed|Still running|\d of \d arms completed)$/),
+      "Scenario v1",
+      expect.stringMatching(/^Seed \d+$/),
+      expect.stringMatching(/^Started /),
+    ]);
+    // The glyph says the standing beside the words, never instead of them.
+    expect(facts[0]?.querySelector("[aria-hidden]")).not.toBeNull();
+    const scenario = within(facts[1] as HTMLElement).getByRole("link", { name: "Scenario v1" });
+    expect(scenario).toHaveAttribute("href", `/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    // The chip's words are the link's own, so nothing in it is heard twice.
+    expect(scenario.textContent).toBe(facts[1]?.textContent);
+    expect(scenario).not.toHaveAttribute("aria-label");
+  });
+
+  it("names Notes with its count and lands on the notes from another tab", async () => {
+    const user = userEvent.setup();
+    annotations = {
+      notes: [
+        { note_id: "n-1", body: "Beacon acts first.", created_at: "2026-09-05T18:20:00+00:00" },
+        { note_id: "n-2", body: "Atlas reads first.", created_at: "2026-09-05T18:25:00+00:00" },
+      ],
+      tags: [],
+    };
+    renderTimeline();
+
+    const notes = await screen.findByRole("link", { name: "Notes · 2" });
+    expect(notes).toHaveAttribute("href", `/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results#notes`);
+    await user.click(notes);
+
+    const section = await screen.findByRole("region", { name: "Notes" });
+    await waitFor(() => expect(section).toHaveFocus());
+    expect(screen.getByRole("link", { name: "General" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("counts a note added on General in the header's Notes", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    const section = await notesSection();
+
+    await user.type(section.getByLabelText("Add a note"), "Counted.");
+    await user.click(section.getByRole("button", { name: "Add note" }));
+
+    expect(await screen.findByRole("link", { name: "Notes · 1" })).toBeVisible();
   });
 });
 
@@ -7761,7 +8247,9 @@ describe("replay", () => {
       name: "Wrong address — framework comparison",
     });
     expect(back).toHaveAttribute("href", `/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results`);
-    expect(await screen.findByText(/fork of/)).toHaveTextContent("changed prompt");
+    expect(await screen.findByRole("row", { name: /^Derived from/ })).toHaveTextContent(
+      "changed prompt",
+    );
   });
 
   it("warns on the derived screen when a fork left its own arms differing two ways", async () => {
@@ -8210,10 +8698,14 @@ describe("what the arms differed on, in Configuration and Outcome", () => {
     expect(within(card).getByText("5 variables are the same for both arms")).toBeVisible();
     const confounded = "2 differences — no behavior here can be attributed to any one of them.";
     expect(within(attribution()).getByText(confounded)).toBeVisible();
-    // The strip under the header keeps the pins and no longer says what differs.
+    // Provenance keeps the pins and does not say what differs.
     expect(screen.getAllByText(confounded)).toHaveLength(1);
     expect(screen.queryByText(/ differs$/)).toBeNull();
-    expect(screen.getByText("scenario v1")).toBeVisible();
+    expect(
+      within(screen.getByRole("region", { name: "Provenance" })).getByRole("link", {
+        name: "Scenario v1",
+      }),
+    ).toBeVisible();
   });
 
   it("says nothing can be attributed when no dimension differs", async () => {
@@ -8504,15 +8996,15 @@ describe("the results as one sheet", () => {
       expect(target, chip.textContent ?? "").not.toBeNull();
       return target as HTMLElement;
     });
-    // Each chip lands on what it names, the cards not yet drawn as sections included.
+    // Each chip lands on the section it names.
     const [outcome, objectives, state, configuration, usage, provenance, notes] = targets;
     expect(outcome).toBe(screen.getByRole("region", { name: "Outcome" }));
     expect(objectives).toBe(screen.getByRole("region", { name: "Objectives" }));
     expect(state).toBe(screen.getByRole("region", { name: "Business state" }));
     expect(configuration).toBe(screen.getByRole("region", { name: "Configuration" }));
     expect(usage).toBe(screen.getByRole("region", { name: "Usage" }));
-    expect(provenance).toContainElement(screen.getByRole("region", { name: "Provenance" }));
-    expect(notes).toContainElement(screen.getByRole("region", { name: "Notes & tags" }));
+    expect(provenance).toBe(screen.getByRole("region", { name: "Provenance" }));
+    expect(notes).toBe(screen.getByRole("region", { name: "Notes" }));
     // One column, top to bottom in that order: no rail beside the evidence.
     for (const [before, after] of targets
       .slice(0, -1)
@@ -8713,46 +9205,119 @@ describe("the record on the General tab", () => {
     };
   }
 
-  it("names each pinned block by its own name, beside the record's fingerprints and each arm's inputs", async () => {
-    serveSeededPins();
+  it("reads Provenance as rows: the fingerprints, the participant, the scenario and fixtures, the blocks, then each arm's versions", async () => {
+    serveSeededPins({
+      sandbox_inputs: [
+        ...experiment([]).sandbox_inputs,
+        pin("shop", SHOP_ID, 3),
+        pin("mutation_block", MUTATION),
+        ...Object.keys(BLOCKS).map((id) => pin("objective_block", id)),
+      ],
+    });
     renderResults();
 
     const provenance = await screen.findByRole("region", { name: "Provenance" });
-    const pinned = within(provenance).getByRole("list", { name: "What this run pinned" });
-    // Three objective blocks at v1 are three blocks, each by the name its version was published
-    // under, and each still opens what it pinned.
-    for (const [id, name] of Object.entries(BLOCKS)) {
-      expect(
-        await within(pinned).findByRole("link", { name: `Objective block · ${name} v1` }),
-      ).toHaveAttribute("href", `/lab/objective-blocks/${id}`);
-    }
+    const rows = within(provenance)
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => row.querySelector("th")?.textContent);
+    expect(rows).toEqual([
+      "Starting state",
+      "Inputs",
+      "Participant",
+      "Scenario and fixtures",
+      "Blocks",
+      "Each arm's versions",
+    ]);
+    // Each arm's cell is heard under its arm's column header, so the two arms' links of one name
+    // are told apart by their column.
     expect(
-      within(pinned).getByRole("link", { name: "Mutation block · concurrent-entity-mutation v1" }),
-    ).toHaveAttribute("href", `/lab/mutation-blocks/${MUTATION}`);
-    expect(within(provenance).queryByText("Objective block v1")).toBeNull();
-    expect(within(pinned).getByRole("link", { name: "scenario v1" })).toBeVisible();
+      within(provenance)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent),
+    ).toEqual(["Fact", "Arm A", "Arm B"]);
+    // The run's own facts span the arms; each arm's versions are in its column.
+    expect(within(sheetRow(provenance, "Starting state")).getAllByRole("cell")).toHaveLength(1);
+    expect(within(sheetRow(provenance, "Each arm's versions")).getAllByRole("cell")).toHaveLength(
+      2,
+    );
 
     // The starting state, the fingerprint of everything the run resolved, and who drove it.
-    expect(within(provenance).getByTitle(SANDBOX_FINGERPRINT)).toBeVisible();
-    expect(within(provenance).getByTitle(RESOLUTION_FINGERPRINT)).toBeVisible();
-    expect(within(provenance).getByText("human operator")).toBeVisible();
+    expect(
+      within(sheetRow(provenance, "Starting state")).getByTitle(SANDBOX_FINGERPRINT),
+    ).toBeVisible();
+    expect(within(sheetRow(provenance, "Inputs")).getByTitle(RESOLUTION_FINGERPRINT)).toBeVisible();
+    expect(within(sheetRow(provenance, "Participant")).getByText("human operator")).toBeVisible();
 
-    // Each arm's own inputs, under the arm: its configuration by name, and its identity.
-    const armA = within(provenance).getByRole("list", { name: "What Arm A pinned" });
-    expect(within(armA).getByRole("link", { name: "Atlas v1" })).toHaveAttribute(
+    // The scenario once, then every other pin that is not a block, each opening what it pinned.
+    const fixtures = sheetRow(provenance, "Scenario and fixtures");
+    expect(
+      within(fixtures)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Scenario v1", "Shop v3"]);
+    expect(within(fixtures).queryByText(/block/i)).toBeNull();
+
+    // Three objective blocks at v1 are three blocks, each by the name its version was published
+    // under with its kind beside it, and each still opens what it pinned.
+    const blocks = sheetRow(provenance, "Blocks");
+    for (const [id, name] of Object.entries(BLOCKS)) {
+      const link = await within(blocks).findByRole("link", { name: `${name} v1` });
+      expect(link).toHaveAttribute("href", `/lab/objective-blocks/${id}`);
+      expect(link.parentElement).toHaveTextContent(`${name} v1objective block`);
+    }
+    expect(
+      within(blocks).getByRole("link", { name: "concurrent-entity-mutation v1" }),
+    ).toHaveAttribute("href", `/lab/mutation-blocks/${MUTATION}`);
+    expect(within(provenance).queryByText("Objective block v1")).toBeNull();
+
+    // Each arm's own inputs, in its column: its configuration by name, and its identity.
+    const [armA, armB] = within(sheetRow(provenance, "Each arm's versions")).getAllByRole("cell");
+    expect(within(armA as HTMLElement).getByRole("link", { name: "Atlas v1" })).toHaveAttribute(
       "href",
       `/lab/agent-configurations/${ATLAS_ID}`,
     );
-    expect(within(armA).getByRole("link", { name: "Support identity v1" })).toHaveAttribute(
-      "href",
-      `/lab/support-identities/${IDENTITY}`,
-    );
-    const armB = within(provenance).getByRole("list", { name: "What Arm B pinned" });
-    expect(within(armB).getByRole("link", { name: "Beacon v1" })).toBeVisible();
+    expect(
+      within(armA as HTMLElement).getByRole("link", { name: "Support identity v1" }),
+    ).toHaveAttribute("href", `/lab/support-identities/${IDENTITY}`);
+    expect(within(armB as HTMLElement).getByRole("link", { name: "Beacon v1" })).toBeVisible();
 
     // Its section's place on the sheet, which its chip and the tour reach.
-    expect(document.getElementById("provenance")).toContainElement(provenance);
-    expect(document.querySelector('[data-tour="results-provenance"]')).toContainElement(provenance);
+    expect(provenance).toHaveAttribute("id", "provenance");
+    expect(provenance).toHaveAttribute("data-tour", "results-provenance");
+  });
+
+  it("copies each fingerprint whole from a press named for it, and says so politely", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    const provenance = await screen.findByRole("region", { name: "Provenance" });
+
+    for (const [row, name, value] of [
+      ["Starting state", "starting-state", SANDBOX_FINGERPRINT],
+      ["Inputs", "inputs", RESOLUTION_FINGERPRINT],
+    ] as const) {
+      const cell = within(sheetRow(provenance, row));
+      const status = cell.getByRole("status");
+      expect(status).toHaveTextContent("");
+
+      await user.click(cell.getByRole("button", { name: `Copy the ${name} fingerprint` }));
+
+      // The whole fingerprint, not the twelve characters drawn beside the press.
+      expect(await navigator.clipboard.readText()).toBe(value);
+      expect(status).toHaveTextContent(`Copied the ${name} fingerprint.`);
+    }
+  });
+
+  it("says when the browser refused a copy", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    const provenance = await screen.findByRole("region", { name: "Provenance" });
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValueOnce(new Error("denied"));
+
+    const cell = within(sheetRow(provenance, "Inputs"));
+    await user.click(cell.getByRole("button", { name: "Copy the inputs fingerprint" }));
+
+    expect(await cell.findByRole("status")).toHaveTextContent("This browser refused the copy.");
   });
 
   it("keeps a block it could not read as the type and version the record carries", async () => {
@@ -8779,9 +9344,7 @@ describe("the record on the General tab", () => {
 
     const provenance = await screen.findByRole("region", { name: "Provenance" });
     expect(
-      await within(provenance).findByRole("link", {
-        name: "Mutation block · concurrent-entity-mutation v1",
-      }),
+      await within(provenance).findByRole("link", { name: "concurrent-entity-mutation v1" }),
     ).toBeVisible();
     await waitFor(() =>
       expect(within(provenance).getAllByRole("link", { name: "Objective block v1" })).toHaveLength(
@@ -8790,7 +9353,7 @@ describe("the record on the General tab", () => {
     );
   });
 
-  it("reads each block version once, however often it is pinned and however often the rail returns", async () => {
+  it("reads each block version once, however often it is pinned and however often General returns", async () => {
     const once = "d2000000-0000-4000-8000-000000000001";
     const reads: string[] = [];
     serveSeededPins({
@@ -8808,45 +9371,74 @@ describe("the record on the General tab", () => {
     renderResults();
 
     const provenance = await screen.findByRole("region", { name: "Provenance" });
-    expect(
-      await within(provenance).findAllByRole("link", { name: "Objective block · read-once v1" }),
-    ).toHaveLength(3);
+    expect(await within(provenance).findAllByRole("link", { name: "read-once v1" })).toHaveLength(
+      3,
+    );
     expect(reads).toEqual([once]);
 
-    // Away to another tab and back: the rail mounts again, and the immutable version is not
+    // Away to another tab and back: the section mounts again, and the immutable version is not
     // asked a second time.
     await user.click(screen.getByRole("link", { name: "Execution timeline" }));
     await waitFor(() => expect(screen.queryByRole("region", { name: "Provenance" })).toBeNull());
     await user.click(screen.getByRole("link", { name: "General" }));
     const again = await screen.findByRole("region", { name: "Provenance" });
-    expect(
-      within(again).getAllByRole("link", { name: "Objective block · read-once v1" }),
-    ).toHaveLength(3);
+    expect(within(again).getAllByRole("link", { name: "read-once v1" })).toHaveLength(3);
     expect(reads).toEqual([once]);
   });
 
-  it("links a derived run to the run it came from, in the rail and nowhere else", async () => {
+  it("links a derived run to the run it came from, its change on a line of its own", async () => {
     renderApp(`/lab/bench/${SHOP_ID}/${FORK_ID}/results`);
 
     const provenance = await screen.findByRole("region", { name: "Provenance" });
-    const source = within(provenance).getByRole("link", {
+    const derived = sheetRow(provenance, "Derived from");
+    // First, above the fingerprints.
+    expect(within(provenance).getAllByRole("row")[1]).toBe(derived);
+    const source = within(derived).getByRole("link", {
       name: "Wrong address — framework comparison",
     });
     expect(source).toHaveAttribute("href", `/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results`);
     expect(source.parentElement).toHaveTextContent(
-      "A fork of Wrong address — framework comparison · changed prompt",
+      /^A fork of Wrong address — framework comparison$/,
     );
-    // Said once: the header no longer names the source beside the seed.
+    const change = source.parentElement?.nextElementSibling as HTMLElement;
+    expect(change).toHaveTextContent(/^changed prompt$/);
+    expect(change.className).toContain("first-letter:uppercase");
+    // Said once: the header names no source beside the seed.
     expect(
       screen.getAllByRole("link", { name: "Wrong address — framework comparison" }),
     ).toHaveLength(1);
+  });
+
+  it("says a fork that moved several things cannot attribute a difference to any one of them", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${FORK_ID}`, () => {
+        const record = derivedExperiment();
+        return HttpResponse.json({
+          ...record,
+          derived_from: record.derived_from
+            ? { ...record.derived_from, changed: ["prompt", "model"] }
+            : null,
+        } satisfies ExperimentResponse);
+      }),
+    );
+    renderApp(`/lab/bench/${SHOP_ID}/${FORK_ID}/results`);
+
+    const derived = sheetRow(
+      await screen.findByRole("region", { name: "Provenance" }),
+      "Derived from",
+    );
+    const change = within(derived).getByText(/^changed prompt, model/);
+    expect(change).toHaveTextContent(
+      "changed prompt, model — no difference from that run can be attributed to any one of them",
+    );
+    expect(change.className).toContain("text-admin-draft-ink");
   });
 
   it("names no source for a run nothing was derived from", async () => {
     renderResults();
 
     const provenance = await screen.findByRole("region", { name: "Provenance" });
-    expect(within(provenance).queryByText(/ of /)).toBeNull();
+    expect(within(provenance).queryByRole("row", { name: /^Derived from/ })).toBeNull();
     expect(
       within(provenance)
         .queryAllByRole("link")
@@ -8854,28 +9446,34 @@ describe("the record on the General tab", () => {
     ).toEqual([]);
   });
 
-  it("ends every card on the General tab with one sentence, the rest in the tour", async () => {
+  it("says each section's note in one sentence, the rest in the tour", async () => {
     renderResults();
 
     await screen.findByRole("region", { name: "Provenance" });
-    for (const name of ["Provenance", "Notes & tags"]) {
-      const footer = screen.getByRole("region", { name }).lastElementChild as HTMLElement;
-      const text = (footer.textContent ?? "").trim();
-      expect(text.match(/[.!?](\s|$)/g), `${name}: ${text}`).toHaveLength(1);
-    }
     // A section of the sheet says it in one note under its title, where the card had a footer,
     // and a group of its rows in one note under its heading.
     const notes = [
-      ...["Outcome", "Objectives", "Business state", "Configuration", "Usage"].map(
-        (name) => screen.getByRole("region", { name }).querySelector("h2 + p") as HTMLElement,
-      ),
+      ...[
+        "Outcome",
+        "Objectives",
+        "Business state",
+        "Configuration",
+        "Usage",
+        "Provenance",
+        "Notes",
+      ].map((name) => screen.getByRole("region", { name }).querySelector("h2 + p") as HTMLElement),
       ...screen.getByRole("region", { name: "Objectives" }).querySelectorAll("h3 + p"),
     ];
-    expect(notes).toHaveLength(7);
+    expect(notes).toHaveLength(9);
     for (const note of notes) {
       const text = (note?.textContent ?? "").trim();
       expect(text.match(/[.!?](\s|$)/g), text).toHaveLength(1);
     }
+    // The footers Provenance and Notes & tags had are their sections' notes now.
+    expect(notes[5]).toHaveTextContent(/^Every arm was cloned from one snapshot/);
+    expect(notes[6]).toHaveTextContent(
+      "What a reviewer concluded, stored beside the record rather than in it.",
+    );
 
     // What the footers said and no longer say is still said, by the walk around this screen.
     const tour = TOURS.results.steps.flatMap((step) => step.body).join(" ");
