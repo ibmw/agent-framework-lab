@@ -222,7 +222,10 @@ test("at a phone's width the indexes scroll their tables and a long shop name is
   // History's rows carry their `sr-only` reasons, so the case above is the one the `relative`
   // scroller answers and not a table with nothing absolutely placed in it.
   await page.goto("/lab/history");
-  await expect(page.getByRole("button", { name: "Fork with newer versions" })).toBeVisible();
+  // One row with the button is the case; earlier specs in the run may have left several.
+  await expect(
+    page.getByRole("button", { name: "Fork with newer versions" }).first(),
+  ).toBeVisible();
   expect(await page.locator("table .sr-only").count()).toBeGreaterThan(0);
 
   // A shop whose name is longer than the bar's row: cut, on the bar's first row, and still the
