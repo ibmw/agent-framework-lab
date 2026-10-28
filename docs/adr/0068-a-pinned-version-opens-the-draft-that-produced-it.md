@@ -2,6 +2,12 @@
 
 Status: accepted — 2026-09-27
 
+Amendment: 2026-10-28 — ADR 0080 takes the figures off the arm card. The results' summary row
+keeps the arm, its configuration chip, its count and its standing; the figures are rows of
+*Usage*, read beside the other arm's, with "Tokens, in and out" among them and a retry above
+zero still in the error ink. *An arm's card carries four figures* below is the record of what
+the card drew until then.
+
 The results screen names every version a run pinned: each arm's agent configuration, the
 scenario, and the sandbox inputs (the shop, the ticket, the customer, the support identity, the
 blocks). None of those names led anywhere. The prototype draws each arm's card under the

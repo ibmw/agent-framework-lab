@@ -316,17 +316,18 @@ export const TOURS: Record<TourId, Tour> = {
   results: {
     surface: "the results",
     route: "/lab/bench/:shopId/:experimentId/results",
-    // The four tabs are one surface: the arm cards and the tab row belong to the layout and
-    // are on screen whichever tab is open, so their steps are every tab's. The cards the other
-    // steps light are the General tab's — its evidence and its rail — and those steps say so
-    // with `at`, so a reader on another tab is walked only what is there (ADR 0055, amended).
+    // The four tabs are one surface: the tab row and the arms' summary row under it belong to
+    // the layout and are on screen whichever tab is open, so their steps are every tab's. The
+    // cards the other steps light are the General tab's — its sheet (ADR 0080) — and those
+    // steps say so with `at`, so a reader on another tab is walked only what is there (ADR 0055,
+    // amended).
     alsoAt: ["conversation", "timeline", "traces"],
     steps: [
       {
         anchor: '[data-tour="results-arms"]',
         title: "How to read the results",
         body: [
-          "Three kinds of evidence, deliberately kept apart. Deterministic rows are projected from each [[run|arm]]'s own record, so they report what happened rather than what was claimed. The rows no rule can decide are scored by the published [[judge-configuration|judge]], from an anonymized brief naming no framework, provider or model, and scoring again records a new judge attempt beside the last, and never overwrites a deterministic row. The figures beside them are what the run measured.",
+          "Three kinds of evidence, deliberately kept apart. Deterministic rows are projected from each [[run|arm]]'s own record, so they report what happened rather than what was claimed. The rows no rule can decide are scored by the published [[judge-configuration|judge]], from an anonymized brief naming no framework, provider or model, and scoring again records a new judge attempt beside the last, and never overwrites a deterministic row. The figures in Usage are what the run measured.",
         ],
       },
       {
@@ -359,7 +360,7 @@ export const TOURS: Record<TourId, Tour> = {
         at: [""],
         body: [
           "Everything in this card is something this run froze before it started — the starting state, the fingerprint of every input it resolved, the scenario version and the published inputs behind it, each block by its own name, and what each [[run|arm]] ran. A derived run names the run it came from and what it changed. What the arms differ along is under the evidence: behavior can be attributed to a dimension only while exactly one differs, and with two nothing can say which of them moved the result.",
-          "Who drove the customer matters as much: one send is one composition however many arms it reaches, and two compositions at the same turn are two questions even when the words match — from there the arms are answering different conversations, which the rail's input divergence lists turn by turn.",
+          "Who drove the customer matters as much: one send is one composition however many arms it reaches, and two compositions at the same turn are two questions even when the words match — from there the arms are answering different conversations, which Outcome's input divergence lists turn by turn.",
         ],
       },
       {

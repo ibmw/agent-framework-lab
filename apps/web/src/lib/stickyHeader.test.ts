@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import themeSource from "../styles.css?raw";
-import { clearStickyHeader, STICKY_REPORT_ATTRIBUTE, stickyHeaderClasses } from "./stickyHeader";
+import {
+  clearStickyHeader,
+  clearStickyStrip,
+  STICKY_REPORT_ATTRIBUTE,
+  stickyHeaderClasses,
+} from "./stickyHeader";
 
 function token(name: string): string | undefined {
   return new RegExp(`--color-${name}:\\s*([^;]+);`).exec(themeSource)?.[1]?.trim();
@@ -208,5 +213,70 @@ describe("clearing a pinned header", () => {
     expect(header.dataset.pinned).toBe("false");
     expect(pane.style.scrollPaddingTop).toBe("");
     release?.();
+  });
+});
+
+describe("clearing the results sheet's pinned strip", () => {
+  let observed: ResizeObserverCallback | null = null;
+  const RealResizeObserver = globalThis.ResizeObserver;
+
+  afterEach(() => {
+    globalThis.ResizeObserver = RealResizeObserver;
+    observed = null;
+    document.body.replaceChildren();
+  });
+
+  function mount(height: number) {
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        observed = callback;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {
+        observed = null;
+      }
+    };
+    const pane = document.createElement("main");
+    pane.style.overflowY = "auto";
+    const column = document.createElement("div");
+    const strip = document.createElement("div");
+    let current = height;
+    Object.defineProperty(strip, "offsetHeight", { get: () => current });
+    column.append(strip);
+    pane.append(column);
+    document.body.append(pane);
+    return {
+      pane,
+      strip,
+      resize(next: number) {
+        current = next;
+        observed?.([{ target: strip as Element } as ResizeObserverEntry], {} as ResizeObserver);
+      },
+    };
+  }
+
+  it("keeps what scrolls into view clear of the strip, and follows its height", () => {
+    const { pane, strip, resize } = mount(41);
+
+    const release = clearStickyStrip(strip);
+    // The strip and the focus ring's clearance, on the pane that scrolls.
+    expect(pane.style.scrollPaddingTop).toBe("49px");
+
+    resize(60);
+    expect(pane.style.scrollPaddingTop).toBe("68px");
+
+    release?.();
+    // A tab without the strip is not left with its clearance, nor anything listening.
+    expect(pane.style.scrollPaddingTop).toBe("");
+    expect(observed).toBeNull();
+  });
+
+  it("asks nothing of a page with no pane that scrolls", () => {
+    const strip = document.createElement("div");
+    document.body.append(strip);
+
+    expect(clearStickyStrip(strip)).toBeUndefined();
+    expect(clearStickyStrip(null)).toBeUndefined();
   });
 });

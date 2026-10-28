@@ -2,6 +2,10 @@
 
 Status: accepted — 2026-09-05
 
+Amendment: 2026-10-28 — ADR 0080 places what an operator writes on the results: the tags in the
+header under *Filed under*, and the notes as the sheet's last section, the composer first.
+Nothing this record decides about storing, folding or writing them changes.
+
 Delivers the notes-and-tags quarter of `docs/PLAN.md` Milestone 5's seventh outcome, which
 that outcome splits from traces, replay, and fork provenance by name. Records the annotation
 as a document stored beside the experiment rather than inside it, the fold that gives a tag

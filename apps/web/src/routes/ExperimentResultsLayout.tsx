@@ -33,14 +33,11 @@ import {
   derivationReport,
   derivedRows,
 } from "../lib/actionStatus";
-import {
-  armFigures,
-  configurationChip,
-  describeArmStanding,
-  MISSED_REQUIREMENT,
-} from "../lib/evidence";
+import { armsInOrder } from "../lib/comparison";
+import { configurationChip, describeArmStanding, MISSED_REQUIREMENT } from "../lib/evidence";
 import { unreachableArmsNote } from "../lib/modelConnections";
 import { useRefusalTouch } from "../lib/refusalTouch";
+import { sheetArmsOf } from "../lib/sheet";
 import {
   depthTabRowClasses,
   depthTabStateClasses,
@@ -48,12 +45,17 @@ import {
   fieldLabelClasses,
   formatTimestamp,
   outlineButtonClasses,
+  sheetArmLetterClasses,
+  sheetCellArmClasses,
+  sheetColumns,
+  sheetSectionClasses,
   versionChipClasses,
 } from "../lib/ui";
 import { frameworkName, labelNamesFramework, useFrameworkLabels } from "../lib/useFrameworkLabels";
 import { pinKey, publishedNameOf, usePinnedVersions } from "../lib/usePinnedVersions";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 import { definitionPath } from "../lib/versionLinks";
+import { useNarrowViewport } from "../lib/viewport";
 
 const UNAVAILABLE = "This experiment's results are unavailable.";
 
@@ -84,7 +86,7 @@ export interface ExperimentResults {
 /**
  * The experiment results screen (frame 9), and the persistent frame its depth tabs sit in.
  *
- * The header and the arm summary belong here rather than to any one tab because the frame
+ * The header, the tabs and the arms' summary row belong here rather than to any one tab because the frame
  * says so for a reason: an operator who follows a finding from the evidence overview into
  * the execution timeline is still reading one experiment, and a depth view that reintroduced
  * its own header would let them lose which run they were in.
@@ -124,7 +126,7 @@ export function ExperimentResultsLayout() {
   // lab cannot reach is refused there with 422 — said here first, as setup's Start says it
   // (ADR 0053). Read before the early return below, so the hooks keep their order.
   const unreachable = useUnreachableProviders();
-  // The arm cards name each framework by its label, as History does; read before the early
+  // The summary row names each framework by its label, as History does; read before the early
   // return below for the same reason.
   const frameworkLabels = useFrameworkLabels();
   const replayNoteId = useId();
@@ -403,24 +405,19 @@ export function ExperimentResultsLayout() {
         />
       ) : null}
 
-      <div data-tour="results-arms" className="mb-4 grid gap-3 lg:grid-cols-2">
-        {experiment.runs.map((run) => (
-          <ArmSummary
-            key={run.run_id}
-            shopId={shopId}
-            run={run}
-            framework={frameworkName(frameworkLabels, run.framework_id)}
-            arm={evaluation.arms.find((entry) => entry.run_id === run.run_id) ?? null}
-          />
-        ))}
-      </div>
-
       <nav aria-label="Results views" className={`mb-4 ${depthTabRowClasses}`}>
         <Tab to="." end label="General" />
         <Tab to="conversation" label="Conversation" />
         <Tab to="timeline" label="Execution timeline" />
         <Tab to="traces" label="Traces" />
       </nav>
+
+      <ArmSummaryRow
+        shopId={shopId}
+        runs={armsInOrder(experiment)}
+        evaluation={evaluation}
+        frameworkLabels={frameworkLabels}
+      />
 
       <Outlet context={context} />
     </>
@@ -732,14 +729,66 @@ function Tab({ to, end, label }: { to: string; end?: boolean; label: string }) {
 }
 
 /**
- * One arm at the top of every tab: what ran, where it stands, what it has met, and what it
- * spent (`Workspace.dc.html` :2566).
+ * The arms, once, on the sheet's columns, under the tabs on every tab (ADR 0080; sheet mockup
+ * :90–96): what each ran and where it stands. It scrolls with the page; the strip General pins
+ * is what names the columns once this has gone.
+ *
+ * Its label cell says what the columns are not: added into a winner. The figures an arm spent
+ * are not here but in General's *Usage*, measure by measure beside the other arm's, because a
+ * figure drawn on its arm's own card was read against nothing.
+ */
+function ArmSummaryRow({
+  shopId,
+  runs,
+  evaluation,
+  frameworkLabels,
+}: {
+  shopId: string;
+  /** The arms in their positions' order, the order of every column on the sheet. */
+  runs: ExperimentRunSchema[];
+  evaluation: ExperimentEvaluationResponse;
+  frameworkLabels: ReturnType<typeof useFrameworkLabels>;
+}) {
+  const narrow = useNarrowViewport();
+  const arms = sheetArmsOf(runs);
+  return (
+    <div
+      data-tour="results-arms"
+      className={`mb-4 grid ${sheetSectionClasses}`}
+      style={narrow ? undefined : { gridTemplateColumns: sheetColumns(runs.length) }}
+    >
+      <div className="grid content-center gap-1 px-5 py-4">
+        <span className={sheetCellArmClasses}>Compared arms</span>
+        <span className="text-[12.5px] leading-[1.45] text-admin-muted">
+          Columns are never added into a winner.
+        </span>
+      </div>
+      {runs.map((run, index) => (
+        <ArmSummary
+          key={run.run_id}
+          shopId={shopId}
+          run={run}
+          letter={arms[index].letter}
+          ruled={!narrow}
+          framework={frameworkName(frameworkLabels, run.framework_id)}
+          arm={evaluation.arms.find((entry) => entry.run_id === run.run_id) ?? null}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One arm in the summary row: its name, what it ran, what it has met, and where it stands
+ * (`Workspace.dc.html` :2566, sheet mockup :97–103).
  *
  * The count is the arm's own — met out of the rows something actually decided — and it is
  * deliberately never put beside the other arm's as a verdict. Two arms driven to different
  * depths hold different denominators, and a screen that subtracted one from the other would
  * be reporting the operator's own pacing as a difference between frameworks. For the same
- * reason it is drawn in one ink on both cards, where the frame paints one green and one amber.
+ * reason it is drawn in one ink in every column, where the frame paints one green and one amber,
+ * and the position's letter beside the name is one ink too: it names the column and ranks
+ * nothing, and it is `aria-hidden` because the name it stands beside already says it.
  *
  * The configuration's version is a link to the editor of the draft it was published from
  * (ADR 0068), so a reviewer reading a finished run reaches what the arm ran in one press. It
@@ -750,14 +799,19 @@ function Tab({ to, end, label }: { to: string; end?: boolean; label: string }) {
 function ArmSummary({
   shopId,
   run,
+  letter,
+  ruled,
   framework,
   arm,
 }: {
   shopId: string;
   run: ExperimentRunSchema;
+  letter: string;
+  /** Ruled from the column before it, where the arms stand side by side. */
+  ruled: boolean;
   /**
    * The framework as History names it: its display label, or its id where none is known; `null`
-   * while the catalog loads, when the card names the model alone.
+   * while the catalog loads, when the line names the model alone.
    */
   framework: string | null;
   arm: ArmEvaluationSchema | null;
@@ -765,63 +819,55 @@ function ArmSummary({
   return (
     <section
       aria-label={`${run.label} summary`}
-      className="grid gap-2 rounded-lg border border-admin-border bg-admin-surface px-4 py-3"
+      className={`grid min-w-0 content-start gap-1.5 px-5 py-4 ${ruled ? "border-l border-admin-border/60" : "border-t border-admin-border/60"}`}
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-lab-ink">{run.label}</h2>
-          <p className="flex flex-wrap items-center gap-1.5 text-xs text-admin-muted">
-            <Link
-              className={versionChipClasses}
-              to={definitionPath(
-                "agent_configuration",
-                run.agent_configuration_id,
-                run.agent_configuration_version,
-                shopId,
-              )}
-              title={`Open ${run.agent_configuration_name}, whose draft published v${run.agent_configuration_version}`}
-            >
-              {configurationChip(
-                run.label,
-                run.agent_configuration_name,
-                run.agent_configuration_version,
-              )}
-            </Link>
-            <span>
-              {framework === null || labelNamesFramework(run.label, framework)
-                ? run.model_id
-                : `${framework} · ${run.model_id}`}
-            </span>
-          </p>
-        </div>
-        {arm ? (
-          <div
-            className="ml-auto text-right"
-            title={`${arm.met} of the ${arm.decided} objective(s) something has decided for this arm`}
-          >
-            <p className="font-display text-[19px] font-bold leading-tight text-admin-ink">
-              {arm.met} of {arm.decided}
-            </p>
-            <p className="text-[11px] text-admin-muted">decided objectives met</p>
-            {arm.failed ? (
-              <p className="text-[11px] font-semibold text-lab-error">
-                <span aria-hidden>{MISSED_REQUIREMENT.mark}</span> {MISSED_REQUIREMENT.label}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-      <p className="text-xs text-admin-muted">{describeArmStanding(run.standing, run.metrics)}</p>
-      <ul
-        aria-label={`What ${run.label} spent`}
-        className="flex flex-wrap gap-x-3.5 gap-y-1 border-t border-admin-border/60 pt-2 text-[11.5px] text-admin-ink-soft"
+      <h2 className="flex min-w-0 items-center gap-2 text-[15px] font-bold text-admin-ink">
+        <span aria-hidden className={sheetArmLetterClasses}>
+          {letter}
+        </span>
+        <span className="min-w-0 break-words">{run.label}</span>
+      </h2>
+      <Link
+        className={`${versionChipClasses} justify-self-start text-xs`}
+        to={definitionPath(
+          "agent_configuration",
+          run.agent_configuration_id,
+          run.agent_configuration_version,
+          shopId,
+        )}
+        title={`Open ${run.agent_configuration_name}, whose draft published v${run.agent_configuration_version}`}
       >
-        {armFigures(run.metrics).map((figure) => (
-          <li key={figure.key} className={figure.warn ? "text-lab-error" : undefined}>
-            {figure.text}
-          </li>
-        ))}
-      </ul>
+        {configurationChip(
+          run.label,
+          run.agent_configuration_name,
+          run.agent_configuration_version,
+        )}
+      </Link>
+      <p className="text-[12.5px] text-admin-ink-soft">
+        {framework === null || labelNamesFramework(run.label, framework)
+          ? run.model_id
+          : `${framework} · ${run.model_id}`}
+      </p>
+      {arm ? (
+        <div
+          title={`${arm.met} of the ${arm.decided} objective(s) something has decided for this arm`}
+        >
+          <p className="text-[12.5px] text-admin-ink">
+            <span className="font-display text-[17px] font-bold text-admin-ink">
+              {arm.met} of {arm.decided}
+            </span>{" "}
+            decided objectives met
+          </p>
+          {arm.failed ? (
+            <p className="text-[12.5px] font-semibold text-lab-error">
+              <span aria-hidden>{MISSED_REQUIREMENT.mark}</span> {MISSED_REQUIREMENT.label}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      <p className="text-[12.5px] text-admin-muted">
+        {describeArmStanding(run.standing, run.metrics)}
+      </p>
     </section>
   );
 }

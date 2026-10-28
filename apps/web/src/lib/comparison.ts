@@ -157,13 +157,13 @@ export function attributionOf(comparison: readonly ComparisonVariableSchema[]): 
   if (differences === 0) {
     return {
       tone: "none",
-      text: "No dimension differs, so nothing above can be attributed to a difference between the arms.",
+      text: "No dimension differs, so nothing here can be attributed to a difference between the arms.",
     };
   }
   if (differences === 1) {
     return {
       tone: "attributable",
-      text: "One difference, so the behavior above is attributable to it.",
+      text: "One difference, so the behavior here is attributable to it.",
     };
   }
   return {

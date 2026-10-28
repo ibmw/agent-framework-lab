@@ -43,6 +43,18 @@ import {
   searchFieldIconClasses,
   searchFieldRowClasses,
   searchFieldWrapClasses,
+  sheetArmLetterClasses,
+  sheetCellClasses,
+  sheetColumns,
+  sheetDiffersRowClasses,
+  sheetDiffersTagClasses,
+  sheetFigureDiffersClasses,
+  sheetLabelCellClasses,
+  sheetNoteClasses,
+  sheetSameSummaryClasses,
+  sheetSectionChipClasses,
+  sheetStripClasses,
+  sheetTitleClasses,
   subtleFieldButtonClasses,
   textAreaClasses,
   validationMessageClasses,
@@ -754,6 +766,65 @@ describe("the button glyph vocabulary", () => {
  * the first are asserted the same way: over the record the named states are read off.
  */
 const chipStates = Object.entries(filterChipStateClasses);
+
+describe("the results sheet (ADR 0080)", () => {
+  const utilities = (classes: string) => classes.split(" ");
+
+  it("lays a 240px label column beside one equal column per arm", () => {
+    // `results-sheet-mockup.dc.html` :90, :170: `240px minmax(0, 1fr) minmax(0, 1fr)`.
+    expect(sheetColumns(2)).toBe("240px repeat(2, minmax(0, 1fr))");
+    expect(sheetColumns(1)).toBe("240px repeat(1, minmax(0, 1fr))");
+  });
+
+  it("spaces a row as the mockup does: 18px tall, 20px wide, at line height 1.5", () => {
+    for (const classes of [sheetLabelCellClasses, sheetCellClasses]) {
+      expect(utilities(classes)).toEqual(expect.arrayContaining(["py-[18px]", "px-5", "min-w-0"]));
+    }
+    expect(utilities(sheetCellClasses)).toEqual(
+      expect.arrayContaining(["leading-[1.5]", "break-words"]),
+    );
+    // A section's note is held to a reading measure.
+    expect(utilities(sheetNoteClasses)).toContain("max-w-[75ch]");
+    expect(utilities(sheetTitleClasses)).toEqual(
+      expect.arrayContaining(["font-display", "text-[19px]", "font-bold"]),
+    );
+  });
+
+  it("tints a differing row with its one token, and says so in words beside it", () => {
+    expect(themeSource).toMatch(/--color-admin-differs:\s*#fdf8ec;/);
+    expect(sheetDiffersRowClasses).toBe("bg-admin-differs");
+    // The word is a fact, in the neutral pill, never a status colour.
+    expect(sheetDiffersTagClasses).toContain("bg-admin-border");
+    expect(sheetDiffersTagClasses).not.toMatch(/lab-(error|success)|published|draft/);
+    // The figures the arms differ on are larger, not coloured.
+    expect(sheetFigureDiffersClasses).not.toMatch(/text-(lab|admin)-/);
+  });
+
+  it("pins the strip where a pinned header holds, on the canvas under a 1px rule", () => {
+    expect(utilities(sheetStripClasses)).toEqual(
+      expect.arrayContaining([
+        "sticky",
+        "-top-5",
+        "z-10",
+        "border-b",
+        "border-admin-border",
+        "bg-admin-canvas",
+      ]),
+    );
+  });
+
+  it("draws every arm's letter in one ink, ranking none", () => {
+    expect(utilities(sheetArmLetterClasses)).toEqual(
+      expect.arrayContaining(["bg-lab-ink", "text-white"]),
+    );
+  });
+
+  it("rings the chips and the disclosure for a keyboard reader", () => {
+    for (const classes of [sheetSectionChipClasses, sheetSameSummaryClasses]) {
+      expect(classes).toMatch(/(^|\s)focus-visible:outline-2(\s|$)/);
+    }
+  });
+});
 
 describe("filter chip states", () => {
   it("offers the two the prototype draws and no third", () => {

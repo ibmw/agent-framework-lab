@@ -2,6 +2,12 @@
 
 Status: accepted — 2026-10-26; the narrow opening decided 2026-10-27
 
+Amendment: 2026-10-28 — ADR 0080 stacks the results sheet's rows below the breakpoint, each
+cell under a line naming its arm and no strip pinned, and settles the *Quantitative* table this
+record left unmeasured: it is *Usage*, its rows stack, and at 390×844 it passes nothing past
+the viewport. The matrices' scroller (*The results' matrices keep their reading widths*) stands
+until the objectives are drawn as sheet rows.
+
 Amends ADR 0016, *The helpdesk workspace* ("The rail collapses to icons **only when the author
 asks**"); ADR 0055, *The bar is one row*; and ADR 0058, its *Reset to defaults…* section, as to
 what the rail's preference governs. Every other decision of the three stands, as do ADR 0044's and

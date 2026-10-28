@@ -1,6 +1,6 @@
 # UX plan
 
-Status: Milestone 14 open — 2026-10-27. Open slices only: a slice that lands is removed from this
+Status: Milestone 14 open — 2026-10-28. Open slices only: a slice that lands is removed from this
 file. Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
 `docs/history/PLAN-UX-2026-09-13.md`; the 20 September plan, whose delivered Milestone 8's goal
 and acceptance criteria are in `docs/history/PLAN-UX-2026-09-20.md`; the 28 September plan,
@@ -143,89 +143,6 @@ No slice touches the backend or a contract. The covered journeys are `experiment
 (the results from :649 to :786, from History's *Open results* at :865 to :956, and the
 deciding-call journey at :964–1053), `tour-anchors.spec.ts` (the results tour,
 `lib/tours.ts:316–374`) and `sticky-header.spec.ts` (:686–691).
-
-### Slice 59 — The sheet's frame: what the arms are and what they spent
-
-The sheet primitive ships with its first sections, Outcome, Configuration and Usage — the cards
-the arms' facts were split across — and the decision, ADR 0080.
-
-- [ ] An arm-column sheet (`components/ArmSheet.tsx`, its class sets in `lib/ui.ts`): a section
-  card with its Georgia title, a one-sentence note and the id a chip jumps to; rows of a 240px
-  label column and one `minmax(0,1fr)` column per arm, with the spacing above; a row that spans
-  the arms; a differing row, tinted (a token in `styles.css`) and marked *Differs* in words; and
-  the disclosure "N {things} are the same for both arms", closed, one spanning row per shared
-  value, drawn whole. The rows are `table`, `row`, `rowheader` and `cell` to assistive
-  technology, each arm's column header named by the arm, so a cell is heard with its arm.
-- [ ] The tabs (`ExperimentResultsLayout.tsx:418–423`) move above the arms, and the arm cards
-  (:406–416, `ArmSummary` :750–827) become one summary row on the sheet's columns: the arm's
-  name, the configuration chip opening its editor (ADR 0068, its `title` unchanged), the model
-  and framework (:791–793), "N of M decided objectives met" in Georgia in one ink, the missed
-  requirement (:806–810), and the standing (:814). Each arm's cell keeps the region name "{label}
-  summary", and the row `data-tour="results-arms"` (`lib/tours.ts:326`). Its label cell reads
-  "Compared arms" over "Columns are never added into a winner." (sheet mockup :92–95). The
-  figures (:815–824) leave it for Usage.
-- [ ] The pinned strip on General: sticky at the pane's top on the canvas under a 1px rule, one
-  line naming each arm over its column, `aria-hidden` because every cell's column header already
-  names its arm. It sets the pane's `scroll-padding-top` as `clearStickyHeader` does
-  (`lib/stickyHeader.ts:121–153`), so a focused control, a chip's jump and a tour step land clear
-  of it.
-- [ ] A `nav` named "Sections" under the summary row on General, a chip per section in the
-  sheet's order; a card not yet converted carries its section's id.
-- [ ] General is one column (`ExperimentResultsPage.tsx:125` loses its rail grid), in the
-  sheet's order; Slices 60 and 61 convert the cards they name in place.
-- [ ] **Outcome** first: "Decided objectives met" and "Status" per arm, then two spanning rows —
-  *Input divergence* (the card at :265–276 and `Divergence` at :666–705: the controlled sentence
-  with its ✓, or a row per divergent turn with what each arm heard in its cell) and *Attribution*
-  (`AttributionLine`, `components/ArmComparison.tsx:25–38`). Its note is the first sentence of
-  today's (:114–117), "There is no aggregate score: each arm's count is of the rows something
-  actually decided for it.", which the journey reads; "the columns are never added into a winner"
-  is the summary row's label cell already. The divergence card's footer (:268–272) becomes its
-  row's second line.
-- [ ] **Configuration** replaces *What the arms differed on* (:224–226, `ComparisonTable`
-  `components/ArmComparison.tsx:69–145`): the dimensions that differ first, each value whole; the
-  others behind "N variables are the same for both arms". The bench's `DifferenceList` and
-  `comparisonRows` (`lib/comparison.ts:118`) are unchanged.
-- [ ] **Usage** replaces *Quantitative* (:253–263, :575–657): the thirteen measures and the arm
-  card's "Tokens, in and out" (`armFigures`, `lib/evidence.ts:240`), the differing ones first and
-  larger, the rest behind "N measures are the same for both arms"; "not reported", "not priced"
-  and "≥" as today, and a retry above zero in the error ink (ADR 0068). The card's footer
-  (:255–260) becomes the section's note.
-- [ ] The one-arm run and the phone width as decided above; Usage at 390 passes nothing past the
-  viewport, which settles ADR 0079's unmeasured *Quantitative* table.
-- [ ] ADR 0080 records the composition the operator approved — every section and the four tabs —
-  and the plan's decisions with their reasons, citing
-  `application/experiment_derivations.py:181–188`, ADR 0079's column opened in place,
-  `ExperimentTimelinePage.tsx:304`, ADR 0054 and `docs/design-direction.md`'s *Authority* rule 5.
-  It amends `docs/design-direction.md`'s *Desktop first, usable narrower* (:32–36) for the
-  stacked results, restates *Three evidence layers, kept distinct* (:18–19) as labelled groups
-  and sections rather than cards, and amends ADR 0068 (the figures leave the arm card), ADR 0079
-  (the results stack at a phone's width) and ADR 0036 (tags in the header, notes a section).
-
-Frames: sheet mockup :84–121 (tabs, summary row, chips, strip), :131–191 with :414–428 and
-:448–458 (Outcome, Configuration, Usage); `Workspace.dc.html:2576–2594` and :2626–2631, the
-arm cards and the differences card it replaces.
-
-Authority: ADR 0025, ADR 0033, ADR 0042, ADR 0068, ADR 0079.
-
-Departures to record: `docs/design-direction.md`'s rows *An arm's names on its results card*
-(the position's letter drawn again, `aria-hidden`, one ink), *What the arms differed on, on the
-results* (a section, *Differs* for the Assessment column, the shared values whole behind the
-disclosure) and *The results' rail* (no rail; Input divergence in Outcome, Quantitative as
-Usage); the sheet mockup's tabs as links, and no strip for one arm or at a phone's width.
-
-Branch: `feat/results-sheet-frame`. Checks: Vitest — a new `ArmSheet.test.tsx` (the columns and
-their headers, a spanning row, a differing row's word, the disclosure's count and contents, one
-arm, the stacked rows at narrow width each naming its arm through `test/viewport.ts`);
-`Experiments.test.tsx` (the summary row's regions and link, no figures in it and every figure in
-Usage, divergence controlled and divergent, attribution for one, two and no differences and for
-one arm, Configuration's order, Usage's count, the chips' targets, the strip's names);
-`tours.test.ts`; `ui.test.ts`. `make check`, `pnpm build`; `pnpm test:e2e` for
-`experiment-start.spec.ts` (:651–657 the figures, :681–691 the phone width, :735–739 the
-divergence), `tour-anchors.spec.ts` (`results-arms` moves) and `sticky-header.spec.ts` (:686–691:
-the header still scrolls away; the strip is not the header).
-
-Slice evidence: the seeded run's General tab at 1440 and 390, scrolled with the strip pinned, and a
-one-arm run at 1440.
 
 ### Slice 60 — The evidence on the sheet: objectives and business state
 

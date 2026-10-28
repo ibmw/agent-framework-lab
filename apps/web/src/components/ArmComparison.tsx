@@ -3,13 +3,14 @@ import { Link } from "react-router-dom";
 import {
   type ArmValue,
   type Attribution,
-  armsInOrder,
   attributionOf,
   type ComparedExperiment,
   comparisonRows,
   hasArmsToCompare,
 } from "../lib/comparison";
-import { focusRingClasses, tableCellClasses, tableHeadClasses } from "../lib/ui";
+import type { SheetArm } from "../lib/sheet";
+import { focusRingClasses } from "../lib/ui";
+import { SameForEveryArm, SheetRow, SheetSection } from "./ArmSheet";
 
 const ATTRIBUTION_CLASSES: Record<Attribution["tone"], string> = {
   attributable: "font-semibold text-lab-success",
@@ -38,8 +39,8 @@ export function AttributionLine({
 
 /**
  * One arm's value: a link where it names a pinned version, and otherwise its text. The text is
- * always whole here; only `ComparisonTable`'s shared values are shortened, and never a value that
- * differs, which is the one a reader has to compare.
+ * always whole: a value that differs is the one a reader has to compare, and one every arm
+ * shares is folded behind a disclosure a reader opens to read it.
  */
 function Value({ value }: { value: ArmValue }) {
   return value.to ? (
@@ -56,88 +57,72 @@ function Value({ value }: { value: ArmValue }) {
 }
 
 /**
- * Every dimension, each arm's value under the arm's name, and whether they differ: the results'
- * *What the arms differed on* (`Workspace.dc.html:2627–2640`), in the setup matrix's words —
- * *Variable*, *Assessment*, *Difference*, *Same* — because it is the same matrix read back on the
- * run. A dimension every arm reads alike holds one value across their columns, shortened with
- * the whole of it in `title`, because a long prompt written out twice is a second thing to
- * compare by eye for a fact the row already states. A value that differs is drawn whole: it is
- * the thing being compared. One arm has no Assessment column, since there is nothing to assess.
+ * *Configuration*, on the results sheet (ADR 0080; sheet mockup :182–185): what the arms
+ * differed on, in the setup matrix's words, read back on the run.
+ *
+ * The dimensions the arms differ on come first, each value whole in its arm's column, tinted and
+ * marked *Differs* — the matrix's *Assessment* column said in the row instead. The others fold
+ * under "N variables are the same for both arms", one value across the arms, drawn whole. One arm
+ * has nothing to differ from or to share with, so every dimension is drawn in its column. What
+ * the count of differences lets an operator attribute is said once, in *Outcome*, above the
+ * evidence it governs.
  */
-export function ComparisonTable({
+export function ConfigurationSection({
   experiment,
   shopId,
+  arms,
 }: {
   experiment: ComparedExperiment;
   shopId: string;
+  arms: readonly SheetArm[];
 }) {
   const rows = comparisonRows(experiment, shopId);
   const compared = hasArmsToCompare(experiment.comparison);
+  const drawn = compared ? rows.filter((row) => row.differs) : rows;
+  const folded = compared ? rows.filter((row) => !row.differs) : [];
   return (
-    <div className="grid gap-3">
-      <table className="w-full table-fixed border-collapse text-[13px]">
-        <caption className="sr-only">Each arm's value along every variable</caption>
-        <thead>
-          <tr>
-            <th scope="col" className={`${tableHeadClasses} w-36`}>
-              Variable
-            </th>
-            {armsInOrder(experiment).map((run) => (
-              <th key={run.run_id} scope="col" className={tableHeadClasses}>
-                {run.label}
-              </th>
-            ))}
-            {compared ? (
-              <th scope="col" className={`${tableHeadClasses} w-28`}>
-                Assessment
-              </th>
-            ) : null}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.dimension}>
-              <th
-                scope="row"
-                className={`${tableCellClasses} text-left ${row.differs ? "font-semibold text-admin-ink" : "font-normal text-admin-ink-soft"}`}
-              >
-                {row.label}
-              </th>
-              {row.shared && !row.differs ? (
-                <td
-                  colSpan={row.values.length}
-                  className={`${tableCellClasses} break-words text-admin-muted`}
-                >
-                  <span
-                    className="line-clamp-2"
-                    title={row.values[0]?.title ?? row.values[0]?.value}
-                  >
-                    {row.values[0] ? <Value value={row.values[0]} /> : null}
+    <SheetSection
+      id="configuration"
+      title="Configuration"
+      note="What the arms differed on: each arm's value along every variable."
+      arms={arms}
+      labelHeader="Variable"
+      after={
+        <SameForEveryArm
+          title="Configuration"
+          labelHeader="Variable"
+          noun={["variable", "variables"]}
+          rows={folded.map((row) => ({
+            key: row.dimension,
+            label: row.label,
+            value: row.shared ? (
+              row.values[0] ? (
+                <Value value={row.values[0]} />
+              ) : null
+            ) : (
+              // Read alike by the server and spelled apart here: each arm's value on its line.
+              <span className="grid gap-1">
+                {row.values.map((value) => (
+                  <span key={value.runId}>
+                    {value.arm}: <Value value={value} />
                   </span>
-                </td>
-              ) : (
-                row.values.map((value) => (
-                  <td
-                    key={value.runId}
-                    className={`${tableCellClasses} whitespace-pre-line break-words ${row.differs ? "font-semibold text-admin-ink" : "text-admin-ink-soft"}`}
-                  >
-                    <Value value={value} />
-                  </td>
-                ))
-              )}
-              {compared ? (
-                <td
-                  className={`${tableCellClasses} ${row.differs ? "font-semibold text-admin-draft-ink" : "text-admin-muted"}`}
-                >
-                  {row.differs ? "Difference" : "Same"}
-                </td>
-              ) : null}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <AttributionLine comparison={experiment.comparison} />
-    </div>
+                ))}
+              </span>
+            ),
+          }))}
+        />
+      }
+    >
+      {drawn.map((row) => (
+        <SheetRow
+          key={row.dimension}
+          label={row.label}
+          differs={compared && row.differs}
+          cellClassName={() => `whitespace-pre-line ${compared ? "font-semibold" : ""}`}
+          cells={row.values.map((value) => <Value key={value.runId} value={value} />)}
+        />
+      ))}
+    </SheetSection>
   );
 }
 

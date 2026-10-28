@@ -732,3 +732,40 @@ test("every surface with a page header pins it exactly where ADR 0066 says", asy
     }
   }
 });
+
+test("the results pin the arm strip over the sheet, and let their header scroll away", async ({
+  page,
+  lab,
+}) => {
+  await page.goto(`/lab/bench/${lab.shopId}/${lab.experimentId}/results`);
+  const header = pageHeader(page);
+  const strip = page.locator("[data-sheet-strip]");
+  const main = page.locator("main");
+  await expect(page.getByRole("region", { name: "Usage" })).toBeVisible();
+
+  // The strip is not the header: the header is static here (ADR 0066), the strip sticky.
+  await expect(header).not.toHaveAttribute("data-pinned", "true");
+  expect(await header.evaluate((element) => getComputedStyle(element).position)).toBe("static");
+  expect(await strip.evaluate((element) => getComputedStyle(element).position)).toBe("sticky");
+  expect(await strip.evaluate((element) => element.closest("header"))).toBeNull();
+
+  // Scrolled to Usage, the header has gone and the strip holds at the pane's top, one line tall.
+  await page
+    .getByRole("navigation", { name: "Sections" })
+    .getByRole("link", { name: "Usage" })
+    .click();
+  // Landed through the router: focus moves to the section, then the pane scrolls to it.
+  await expect(page.getByRole("region", { name: "Usage" })).toBeFocused();
+  await expect.poll(() => main.evaluate((pane) => pane.scrollTop)).toBeGreaterThan(0);
+  await expect(header).not.toBeInViewport();
+  await expect(strip).toBeInViewport();
+  const held = await box(strip);
+  expect(held.y).toBe((await box(main)).y);
+  expect(held.height).toBeLessThan(60);
+
+  // The chip's jump landed the section under the strip, not behind it.
+  const usage = await box(page.getByRole("heading", { level: 2, name: "Usage" }));
+  expect(usage.y).toBeGreaterThanOrEqual(held.y + held.height);
+  const clearance = Number.parseFloat(await main.evaluate((pane) => pane.style.scrollPaddingTop));
+  expect(clearance).toBeGreaterThanOrEqual(held.height);
+});

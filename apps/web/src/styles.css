@@ -129,6 +129,13 @@
    * because two class sets drew it as the same literal.
    */
   --color-admin-selected-ink: #14352e;
+  /*
+   * The tint of a row the arms differ on, on the results sheet (`results-sheet-mockup.dc.html`
+   * :182, :186–189; ADR 0080). It says the values differ and nothing more: never which arm is
+   * better, so it is one tint for every differing row and never a pair of colours. The row also
+   * says *Differs* in words, because status is never colour alone.
+   */
+  --color-admin-differs: #fdf8ec;
   --font-display: Georgia, "Times New Roman", serif;
   --radius-panel: 1.15rem;
   --shadow-panel: 0 22px 70px rgb(31 56 49 / 8%);

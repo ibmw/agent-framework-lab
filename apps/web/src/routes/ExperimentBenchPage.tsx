@@ -525,7 +525,7 @@ export function ExperimentBenchPage() {
  * two arms progress independently, so "which of these is mine to move" is not answerable by
  * reading two transcripts. It is the server's reading rather than this page's — the same one
  * the runner acts on, so the button below can never offer a run the backend would decline. The
- * sentence is `describeArmStanding`'s, the one the results' arm card reads, so the bench and the
+ * sentence is `describeArmStanding`'s, the one the results' summary row reads, so the bench and the
  * results count a thread's turns the same way — from one.
  */
 function Standing({

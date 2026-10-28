@@ -152,3 +152,35 @@ export function clearStickyHeader(header: HTMLElement | null): (() => void) | un
     pane.style.removeProperty("scroll-padding-top");
   };
 }
+
+/**
+ * A ref callback for a strip pinned over the page rather than a header: the results sheet's arm
+ * strip (ADR 0080). It is always pinned — one line, so it never letterboxes a pane the way a
+ * wrapped header could — and it keeps what the browser scrolls into view clear of it, as
+ * `clearStickyHeader` does: the pane's `scroll-padding-top` is the strip's height and the focus
+ * ring's clearance, following the strip's height, so a focused control, a chip's jump to its
+ * section and a tour step land under the strip rather than behind it (WCAG 2.2's 2.4.11).
+ *
+ * It puts the pane back as it found it when the strip goes, so a tab without a strip is not left
+ * with the sheet's clearance. Where the pane is not found — jsdom, which lays nothing out — or the
+ * browser has no `ResizeObserver`, it does nothing.
+ */
+export function clearStickyStrip(strip: HTMLElement | null): (() => void) | undefined {
+  if (strip === null || typeof ResizeObserver === "undefined") {
+    return undefined;
+  }
+  const pane = scrollingAncestor(strip);
+  if (pane === null) {
+    return undefined;
+  }
+  const clear = () => {
+    pane.style.scrollPaddingTop = `${strip.offsetHeight + FOCUS_CLEARANCE_PX}px`;
+  };
+  clear();
+  const observer = new ResizeObserver(clear);
+  observer.observe(strip);
+  return () => {
+    observer.disconnect();
+    pane.style.removeProperty("scroll-padding-top");
+  };
+}

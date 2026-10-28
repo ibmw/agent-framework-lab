@@ -268,12 +268,13 @@ describe("the tour a location is on", () => {
   });
 
   it("walks a tab only the steps that are on it", () => {
-    // The arm cards and the tab row are the layout's; the provenance card, the evidence and the
-    // notes are the General tab's, and a reader on the timeline is not walked to them.
+    // The tab row and the arms' summary row are the layout's; the provenance card, the evidence
+    // and the notes are the General tab's, and a reader on the timeline is not walked to them.
     const results = tourHref("results", IDS);
     const titles = (pathname: string) => tourSteps("results", pathname).map((step) => step.title);
-    // Top to bottom on General: the arm cards and the tab row above it, then its evidence and
-    // its rail — so no step scrolls the reader back up.
+    // Top to bottom on General but for the first two: the summary row the walk opens on sits
+    // directly under the tab row, both on screen together, and then the sheet's sections in
+    // their order — so no step scrolls the reader back up past what is on screen.
     expect(titles(results)).toEqual([
       "How to read the results",
       "No aggregate, and nothing hidden",

@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { accessibleTable } from "./support/accessibility";
 import {
   addDocument,
   createBlock,
@@ -650,10 +651,17 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(page.getByText(/There is no aggregate score/)).toBeVisible();
   await expect(card(page, "Arm A summary").getByText(/^\d+ of \d+$/)).toBeVisible();
   await expect(card(page, "Arm B summary").getByText(/^\d+ of \d+$/)).toBeVisible();
-  // Each card carries what its arm spent, the four figures the frame draws.
+  // What each arm spent is read in Usage, beside the other arm's, and not on its summary.
+  await expect(card(page, "Arm A summary").getByRole("list")).toHaveCount(0);
+  const usage = card(page, "Usage");
+  await expect(usage.getByRole("row", { name: /^Tool calls/, includeHidden: true })).toHaveCount(1);
   await expect(
-    card(page, "Arm A summary").getByRole("list", { name: "What Arm A spent" }),
-  ).toContainText(/\d+ turns?.*\d+ tool calls?/);
+    usage.getByRole("row", { name: /^Tokens, in and out/, includeHidden: true }),
+  ).toHaveCount(1);
+  // The arms are named over their columns by the strip pinned over the sheet.
+  const strip = page.locator("[data-sheet-strip]");
+  await expect(strip).toHaveAttribute("aria-hidden", "true");
+  await expect(strip).toContainText("Arm A");
 
   // Each cell's mark with the sentence that decided it, drawn under the mark rather than heard
   // or hovered: the arm that completed missed the read, the one still open can make it.
@@ -679,11 +687,25 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   ).toHaveCount(1);
 
   // The same results at a phone's width (ADR 0079): the rail is the strip, the matrices scroll
-  // inside their cards, and nothing — not a cell's screen-reader line, not the bar — passes the
-  // viewport or sets the pane scrolling sideways.
+  // inside their cards, the sheet's rows stack with each cell naming its arm (ADR 0080), and
+  // nothing — not a cell's screen-reader line, not Usage, not the bar — passes the viewport or
+  // sets the pane scrolling sideways.
   const wide = page.viewportSize();
   await page.setViewportSize(PHONE);
   await expect(page.getByRole("button", { name: "Expand menu" })).toBeVisible();
+  await expect(strip).toHaveCount(0);
+  // Stacked as blocks, the Usage table is still a table to the browser's own accessibility
+  // tree: each row a row, its label a row header, and a cell per arm (ADR 0080).
+  const stacked = await accessibleTable(page, "Usage");
+  expect(stacked?.[0]).toEqual(["columnheader", "columnheader", "columnheader"]);
+  expect(stacked?.length).toBeGreaterThan(1);
+  for (const row of stacked?.slice(1) ?? []) {
+    expect(row).toEqual(["rowheader", "cell", "cell"]);
+  }
+  await expect(
+    usage.getByRole("row", { name: /^Tool calls/, includeHidden: true }).getByText("Arm B"),
+  ).toHaveCount(1);
+  await usage.scrollIntoViewIfNeeded();
   expect(await pastTheViewport(page)).toEqual([]);
   await expectTopBarHoldsItsControls(page);
   if (wide !== null) {
@@ -731,10 +753,16 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await written.getByRole("button", { name: "Add note" }).click();
   await expect(written.getByText(`Beacon never opened the policy ${unique}.`)).toBeVisible();
 
-  // And the turn only one arm heard is what makes everything after it two conversations.
-  const divergence = card(page, "Input divergence");
-  // Counted from one, as the arm cards count: the trigger, the shared reply, then this.
-  await expect(divergence.getByText("Turn 3")).toBeVisible();
+  // And the turn only one arm heard is what makes everything after it two conversations: said
+  // in Outcome, above the evidence, with what each arm heard in its own column.
+  const outcome = card(page, "Outcome");
+  await expect(
+    outcome
+      .getByRole("row", { name: /^Input divergence/ })
+      .getByText(/so the comparison is not controlled/),
+  ).toBeVisible();
+  // Counted from one, as the summary row counts: the trigger, the shared reply, then this.
+  const divergence = outcome.getByRole("row", { name: /^Turn 3/ });
   await expect(divergence.getByText(/never received this turn/)).toBeVisible();
 
   // The same incident read as one normalized stream: the arms interleaved on the messages

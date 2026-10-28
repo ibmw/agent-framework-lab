@@ -821,6 +821,100 @@ export type DepthTabState = keyof typeof depthTabStates;
 /** The table itself, for the test that holds both states to the same rules. */
 export const depthTabStateClasses: Readonly<Record<DepthTabState, string>> = depthTabStates;
 
+/*
+ * The results sheet (ADR 0080; `results-sheet-mockup.dc.html` :84–121, :131–191): a section card
+ * per subject, each fact a row, each arm a column. `components/ArmSheet.tsx` draws it.
+ *
+ * The values are the sheet mockup's: a 240px label column and one `minmax(0,1fr)` column per arm;
+ * a row's cells padded 18px tall and 20px wide, at line height 1.5, each fact on a line of its
+ * own; the section's title Georgia 19px 700 over a note held to about 75 characters. A row is
+ * ruled from the one above it by the faint rule the mockup draws (`#eef0f1`, here `admin-border`
+ * at 60%, the table rule this workspace already draws), and each arm's cell from the one before
+ * it by the same.
+ */
+
+/** The label column's width and one column per arm, as `grid-template-columns`. */
+export function sheetColumns(arms: number): string {
+  return `240px repeat(${Math.max(arms, 1)}, minmax(0, 1fr))`;
+}
+
+/** A section: the card the rows sit in, whose `id` a chip jumps to. */
+export const sheetSectionClasses = `${surfaceClasses} overflow-hidden`;
+
+/** A section's head: its title over its note. */
+export const sheetSectionHeadClasses = "grid gap-1.5 px-5 pt-5 pb-4";
+
+/** A section's title, Georgia at the mockup's 19px. */
+export const sheetTitleClasses = "font-display text-[19px] font-bold tracking-[-0.01em]";
+
+/** A section's note: one sentence, muted, held to a reading measure. */
+export const sheetNoteClasses = "max-w-[75ch] text-[13.5px] leading-[1.55] text-admin-muted";
+
+/**
+ * A row — a table row — ruled from the one above it. From a phone's width up the table's own
+ * columns draw `sheetColumns`; narrow, the row is a block and its cells stack.
+ */
+export const sheetRowClasses = "border-t border-admin-border/60";
+
+/** A row the arms differ on: the tint that says so, and nothing more. */
+export const sheetDiffersRowClasses = "bg-admin-differs";
+
+/**
+ * A row's label cell, and below one arm's cell: table cells, so nothing here may set their
+ * `display` — each holds its lines in a grid of its own (`components/ArmSheet.tsx`).
+ */
+export const sheetLabelCellClasses =
+  "min-w-0 px-5 py-[18px] text-left text-[14px] font-semibold leading-[1.35] text-admin-ink";
+
+/** One arm's cell, or a cell spanning the arms. */
+export const sheetCellClasses =
+  "min-w-0 px-5 py-[18px] text-[14px] leading-[1.5] text-admin-ink break-words";
+
+/**
+ * A cell's second line: a sentence under the fact, muted, at the mockup's 12px with 8px above it
+ * (`results-sheet-mockup.dc.html` :250) — the cell's 6px gap and 2px more.
+ */
+export const sheetCellDetailClasses = "mt-0.5 text-[12px] leading-[1.5] text-admin-muted";
+
+/** An arm's cell beside another, ruled from it; at a phone's width the cells stack unruled. */
+export const sheetArmCellRuleClasses = "border-l border-admin-border/60";
+
+/** The line naming a cell's arm at a phone's width, where no column says it. */
+export const sheetCellArmClasses =
+  "text-[11px] font-bold tracking-[0.07em] text-admin-muted uppercase";
+
+/** *Differs*, in words beside the tint: the neutral pill, so it reads as a fact and not a mark. */
+export const sheetDiffersTagClasses = `${neutralPillClasses} justify-self-start`;
+
+/** The disclosure that folds what every arm reads alike. */
+export const sheetSameSummaryClasses = `cursor-pointer px-5 py-4 text-[13.5px] font-semibold text-admin-ink ${focusRingClasses}`;
+
+/** A figure the arms differ on, drawn larger than the ones they share (sheet mockup :186–189). */
+export const sheetFigureDiffersClasses = "text-[16px] font-bold tabular-nums";
+
+/** A figure as every other row draws it. */
+export const sheetFigureClasses = "tabular-nums";
+
+/**
+ * The strip pinned over the sheet: one line naming each arm over its column. It holds where the
+ * page header would if it were pinned — the pane's top edge, pulled up by `main`'s `py-5` as
+ * `stickyHeaderClasses` is — on the canvas under a 1px rule, above the page it scrolls over and
+ * under the top bar and every dialog.
+ */
+export const sheetStripClasses =
+  "sticky -top-5 z-10 grid border-b border-admin-border bg-admin-canvas";
+
+/** A strip's cell: one line, cut rather than wrapped. */
+export const sheetStripCellClasses =
+  "flex min-w-0 items-center gap-2 px-5 py-2.5 text-[13px] font-bold text-admin-ink";
+
+/** The arm's position letter, in one ink for every arm: it names a column and ranks nothing. */
+export const sheetArmLetterClasses =
+  "inline-flex h-[22px] w-[22px] flex-none items-center justify-center rounded-md bg-lab-ink text-[11.5px] font-bold text-white";
+
+/** A chip in the *Sections* row, a link to its section. */
+export const sheetSectionChipClasses = `rounded-full border border-admin-border bg-admin-surface px-3 py-1.5 text-[12.5px] font-semibold text-admin-ink-soft no-underline hover:text-admin-ink ${focusRingClasses}`;
+
 /**
  * What a filter chip's glyph may mean.
  *

@@ -91,7 +91,7 @@ describe("the interface's spelling", () => {
     expect(Object.keys(sources)).toContain("./comparison.ts");
     expect(Object.keys(sources)).toContain("../routes/ScenarioEditorPage.tsx");
     expect(Object.keys(sources).some((file) => /\.test\.tsx?$/.test(file))).toBe(false);
-    expect(strings.some(({ text }) => text.includes("so the behavior above is attributable"))).toBe(
+    expect(strings.some(({ text }) => text.includes("so the behavior here is attributable"))).toBe(
       true,
     );
   });

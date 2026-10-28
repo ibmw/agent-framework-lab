@@ -37,7 +37,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { delay, HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   NO_ARM,
   NO_NAME,
@@ -59,6 +59,7 @@ import {
   submitWithoutPressing,
 } from "./test/refused";
 import { shellListings } from "./test/shell";
+import { stubViewport } from "./test/viewport";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
@@ -1406,6 +1407,27 @@ function renderResults() {
 
 function renderBench() {
   return renderApp(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}`);
+}
+
+/**
+ * A row of a results sheet section by its label — open or folded behind "the same for both
+ * arms" — matched on the label itself, so "Turns" is never "Answered turns".
+ */
+function sheetRow(section: HTMLElement, label: string): HTMLElement {
+  const rows = within(section)
+    .getAllByRole("row", { hidden: true })
+    .filter(
+      (row) => row.querySelector("th")?.firstElementChild?.firstElementChild?.textContent === label,
+    );
+  expect(rows, `rows labelled ${label}`).toHaveLength(1);
+  return rows[0];
+}
+
+/** A sheet row's cells after its label, read left to right: one per arm, or one spanning. */
+function sheetCells(section: HTMLElement, label: string): (string | null)[] {
+  return within(sheetRow(section, label))
+    .getAllByRole("cell", { hidden: true })
+    .map((cell) => cell.textContent);
 }
 
 /** Start's reasons, one per line of the refusal its description names — or none. */
@@ -5109,7 +5131,7 @@ describe("experiment results", () => {
     expect(within(armA).queryByText("Atlas v1")).toBeNull();
   });
 
-  it("puts each arm's four figures on its card, from the metrics the table reads", async () => {
+  it("keeps the figures off the summary row and draws every one in Usage", async () => {
     turns = [...OPENED];
     agentTurns = [agentTurn(ARM_A, 0)];
     toolEvents = [
@@ -5119,37 +5141,36 @@ describe("experiment results", () => {
     renderResults();
 
     const armA = await screen.findByRole("region", { name: "Arm A summary" });
-    const figures = within(within(armA).getByRole("list", { name: "What Arm A spent" }))
-      .getAllByRole("listitem")
-      .map((item) => item.textContent);
+    // The summary says what ran and where it stands; what it spent is read beside the other arm.
+    expect(within(armA).queryByRole("list")).toBeNull();
+    expect(within(armA).queryByText(/tool calls?|tokens|USD|\d\.\ds/)).toBeNull();
 
-    expect(figures).toEqual(["1 turn", "0 tokens", "2 tool calls", "2.1s", "0.00 USD"]);
+    const usage = screen.getByRole("region", { name: "Usage" });
+    expect(sheetCells(usage, "Tool calls")).toEqual(["2", "0"]);
+    expect(sheetCells(usage, "Tokens, in and out")).toEqual(["0", "not reported"]);
+    expect(sheetCells(usage, "Time in attempts")).toEqual(["2.1s", "not reported"]);
+    expect(sheetCells(usage, "Estimated cost")).toEqual(["0.00 USD", "not priced"]);
+    expect(sheetCells(usage, "Turns")).toEqual(["1"]);
   });
 
-  it("leaves off a figure nobody measured and says an arm needed a retry", async () => {
+  it("says in Usage what nobody measured, what is a floor, and a retry in the error ink", async () => {
     turns = [...OPENED];
     agentTurns = [agentTurn(ARM_A, 0, 1, "model_provider"), agentTurn(ARM_A, 0, 2)];
     renderResults();
 
-    const armA = await screen.findByRole("region", { name: "Arm A summary" });
-    const armB = screen.getByRole("region", { name: "Arm B summary" });
-    const spent = (arm: HTMLElement, label: string) =>
-      within(within(arm).getByRole("list", { name: `What ${label} spent` }))
-        .getAllByRole("listitem")
-        .map((item) => item.textContent);
+    const usage = await screen.findByRole("region", { name: "Usage" });
 
-    // The failed attempt metered nothing, so the tokens are a floor; the retry is said.
-    expect(spent(armA, "Arm A")).toEqual([
-      "1 turn",
-      "≥0 tokens",
-      "0 tool calls",
-      "4.2s",
-      "1 retry",
-      "≥0.00 USD",
-    ]);
-    expect(within(armA).getByText("1 retry")).toHaveClass("text-lab-error");
+    // The failed attempt metered nothing, so the tokens and the cost are a floor.
+    expect(sheetCells(usage, "Tokens, in and out")).toEqual(["≥0", "not reported"]);
+    expect(sheetCells(usage, "Estimated cost")).toEqual(["≥0.00 USD", "not priced"]);
     // Arm B has not run: no tokens, no time and no cost were measured, so none is written as 0.
-    expect(spent(armB, "Arm B")).toEqual(["1 turn", "0 tool calls"]);
+    expect(sheetCells(usage, "Time in attempts")).toEqual(["4.2s", "not reported"]);
+    // The retry is said in the error ink, in the arm's cell that needed it and in no other.
+    const [retriedA, retriedB] = within(sheetRow(usage, "Retries")).getAllByRole("cell");
+    expect(retriedA).toHaveTextContent("1");
+    expect(retriedA).toHaveClass("text-lab-error");
+    expect(retriedB).toHaveTextContent("0");
+    expect(retriedB).not.toHaveClass("text-lab-error");
   });
 
   it("holds Replay and Fork in the header beside the run's name, as the frame draws them", async () => {
@@ -5165,7 +5186,28 @@ describe("experiment results", () => {
     expect(within(header).getByRole("button", { name: "Fork…" })).toBeVisible();
   });
 
-  it("sums an arm's input and output tokens, and marks a partly measured time as a floor", async () => {
+  it("keeps a retry both arms needed in the error ink, folded with what they share", async () => {
+    turns = [...OPENED];
+    agentTurns = [
+      agentTurn(ARM_A, 0, 1, "model_provider"),
+      agentTurn(ARM_A, 0, 2),
+      agentTurn(ARM_B, 0, 1, "model_provider"),
+      agentTurn(ARM_B, 0, 2),
+    ];
+    renderResults();
+
+    const usage = await screen.findByRole("region", { name: "Usage" });
+    const retries = sheetRow(usage, "Retries");
+
+    // Shared, so folded into one spanning cell behind the disclosure — and still red.
+    expect(retries.closest("details")).not.toBeNull();
+    expect(sheetCells(usage, "Retries")).toEqual(["1"]);
+    expect(within(retries).getByText("1")).toHaveClass("text-lab-error");
+    // A shared measure that is not a retry keeps the plain ink.
+    expect(within(sheetRow(usage, "Turns")).getByText("1")).not.toHaveClass("text-lab-error");
+  });
+
+  it("sums an arm's input and output tokens in Usage, and says how much of its time was timed", async () => {
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
         const record = experiment(turns, agentTurns, toolEvents, mutationEvents);
@@ -5194,15 +5236,13 @@ describe("experiment results", () => {
     );
     renderResults();
 
-    const armA = await screen.findByRole("region", { name: "Arm A summary" });
-    const figures = within(within(armA).getByRole("list", { name: "What Arm A spent" }))
-      .getAllByRole("listitem")
-      .map((item) => item.textContent);
+    const usage = await screen.findByRole("region", { name: "Usage" });
 
     // Every attempt metered, so 6.2k in and 3.0k out is a whole 9.2k; one attempt went
-    // untimed, so 8.4s is what the other two took and the arm took at least that.
-    expect(figures).toContain("9.2k tokens");
-    expect(figures).toContain("≥8.4s");
+    // untimed, so 8.4s is what the other two took, and the row says of how many.
+    expect(sheetCells(usage, "Tokens, in and out")[0]).toBe("9.2k");
+    expect(sheetCells(usage, "Input tokens")[0]).toBe("6.2k");
+    expect(sheetCells(usage, "Time in attempts")[0]).toBe("8.4s (2 of 3)");
   });
 
   it("links each arm's configuration version to the draft that published it", async () => {
@@ -5308,35 +5348,102 @@ describe("experiment results", () => {
     toolEvents = [toolEvent(ARM_A, 0, "orders.read_order")];
     renderResults();
 
-    const quantitative = await screen.findByRole("region", { name: "Quantitative" });
-    const requests = within(quantitative).getByRole("row", { name: /Model requests/ });
+    const usage = await screen.findByRole("region", { name: "Usage" });
 
     // Arm A metered itself; the arm that never ran reports nothing rather than a zero an
     // operator would read as a measurement somebody took.
-    expect(requests).toHaveTextContent("0");
-    expect(requests).toHaveTextContent("not reported");
-    expect(within(quantitative).getByRole("row", { name: /Attempts/ })).toHaveTextContent("1");
+    expect(sheetCells(usage, "Model requests")).toEqual(["0", "not reported"]);
+    expect(sheetCells(usage, "Attempts")).toEqual(["1", "0"]);
   });
 
-  it("marks the turn one arm alone received", async () => {
+  it("draws the measures the arms differ on first and larger, and folds the rest under their count", async () => {
+    agentTurns = [agentTurn(ARM_A, 0)];
+    toolEvents = [toolEvent(ARM_A, 0, "orders.read_order")];
+    renderResults();
+
+    const usage = await screen.findByRole("region", { name: "Usage" });
+    const [drawn, folded] = within(usage).getAllByRole("table", { hidden: true });
+    const labels = (table: HTMLElement) =>
+      within(table)
+        .getAllByRole("rowheader", { hidden: true })
+        .map((header) => header.firstElementChild?.firstElementChild?.textContent);
+
+    // Every row drawn open is one the arms differ on, says so in words, and draws its figures
+    // larger; every folded row is one they share, drawn once across the arms.
+    const differing = labels(drawn);
+    expect(differing).toEqual([
+      "Answered turns",
+      "Attempts",
+      "Tool calls",
+      "Model requests",
+      "Tokens, in and out",
+      "Input tokens",
+      "Output tokens",
+      "Time in attempts",
+      "Time in tools",
+      "Estimated cost",
+    ]);
+    for (const row of within(drawn).getAllByRole("row").slice(1)) {
+      expect(row).toHaveClass("bg-admin-differs");
+      expect(within(row).getByText("Differs")).toBeVisible();
+      for (const cell of within(row).getAllByRole("cell")) {
+        expect(cell.querySelector(".font-bold.text-\\[16px\\]")).not.toBeNull();
+      }
+    }
+    const shared = labels(folded);
+    expect(shared).toEqual(["Turns", "Retries", "Failures", "Writes"]);
+    // Fourteen measures in all: none dropped, none drawn twice.
+    expect(differing.length + shared.length).toBe(14);
+    const disclosure = within(usage).getByText("4 measures are the same for both arms");
+    expect(disclosure.tagName).toBe("SUMMARY");
+    expect(disclosure.closest("details")).not.toHaveAttribute("open");
+    // One value across both arms, drawn whole.
+    expect(sheetCells(usage, "Failures")).toEqual(["none"]);
+  });
+
+  it("marks in Outcome the turn one arm alone received", async () => {
     turns = [...OPENED, turn(ARM_B, 1, "composition-1", "Yes, go ahead.")];
     renderResults();
 
-    const divergence = await screen.findByRole("region", { name: "Input divergence" });
+    const outcome = await screen.findByRole("region", { name: "Outcome" });
 
-    // The second turn, counted from one as the arm cards count it: the trigger is the first.
-    expect(within(divergence).getByText("Turn 2")).toBeVisible();
-    expect(within(divergence).queryByText("Turn 1")).toBeNull();
-    expect(within(divergence).getByText(/never received this turn/)).toBeVisible();
-    expect(within(divergence).getByText(/Yes, go ahead\./)).toBeVisible();
+    // One spanning row says the comparison is not controlled, the old footer on the cell's side.
+    const verdict = sheetRow(outcome, "Input divergence");
+    expect(within(verdict).getAllByRole("cell")).toHaveLength(1);
+    expect(
+      within(verdict).getByText(
+        "Not every turn reached both arms as one composition, so the comparison is not controlled.",
+      ),
+    ).toBeVisible();
+    const footer = within(verdict).getByText(
+      "One send is one composition however many arms it reaches.",
+    );
+    expect(footer.closest("td")).not.toBeNull();
+    expect(within(verdict).getByRole("rowheader")).toHaveTextContent(/^Input divergence$/);
+    // Then a row per divergent turn — the second, counted from one as the summary row counts
+    // it — with what each arm heard in its own column.
+    expect(within(outcome).queryByRole("row", { name: /^Turn 1/ })).toBeNull();
+    expect(sheetCells(outcome, "Turn 2")).toEqual(["never received this turn", "“Yes, go ahead.”"]);
+    expect(within(outcome).queryByText(/the comparison is controlled/)).toBeNull();
   });
 
-  it("reads a controlled comparison as controlled", async () => {
+  it("reads a controlled comparison as controlled, in Outcome above the evidence", async () => {
     renderResults();
 
-    const divergence = await screen.findByRole("region", { name: "Input divergence" });
+    const outcome = await screen.findByRole("region", { name: "Outcome" });
+    const row = within(outcome).getByRole("row", { name: /^Input divergence/ });
 
-    expect(within(divergence).getByText(/the comparison is controlled/)).toBeVisible();
+    expect(within(row).getByText(/the comparison is controlled/)).toBeVisible();
+    expect(within(row).getByText("✓")).toHaveAttribute("aria-hidden", "true");
+    // The card's footer is the row's second line.
+    expect(
+      within(row).getByText("One send is one composition however many arms it reaches."),
+    ).toBeVisible();
+    // Above the evidence it governs.
+    const evidence = screen.getByRole("region", { name: "Deterministic evidence" });
+    expect(outcome.compareDocumentPosition(evidence) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it("reports a judge the lab could not reach rather than leaving the row blank", async () => {
@@ -7692,7 +7799,7 @@ describe("replay, fork and the provider the lab can reach", () => {
   });
 });
 
-describe("what the arms differed on", () => {
+describe("what the arms differed on, in Configuration and Outcome", () => {
   /** The comparison fixture with only the named dimensions left differing. */
   function differingOnly(
     ...dimensions: ComparisonVariableSchema["dimension"][]
@@ -7730,13 +7837,28 @@ describe("what the arms differed on", () => {
   }
 
   async function differedOn() {
-    return screen.findByRole("region", { name: "What the arms differed on" });
+    return screen.findByRole("region", { name: "Configuration" });
   }
 
-  /** A row's cells after the variable's own header, read left to right. */
+  /** What the differences let an operator attribute: Outcome's row, above the evidence. */
+  function attribution(): HTMLElement {
+    return within(screen.getByRole("region", { name: "Outcome" })).getByRole("row", {
+      name: /^Attribution/,
+    });
+  }
+
+  /** The arms' names over the drawn rows, as assistive technology hears them. */
+  function columnHeaders(card: HTMLElement) {
+    const [drawn] = within(card).getAllByRole("table", { hidden: true });
+    return within(drawn)
+      .getAllByRole("columnheader", { hidden: true })
+      .map((head) => head.textContent);
+  }
+
+  /** A row's cells after the variable's own header, read left to right, open or folded. */
   function cellsOf(card: HTMLElement, dimension: RegExp) {
-    return within(within(card).getByRole("row", { name: dimension }))
-      .getAllByRole("cell")
+    return within(within(card).getByRole("row", { name: dimension, hidden: true }))
+      .getAllByRole("cell", { hidden: true })
       .map((cell) => cell.textContent);
   }
 
@@ -7745,34 +7867,51 @@ describe("what the arms differed on", () => {
     renderResults();
 
     const card = await differedOn();
-    // Each value sits in its arm's column, in the setup matrix's words.
+    // Each value sits in its arm's column, heard with the arm's name.
+    expect(columnHeaders(card)).toEqual(["Variable", "Arm A", "Arm B"]);
+    // The difference is drawn first, tinted, and said in words rather than in a column.
+    const framework = within(card).getByRole("row", { name: /^Framework/ });
+    expect(framework).toHaveClass("bg-admin-differs");
+    expect(within(framework).getByText("Differs")).toBeVisible();
+    expect(cellsOf(card, /^Framework/)).toEqual(["pydantic-ai", "fake"]);
+    // An agreeing variable is one value across both arms, spelled as the lab spells it, behind
+    // the disclosure that counts them.
+    const same = within(card).getByText("6 variables are the same for both arms");
+    expect(same.closest("details")).not.toHaveAttribute("open");
+    expect(cellsOf(card, /^Architecture/)).toEqual(["Single agent"]);
+    expect(cellsOf(card, /^Tone of voice/)).toEqual(["shop default"]);
+    expect(same.closest("details")).toContainElement(
+      within(card).getByRole("row", { name: /^Architecture/, hidden: true }),
+    );
+    expect(within(card).queryByText(/Difference|Assessment/)).toBeNull();
+    // What that lets an operator attribute is said once, in Outcome, above the evidence.
     expect(
-      within(card)
-        .getAllByRole("columnheader")
-        .map((head) => head.textContent),
-    ).toEqual(["Variable", "Arm A", "Arm B", "Assessment"]);
-    expect(cellsOf(card, /^Framework/)).toEqual(["pydantic-ai", "fake", "Difference"]);
-    // An agreeing variable is one value across both arms, spelled as the lab spells it.
-    expect(cellsOf(card, /^Architecture/)).toEqual(["Single agent", "Same"]);
-    expect(cellsOf(card, /^Tone of voice/)).toEqual(["shop default", "Same"]);
-    expect(
-      within(card).getByText("One difference, so the behavior above is attributable to it."),
+      within(attribution()).getByText(
+        "One difference, so the behavior here is attributable to it.",
+      ),
     ).toBeVisible();
-    expect(within(card).queryByText(/cannot be attributed|can be attributed/)).toBeNull();
+    expect(within(card).queryByText(/attributable|attributed/)).toBeNull();
   });
 
   it("says two differences make nothing attributable, in the card and not as a chip", async () => {
     renderResults();
 
     const card = await differedOn();
-    expect(cellsOf(card, /^Framework/)).toEqual(["pydantic-ai", "fake", "Difference"]);
+    expect(cellsOf(card, /^Framework/)).toEqual(["pydantic-ai", "fake"]);
     expect(cellsOf(card, /^Model/)).toEqual([
       "openai/gpt-5-mini · temp 0.20 · 8 tool rounds",
       "fake/deterministic",
-      "Difference",
     ]);
+    // The differences first, in the record's order, and every shared variable folded.
+    const [drawn] = within(card).getAllByRole("table");
+    expect(
+      within(drawn)
+        .getAllByRole("rowheader")
+        .map((header) => header.firstElementChild?.firstElementChild?.textContent),
+    ).toEqual(["Framework", "Model"]);
+    expect(within(card).getByText("5 variables are the same for both arms")).toBeVisible();
     const confounded = "2 differences — no behavior here can be attributed to any one of them.";
-    expect(within(card).getByText(confounded)).toBeVisible();
+    expect(within(attribution()).getByText(confounded)).toBeVisible();
     // The strip under the header keeps the pins and no longer says what differs.
     expect(screen.getAllByText(confounded)).toHaveLength(1);
     expect(screen.queryByText(/ differs$/)).toBeNull();
@@ -7784,14 +7923,16 @@ describe("what the arms differed on", () => {
     renderResults();
 
     const card = await differedOn();
-    expect(within(card).queryByRole("cell", { name: "Difference" })).toBeNull();
-    expect(within(card).getAllByRole("cell", { name: "Same" })).toHaveLength(COMPARISON.length);
+    expect(within(card).queryByText("Differs")).toBeNull();
     expect(
-      within(card).getByText(
-        "No dimension differs, so nothing above can be attributed to a difference between the arms.",
+      within(card).getByText(`${COMPARISON.length} variables are the same for both arms`),
+    ).toBeVisible();
+    expect(
+      within(attribution()).getByText(
+        "No dimension differs, so nothing here can be attributed to a difference between the arms.",
       ),
     ).toBeVisible();
-    expect(within(card).queryByText(/attributable to it/)).toBeNull();
+    expect(screen.queryByText(/attributable to it/)).toBeNull();
   });
 
   it("draws a differing prompt whole, for a reader who cannot hover", async () => {
@@ -7841,6 +7982,7 @@ describe("what the arms differed on", () => {
 
     const card = await differedOn();
     const row = within(card).getByRole("row", { name: /^Support identity/ });
+    expect(row).toHaveClass("bg-admin-differs");
     // Both at v1, and still told apart by their ids; each opens what that arm pinned.
     const a = within(row).getByRole("link", { name: "v1 · aadf1767" });
     expect(a).toHaveAttribute("href", `/lab/support-identities/${frontline}`);
@@ -7869,12 +8011,12 @@ describe("what the arms differed on", () => {
     renderResults();
 
     const card = await differedOn();
-    const row = within(card).getByRole("row", { name: /^Support identity/ });
-    expect(within(row).getByRole("link", { name: "v2 · aadf1767" })).toHaveAttribute(
+    const row = within(card).getByRole("row", { name: /^Support identity/, hidden: true });
+    expect(within(row).getByRole("link", { name: "v2 · aadf1767", hidden: true })).toHaveAttribute(
       "href",
       `/lab/support-identities/${frontline}`,
     );
-    expect(cellsOf(card, /^Support identity/)).toEqual(["v2 · aadf1767", "Same"]);
+    expect(cellsOf(card, /^Support identity/)).toEqual(["v2 · aadf1767"]);
   });
 
   it("lists one support identity at v1 against v2 as the difference the server says it is", async () => {
@@ -7898,18 +8040,16 @@ describe("what the arms differed on", () => {
     renderResults();
 
     const card = await differedOn();
-    expect(cellsOf(card, /^Support identity/)).toEqual([
-      "v1 · aadf1767",
-      "v2 · aadf1767",
-      "Difference",
-    ]);
+    expect(cellsOf(card, /^Support identity/)).toEqual(["v1 · aadf1767", "v2 · aadf1767"]);
     const row = within(card).getByRole("row", { name: /^Support identity/ });
     expect(within(row).getByRole("link", { name: "v1 · aadf1767" })).toHaveAttribute(
       "href",
       `/lab/support-identities/${frontline}`,
     );
     expect(
-      within(card).getByText("One difference, so the behavior above is attributable to it."),
+      within(attribution()).getByText(
+        "One difference, so the behavior here is attributable to it.",
+      ),
     ).toBeVisible();
   });
 
@@ -7922,12 +8062,8 @@ describe("what the arms differed on", () => {
     renderResults();
 
     const card = await differedOn();
-    expect(
-      within(card)
-        .getAllByRole("columnheader")
-        .map((head) => head.textContent),
-    ).toEqual(["Variable", "Arm A", "Arm B", "Assessment"]);
-    expect(cellsOf(card, /^Framework/)).toEqual(["pydantic-ai", "fake", "Difference"]);
+    expect(columnHeaders(card)).toEqual(["Variable", "Arm A", "Arm B"]);
+    expect(cellsOf(card, /^Framework/)).toEqual(["pydantic-ai", "fake"]);
   });
 
   it("says one arm has nothing to compare against rather than that it agrees", async () => {
@@ -7935,17 +8071,19 @@ describe("what the arms differed on", () => {
     renderResults();
 
     const card = await differedOn();
-    expect(
-      within(card)
-        .getAllByRole("columnheader")
-        .map((head) => head.textContent),
-    ).toEqual(["Variable", "Arm A"]);
-    expect(within(card).queryByRole("cell", { name: "Same" })).toBeNull();
+    expect(columnHeaders(card)).toEqual(["Variable", "Arm A"]);
+    // One column, every variable drawn in it, nothing folded and nothing said to differ.
+    expect(within(card).getAllByRole("table")).toHaveLength(1);
+    expect(within(card).getAllByRole("row")).toHaveLength(COMPARISON.length + 1);
+    expect(within(card).queryByText(/Differs|same for/)).toBeNull();
     expect(cellsOf(card, /^Framework/)).toEqual(["pydantic-ai"]);
+    // Outcome says there is nothing to compare, and draws no divergence between one arm.
+    const outcome = screen.getByRole("region", { name: "Outcome" });
     expect(
-      within(card).getByText("One arm ran, so there is nothing to compare it against."),
+      within(attribution()).getByText("One arm ran, so there is nothing to compare it against."),
     ).toBeVisible();
-    expect(within(card).queryByText(/No dimension differs/)).toBeNull();
+    expect(within(outcome).queryByRole("row", { name: /^Input divergence/ })).toBeNull();
+    expect(screen.queryByText(/No dimension differs/)).toBeNull();
   });
 
   it("says the same of one arm on the bench", async () => {
@@ -7974,12 +8112,260 @@ describe("what the arms differed on", () => {
     // Only what differs is listed on the bench.
     expect(within(card).queryByText("Architecture")).toBeNull();
     expect(
-      within(card).getByText("One difference, so the behavior above is attributable to it."),
+      within(card).getByText("One difference, so the behavior here is attributable to it."),
     ).toBeVisible();
   });
 });
 
-describe("the rail holds the record", () => {
+describe("the results as one sheet", () => {
+  /** The same experiment with arm A alone. */
+  function serveOneArm() {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
+        const base = experiment(turns, agentTurns, toolEvents, mutationEvents);
+        return HttpResponse.json({
+          ...base,
+          runs: [base.runs[0]],
+          arm_inputs: [[]],
+          comparison: COMPARISON.map((entry) => variable(entry.dimension, [entry.values[0]])),
+        } satisfies ExperimentResponse);
+      }),
+    );
+  }
+
+  function strip(): HTMLElement | null {
+    return document.querySelector("[data-sheet-strip]");
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("draws the tabs, then the arms in one row on the sheet's columns", async () => {
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+    const armB = screen.getByRole("region", { name: "Arm B summary" });
+    const row = document.querySelector('[data-tour="results-arms"]') as HTMLElement;
+    const tabs = screen.getByRole("navigation", { name: "Results views" });
+
+    // One row holding both arms, under the tabs rather than above them.
+    expect(row).toContainElement(armA);
+    expect(row).toContainElement(armB);
+    expect(tabs.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(row.style.gridTemplateColumns).toBe("240px repeat(2, minmax(0, 1fr))");
+    // Its label cell says what the columns are not.
+    expect(within(row).getByText("Compared arms")).toBeVisible();
+    expect(within(row).getByText("Columns are never added into a winner.")).toBeVisible();
+    // Each arm's position letter is drawn again for the eye and not heard twice.
+    expect(within(armA).getByRole("heading", { name: "Arm A" })).toBeVisible();
+    expect(within(armA).getByText("A")).toHaveAttribute("aria-hidden", "true");
+    expect(within(armB).getByText("B")).toHaveAttribute("aria-hidden", "true");
+    // What it ran, opening its editor, and its count in the display face, in one ink.
+    expect(within(armA).getByRole("link", { name: "Atlas v1" })).toHaveAttribute(
+      "title",
+      "Open Atlas, whose draft published v1",
+    );
+    const count = within(armA).getByText("0 of 0");
+    expect(count).toHaveClass("font-display", "text-admin-ink");
+    expect(within(armB).getByText("0 of 0")).toHaveClass("text-admin-ink");
+    expect(count.parentElement).toHaveTextContent("0 of 0 decided objectives met");
+  });
+
+  it("keeps the summary row on every tab", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    await screen.findByRole("region", { name: "Arm A summary" });
+    await user.click(screen.getByRole("link", { name: "Execution timeline" }));
+
+    expect(await screen.findByRole("region", { name: "Arm A summary" })).toBeVisible();
+    expect(document.querySelectorAll('[data-tour="results-arms"]')).toHaveLength(1);
+  });
+
+  it("reaches every section of General from a chip, in the sheet's order", async () => {
+    renderResults();
+
+    const sections = await screen.findByRole("navigation", { name: "Sections" });
+    const chips = within(sections).getAllByRole("link");
+    expect(chips.map((chip) => chip.textContent)).toEqual([
+      "Outcome",
+      "Objectives",
+      "Business state",
+      "Configuration",
+      "Usage",
+      "Provenance",
+      "Notes",
+    ]);
+    const targets = chips.map((chip) => {
+      const href = chip.getAttribute("href") ?? "";
+      // The fragment on the results' own address: the chip stays on the page it is on.
+      expect(href.startsWith(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results#`)).toBe(true);
+      const id = href.split("#")[1] ?? "";
+      const target = document.getElementById(id);
+      expect(target, chip.textContent ?? "").not.toBeNull();
+      return target as HTMLElement;
+    });
+    // Each chip lands on what it names, the cards not yet drawn as sections included.
+    const [outcome, objectives, state, configuration, usage, provenance, notes] = targets;
+    expect(outcome).toBe(screen.getByRole("region", { name: "Outcome" }));
+    expect(objectives).toContainElement(
+      screen.getByRole("region", { name: "Deterministic evidence" }),
+    );
+    expect(objectives).toContainElement(screen.getByRole("region", { name: "LLM judge evidence" }));
+    expect(state).toContainElement(
+      screen.getByRole("region", { name: "Business state — verified, not claimed" }),
+    );
+    expect(configuration).toBe(screen.getByRole("region", { name: "Configuration" }));
+    expect(usage).toBe(screen.getByRole("region", { name: "Usage" }));
+    expect(provenance).toContainElement(screen.getByRole("region", { name: "Provenance" }));
+    expect(notes).toContainElement(screen.getByRole("region", { name: "Notes & tags" }));
+    // One column, top to bottom in that order: no rail beside the evidence.
+    for (const [before, after] of targets
+      .slice(0, -1)
+      .map((target, i) => [target, targets[i + 1]])) {
+      expect(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      expect(after.parentElement).toBe(outcome.parentElement);
+    }
+    // The chips sit under the summary row.
+    const row = document.querySelector('[data-tour="results-arms"]') as HTMLElement;
+    expect(row.compareDocumentPosition(sections) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("moves the reader to the section a chip names, and again on a second press", async () => {
+    const user = userEvent.setup();
+    const { router } = renderResults();
+
+    const sections = await screen.findByRole("navigation", { name: "Sections" });
+    await user.click(within(sections).getByRole("link", { name: "Usage" }));
+
+    expect(router.state.location.hash).toBe("#usage");
+    expect(screen.getByRole("region", { name: "Usage" })).toHaveFocus();
+    // Ringed as every focus is, where the browser shows focus. jsdom draws no ring and has no
+    // `:focus-visible` heuristic, so the test checks the class set that draws it.
+    expect(screen.getByRole("region", { name: "Usage" })).toHaveClass(
+      "focus-visible:outline-2",
+      "focus-visible:outline-lab-primary",
+    );
+    expect(document.getElementById("notes")).toHaveClass("focus-visible:outline-2");
+
+    // Away and back by the same chip: focus lands on it again.
+    await user.click(within(sections).getByRole("link", { name: "Notes" }));
+    expect(document.getElementById("notes")).toHaveFocus();
+    await user.click(within(sections).getByRole("link", { name: "Usage" }));
+    expect(screen.getByRole("region", { name: "Usage" })).toHaveFocus();
+    (document.activeElement as HTMLElement).blur();
+    await user.click(within(sections).getByRole("link", { name: "Usage" }));
+    expect(screen.getByRole("region", { name: "Usage" })).toHaveFocus();
+  });
+
+  it("reads Outcome per arm: what each met and where it stands", async () => {
+    toolEvents = [toolEvent(ARM_A, 0, "support.read_document")];
+    renderResults();
+
+    const outcome = await screen.findByRole("region", { name: "Outcome" });
+
+    expect(sheetCells(outcome, "Decided objectives met")).toEqual(["1 of 1", "0 of 0"]);
+    expect(sheetCells(outcome, "Status")).toEqual([
+      "Waiting for the agent at turn 1",
+      "Waiting for the agent at turn 1",
+    ]);
+    expect(
+      within(outcome).getByText(
+        "There is no aggregate score: each arm's count is of the rows something actually decided for it.",
+      ),
+    ).toBeVisible();
+    // Attribution spans the arms: it is a fact about the run, not about either of them.
+    const [attributed] = within(sheetRow(outcome, "Attribution")).getAllByRole("cell");
+    expect(attributed).toHaveAttribute("colspan", "2");
+  });
+
+  it("names the arms over their columns in a strip pinned over General, unheard", async () => {
+    renderResults();
+
+    await screen.findByRole("region", { name: "Outcome" });
+    const pinned = strip();
+
+    expect(pinned).not.toBeNull();
+    expect(pinned).toHaveAttribute("aria-hidden", "true");
+    expect(pinned).toHaveClass("sticky", "-top-5", "border-b", "bg-admin-canvas");
+    expect(pinned?.style.gridTemplateColumns).toBe("240px repeat(2, minmax(0, 1fr))");
+    expect(Array.from(pinned?.children ?? [], (cell) => cell.textContent)).toEqual([
+      "General",
+      "AArm A",
+      "BArm B",
+    ]);
+    // Pinned over the sections it names the columns of, as their column's first child.
+    expect(pinned?.parentElement).toContainElement(screen.getByRole("region", { name: "Usage" }));
+  });
+
+  it("pins no strip on a tab this slice has not put on the columns", async () => {
+    renderTimeline();
+
+    await screen.findByRole("region", { name: "Arm A summary" });
+    expect(strip()).toBeNull();
+  });
+
+  it("reads a one-arm run as one column, with no strip and nothing compared", async () => {
+    serveOneArm();
+    renderResults();
+
+    const usage = await screen.findByRole("region", { name: "Usage" });
+
+    expect(strip()).toBeNull();
+    expect(within(usage).getAllByRole("table")).toHaveLength(1);
+    // Every measure drawn in the arm's one column, none said to differ or to be shared.
+    expect(within(usage).getAllByRole("row")).toHaveLength(15);
+    expect(within(usage).queryByText(/Differs|same for/)).toBeNull();
+    expect(sheetCells(usage, "Turns")).toEqual(["1"]);
+    const row = document.querySelector('[data-tour="results-arms"]') as HTMLElement;
+    expect(row.style.gridTemplateColumns).toBe("240px repeat(1, minmax(0, 1fr))");
+  });
+
+  it("stacks every row at a phone's width, each cell under a line naming its arm", async () => {
+    stubViewport("narrow");
+    agentTurns = [agentTurn(ARM_A, 0)];
+    toolEvents = [toolEvent(ARM_A, 0, "orders.read_order")];
+    renderResults();
+
+    const usage = await screen.findByRole("region", { name: "Usage" });
+
+    // No strip at a phone's width: each cell names its own arm.
+    expect(strip()).toBeNull();
+    const row = sheetRow(usage, "Tool calls");
+    expect(row).not.toHaveAttribute("style");
+    expect(row).toHaveClass("block");
+    expect(sheetCells(usage, "Tool calls")).toEqual(["Arm A1", "Arm B0"]);
+    const [armA, armB] = within(row).getAllByRole("cell");
+    expect(within(armA).getByText("Arm A")).toBeVisible();
+    expect(within(armB).getByText("Arm B")).toBeVisible();
+    // A row spanning the arms names none: it is about the run.
+    const outcome = screen.getByRole("region", { name: "Outcome" });
+    expect(sheetCells(outcome, "Attribution")[0]).not.toMatch(/^Arm /);
+    // The summary row stacks too.
+    const summary = document.querySelector('[data-tour="results-arms"]') as HTMLElement;
+    expect(summary.style.gridTemplateColumns).toBe("");
+  });
+
+  it("draws the strip again once the viewport widens past a phone's", async () => {
+    const viewport = stubViewport("narrow");
+    renderResults();
+
+    await screen.findByRole("region", { name: "Usage" });
+    expect(strip()).toBeNull();
+
+    viewport.resize("wide");
+
+    expect(strip()).not.toBeNull();
+    expect(sheetCells(screen.getByRole("region", { name: "Usage" }), "Turns")).toEqual(["1"]);
+  });
+});
+
+describe("the record on the General tab", () => {
   const BLOCKS = {
     "03089d7f-b0ee-47a6-88bb-050d0f11d50f": "redirect-the-order",
     "1710d64d-17db-46b8-a0cf-9edb61e82ded": "read-required-document",
@@ -8034,11 +8420,6 @@ describe("the rail holds the record", () => {
     };
   }
 
-  /** The column beside the evidence, read from the card the rail always held. */
-  function rail(): HTMLElement {
-    return screen.getByRole("region", { name: "Quantitative" }).parentElement as HTMLElement;
-  }
-
   it("names each pinned block by its own name, beside the record's fingerprints and each arm's inputs", async () => {
     serveSeededPins();
     renderResults();
@@ -8076,13 +8457,8 @@ describe("the rail holds the record", () => {
     const armB = within(provenance).getByRole("list", { name: "What Arm B pinned" });
     expect(within(armB).getByRole("link", { name: "Beacon v1" })).toBeVisible();
 
-    // In the rail, with what a reviewer wrote, and not under the arm cards any more.
-    expect(rail()).toContainElement(provenance);
-    expect(rail()).toContainElement(screen.getByRole("region", { name: "Notes & tags" }));
-    expect(rail()).toContainElement(screen.getByRole("region", { name: "Input divergence" }));
-    expect(rail()).not.toContainElement(
-      screen.getByRole("region", { name: "Deterministic evidence" }),
-    );
+    // Its section's place on the sheet, which its chip and the tour reach.
+    expect(document.getElementById("provenance")).toContainElement(provenance);
     expect(document.querySelector('[data-tour="results-provenance"]')).toContainElement(provenance);
   });
 
@@ -8195,11 +8571,15 @@ describe("the rail holds the record", () => {
       "LLM judge evidence",
       "Provenance",
       "Notes & tags",
-      "Quantitative",
-      "Input divergence",
     ]) {
       const footer = screen.getByRole("region", { name }).lastElementChild as HTMLElement;
       const text = (footer.textContent ?? "").trim();
+      expect(text.match(/[.!?](\s|$)/g), `${name}: ${text}`).toHaveLength(1);
+    }
+    // A section of the sheet says it in one note under its title, where the card had a footer.
+    for (const name of ["Outcome", "Configuration", "Usage"]) {
+      const note = screen.getByRole("region", { name }).querySelector("h2 + p");
+      const text = (note?.textContent ?? "").trim();
       expect(text.match(/[.!?](\s|$)/g), `${name}: ${text}`).toHaveLength(1);
     }
 

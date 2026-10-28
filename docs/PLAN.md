@@ -137,8 +137,8 @@ Rebuild the experiment results as one comparison sheet with the arms as columns,
 chose and approved on 27 October 2026, keeping every piece of information the page holds and
 changing only where it sits. It is built on the primitives the workspace already has, without a
 backend or contract change. `docs/PLAN-UX.md` is the authority for its scope, order and checks.
-Its first slice writes ADR 0080 with its code, recording the composition and amending ADR 0036,
-ADR 0068 and ADR 0079 and the two principles of `docs/design-direction.md` it touches.
+ADR 0080 records the composition, and amends ADR 0036, ADR 0068 and ADR 0079 and the two
+principles of `docs/design-direction.md` it touches.
 Acceptance is that plan's.
 
 ## Deferred decision triggers
