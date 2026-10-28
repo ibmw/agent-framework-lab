@@ -1,6 +1,6 @@
 # UX plan
 
-Status: Milestone 14 open — 2026-10-28. Open slices only: a slice that lands is removed from this
+Status: no milestone open — 2026-10-28. Open slices only: a slice that lands is removed from this
 file. Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
 `docs/history/PLAN-UX-2026-09-13.md`; the 20 September plan, whose delivered Milestone 8's goal
 and acceptance criteria are in `docs/history/PLAN-UX-2026-09-20.md`; the 28 September plan,
@@ -8,9 +8,10 @@ whose delivered Milestone 9's are in `docs/history/PLAN-UX-2026-09-28.md`; the 2
 plan, whose delivered Milestone 10's are in `docs/history/PLAN-UX-2026-09-29.md`; the
 2 October plan, whose delivered Milestone 11's decisions, goal and acceptance criteria are in
 `docs/history/PLAN-UX-2026-10-02.md`; the 22 October plan, whose delivered Milestone 12's
-goal, decisions and acceptance criteria are in `docs/history/PLAN-UX-2026-10-22.md`; and the
+goal, decisions and acceptance criteria are in `docs/history/PLAN-UX-2026-10-22.md`; the
 27 October plan, whose delivered Milestone 13's goal and decisions are in
-`docs/history/PLAN-UX-2026-10-27.md`.
+`docs/history/PLAN-UX-2026-10-27.md`; and the 28 October plan, whose delivered Milestone 14's
+goal, decisions and acceptance criteria are in `docs/history/PLAN-UX-2026-10-28.md`.
 
 ## Purpose and authority
 
@@ -83,131 +84,12 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Milestones 8, 9, 10, 11, 12 and 13 are delivered. Their record is the commits and ADR
-0052–0079; their goals and acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md`,
+Milestones 8, 9, 10, 11, 12, 13 and 14 are delivered. Their record is the commits and ADR
+0052–0080; their goals and acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md`,
 `docs/history/PLAN-UX-2026-09-28.md`, `docs/history/PLAN-UX-2026-09-29.md`,
-`docs/history/PLAN-UX-2026-10-02.md`, `docs/history/PLAN-UX-2026-10-22.md` and
-`docs/history/PLAN-UX-2026-10-27.md`. Milestone 14 is open. Its slices land in the order they
-are numbered, because each reads the page the one before it left: General is the whole sheet, and
-the depth tabs keep their cards until Slice 62 converts them.
-
-## Milestone 14 — The results are one sheet, arm beside arm
-
-### Goal
-
-An operator reads a finished experiment top to bottom in one scroll, each arm a column and every
-fact a row, and each of the 27 pieces in `tmp/design-frames/results-inventory.dc.html` is still
-on the page. The operator chose direction C, a comparison sheet with the arms as columns, and
-approved its clickable mockup, `tmp/design-frames/results-sheet-mockup.dc.html` (the *sheet
-mockup* below), on 27 October 2026. Its decisions:
-
-- **One page scroll**, no nested scrolling region and no overlay. A slim strip pinned at the top
-  of the pane names the arms over their columns on General, Conversation and Execution
-  timeline; on Traces it is one line naming the chosen arm, attempt and span.
-- **The header** holds the way back, the title, *Notes · N*, Replay and *Fork…*, then the run's
-  facts as chips and a *Filed under* row of tags. Under it, the tabs, then one arm summary row —
-  name, configuration and version, model, objectives met, standing — which scrolls with the page.
-  The arm cards' figures move into *Usage*.
-- **General is a sheet**: a 240px label column and a column per arm, sections in the order
-  Outcome, Objectives, Business state, Configuration, Usage, Provenance, Notes, each reached from
-  a chip. The rail, its *Record* and the *Notes & tags* card go: tags join the header, notes are
-  the last section.
-- **What differs leads, and is never a verdict.** Configuration and Usage draw the rows the arms
-  differ on first, tinted, and fold the rest under "N … are the same for both arms". The tint
-  says the values differ and nothing more: no ratio, no winner.
-- **Spacious**: one fact per line, never "a · b · c"; rows about 18px tall in padding, line
-  height 1.5, prose at most about 75ch, long material behind a disclosure.
-- **The depth tabs keep their content under the strip**: the conversation draws each message once
-  and each arm's calls and reply in its column; the timeline a spanning row per turn over the
-  arms' lanes, its executed code folded at the foot; Traces an attempt list, the span waterfall
-  as the inventory keeps it (T4), and the span's detail. The *Arms* side card goes.
-
-The plan's decisions, where the operator's left a point open:
-
-- **A one-arm run is one column**: no strip, no *Differs*, no "same for both arms"; every row of
-  Configuration and Usage drawn; Outcome reads "One arm ran, so there is nothing to compare it
-  against." and draws no Input divergence.
-- **At a phone's width the rows stack** (below 48rem, ADR 0079): a row's label on a line, then
-  each arm's cell under a line naming its arm. No strip there; Traces' one-line strip stays, cut
-  with an ellipsis.
-- **Fork stays the panel under the header** (`ExperimentResultsLayout.tsx:535–701`), not the
-  sheet mockup's dialog, and offers no one-arm fork.
-- **The tabs stay links** in `nav[aria-label="Results views"]`, not a `tablist`.
-- **Accessible names stay** where a spec or the tour reaches them — "Arm A summary", "Back to the
-  live bench", "Add a tag", "Remove tag {tag}", "Add a note", "Fork this experiment", "Span",
-  "Span waterfall", "Traced attempts", "Every field of {order} each arm changed" — where the
-  sheet mockup draws others. A card that becomes a section takes the section's name.
-
-No slice touches the backend or a contract. The covered journeys are `experiment-start.spec.ts`
-(the results from :650 to :849, from History's *Open results* at :928 to :1028, and the
-deciding-call journey at :1036–1131), `tour-anchors.spec.ts` (the results tour,
-`lib/tours.ts:316–376`) and `sticky-header.spec.ts` (:736–782).
-
-### Slice 62 — The depth tabs under the strip
-
-- [ ] The strip on Conversation and Execution timeline, over the tabs' own arm columns.
-- [ ] **Conversation** (`ExperimentConversationPage.tsx:81–147`) on the sheet's columns: each
-  composition once, spanning, as Trigger or Message N, with "this arm only" where it reached one
-  arm; then *What each arm did*, each arm's attempts in its column — the calls with their glyph
-  and word, a fault where it fired, then the reply — headed by that arm's own turn number
-  (`ArmTurn` without its customer message, `components/ConversationThread.tsx:50–79`; the bench's
-  `ArmThread` is unchanged). An arm that never received the message says so in its cell.
-- [ ] **Execution timeline** (`ExperimentTimelinePage.tsx:252–337`) on the columns: per turn a
-  spanning row with the customer's event, then each arm's lane in its column; the lanes' header
-  row (:268–276) goes, the strip naming them; the lenses are unchanged (:173–212), and a
-  followed event lands clear of the strip. *Executed project code* (:414–454) becomes a closed
-  disclosure at the foot that stays the region "Executed project code" — a `section` carrying
-  the name, with the `summary` and its count of functions inside — so
-  `card(page, "Executed project code")` still resolves; the list inside it is as today, and the
-  journey opens it before it reads the list's items (`experiment-start.spec.ts:825–831`). The
-  *Arms* card (:147–166) goes.
-- [ ] **Traces** (`ExperimentTracesPage.tsx:105–171`): the attempts as a list on the left,
-  buttons with `aria-pressed` naming the arm, the turn and the attempt, in the group still named
-  "Traced attempts" (:181–211, :193); the span waterfall as today, each bar at its offset and
-  still the list "Span waterfall" (`Waterfall` :220–296, `bar` :336); the span's detail under it,
-  still the region "Span" (:299–333). A one-line strip pinned at the top names the chosen arm,
-  attempt and span. The *Arms* card (:150–169) goes.
-- [ ] Each footer becomes its section's note: the conversation's
-  (`ExperimentConversationPage.tsx:58–64`), the timeline's
-  (`ExperimentTimelinePage.tsx:119–128`), the executed code's (:428–433) inside its disclosure,
-  the traces' (`ExperimentTracesPage.tsx:109–116`) and the span's (:136–141).
-- [ ] At a phone's width the conversation and the timeline stack as General does, and Traces'
-  list sits above its spans.
-
-Frames: sheet mockup :114–129 and :243–362, with :461–532.
-
-Authority: ADR 0027, ADR 0037, ADR 0054, ADR 0080.
-
-Departures to record: `docs/design-direction.md`'s rows *The execution timeline's clock*, *The arm
-on a timeline card* (no lanes' header row; each card keeps its arm) and *The results' fourth tab*
-(the message drawn once); the sheet mockup's bars drawn by duration alone, kept at their offset
-as ADR 0037 draws them; its attempt `listbox` drawn as pressed buttons, with no arrow-key model
-to build; and its single lens as today's lenses, which combine.
-
-Branch: `feat/results-depth-tabs-sheet`. Checks: Vitest — `Experiments.test.tsx` (a message once
-and each arm's calls and reply in its column, a message one arm never received, the timeline's
-spanning row and lanes, the folded code and its count, a followed event landing, the traces'
-list, the waterfall's bars at their offsets, the span region and the one-line strip, no *Arms*
-card on either tab); `tours.test.ts`. `make check`, `pnpm build`; `pnpm test:e2e` for
-`experiment-start.spec.ts` (:805–849, the executed code opened before it is read),
-`sticky-header.spec.ts` (:736–782) and `tour-anchors.spec.ts`.
-
-Slice evidence: the seeded run's three depth tabs at 1440 and 390, scrolled with the strip pinned.
-
-### Acceptance criteria
-
-- General reads in one scroll — Outcome, Objectives, Business state, Configuration, Usage,
-  Provenance, Notes — each reached from a chip, and whether the comparison was controlled is in
-  Outcome, above the evidence.
-- Each of the 27 pieces in `tmp/design-frames/results-inventory.dc.html` is on the page.
-- On General, Conversation and Execution timeline a pinned strip names the arms over their
-  columns; on Traces it names the arm, attempt and span. Nothing scrolls inside the page, and
-  nothing covers it.
-- What differs is drawn first and said in words, and nothing between the arms reads as a verdict.
-- A one-arm run reads as one column; at 390 every row stacks with its arm named, and nothing
-  passes the viewport.
-- Tags are in the header, notes are a section, the rail and the *Arms* cards are gone, and
-  ADR 0080 records the composition and what it amends.
+`docs/history/PLAN-UX-2026-10-02.md`, `docs/history/PLAN-UX-2026-10-22.md`,
+`docs/history/PLAN-UX-2026-10-27.md` and `docs/history/PLAN-UX-2026-10-28.md`. No UX milestone is
+open: the next one is planned here, under the rules above, when the operator asks for it.
 
 ## Deliberately not here
 
