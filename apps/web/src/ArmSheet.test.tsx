@@ -6,6 +6,7 @@ import {
   SheetBody,
   SheetGroup,
   SheetHeadingRow,
+  SheetLineStrip,
   SheetRow,
   SheetSection,
   SheetSpanningRow,
@@ -327,5 +328,68 @@ describe("the arm-column sheet", () => {
       "Arm B — OpenAI Agents SDKParis",
       "AssessmentDifference",
     ]);
+  });
+
+  it("names a group of rows, lays a spanning row on its ground, and holds controls in the head", () => {
+    render(
+      <SheetSection
+        id="timeline"
+        title="Execution timeline"
+        note="What happened."
+        arms={TWO}
+        labelHeader="Turn"
+        grouped
+        controls={<button type="button">All events</button>}
+      >
+        <SheetTable label="Execution timeline">
+          <SheetBody label="Turn 1">
+            <SheetSpanningRow ground label="Turn 1">
+              The customer sent a message.
+            </SheetSpanningRow>
+            <SheetRow label="Events, in order" cells={["Replied", "Replied"]} />
+          </SheetBody>
+          <SheetBody label="Turn 2">
+            <SheetSpanningRow label="Turn 2">Again.</SheetSpanningRow>
+          </SheetBody>
+        </SheetTable>
+      </SheetSection>,
+    );
+
+    const section = screen.getByRole("region", { name: "Execution timeline" });
+    // The controls are in the head, after the note and before the rows.
+    const lens = within(section).getByRole("button", { name: "All events" });
+    expect(within(section).getByText("What happened.").nextElementSibling).toBe(lens);
+    const turns = within(section).getAllByRole("rowgroup", { name: /^Turn/ });
+    expect(turns.map((group) => group.getAttribute("aria-label"))).toEqual(["Turn 1", "Turn 2"]);
+    const [first, second] = turns.map((group) => within(group).getAllByRole("row")[0]);
+    expect(first).toHaveClass("bg-admin-canvas/50");
+    expect(second).not.toHaveClass("bg-admin-canvas/50");
+    expect(within(turns[0]).getAllByRole("row")[1]).not.toHaveClass("bg-admin-canvas/50");
+  });
+
+  it("pins Traces' one-line strip for one arm and at a phone's width, cut rather than wrapped", () => {
+    stubViewport("narrow");
+    render(
+      <div>
+        <SheetLineStrip
+          label="Traces"
+          letter="A"
+          arm="Arm A — Pydantic AI"
+          detail="Turn 1 · attempt 1 · span agent.tool · orders.read_order"
+        />
+      </div>,
+    );
+
+    const strip = document.querySelector("[data-sheet-strip]") as HTMLElement;
+    expect(strip).toHaveAttribute("aria-hidden", "true");
+    expect(strip).toHaveClass("sticky", "-top-5", "whitespace-nowrap", "overflow-hidden");
+    expect(Array.from(strip.children, (part) => part.textContent)).toEqual([
+      "Traces",
+      "A",
+      "Arm A — Pydantic AI",
+      "Turn 1 · attempt 1 · span agent.tool · orders.read_order",
+    ]);
+    expect(strip.children[2]).toHaveClass("truncate");
+    expect(strip.children[3]).toHaveClass("truncate");
   });
 });

@@ -821,8 +821,13 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   ).toHaveCount(2);
   await stream.getByRole("button", { name: "All events" }).click();
 
-  // And every event points at the lab's own code — resolved from the record, never a map.
+  // And every event points at the lab's own code — resolved from the record, never a map. It is
+  // folded at the timeline's foot, closed, its count of functions in its summary (ADR 0080).
   const paths = card(page, "Executed project code");
+  const summary = paths.locator("summary");
+  await expect(summary).toHaveText(/^Executed project code · \d+ functions$/);
+  await expect(paths.getByRole("listitem").first()).toBeHidden();
+  await summary.click();
   const applied = paths.getByRole("listitem").filter({ hasText: "SandboxActionService._apply" });
   await expect(applied).toHaveText(
     /capability_lab\/application\/sandbox_actions\.py:\d+ · 2 calls/,
@@ -1128,4 +1133,30 @@ test("a deciding call followed from a stacked results cell opens the call on the
   await expect(landed.getByText("the event you followed")).toBeVisible();
   await expect(landed).toBeInViewport();
   await expect(stream.getByText("the event you followed")).toHaveCount(1);
+
+  // At this width Traces still pins its one line, and the line still says which attempt the
+  // waterfall is of: the arm's name is cut before "Turn N · attempt M" is.
+  await page
+    .getByRole("navigation", { name: "Results views" })
+    .getByRole("link", { name: "Traces" })
+    .click();
+  await expect(page.getByRole("list", { name: "Span waterfall" })).toBeVisible();
+  const detail = page.locator("[data-sheet-strip] > :last-child");
+  await expect(page.locator("[data-sheet-strip] > :first-child")).toBeHidden();
+  await expect(detail).toHaveText(/^Turn 1 · attempt 1 · span /);
+  const fits = await detail.evaluate((element) => {
+    const text = element.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, "Turn 1 · attempt 1".length);
+    // An ellipsis is drawn over the end of the box, so the attempt is read whole only if its own
+    // run of text ends before the ellipsis, measured in the line's own font, begins.
+    const context = document.createElement("canvas").getContext("2d");
+    if (context === null) return false;
+    context.font = getComputedStyle(element).font;
+    const ellipsis = context.measureText("…").width;
+    return range.getBoundingClientRect().right <= element.getBoundingClientRect().right - ellipsis;
+  });
+  expect(fits, "the strip cuts the attempt at a phone's width").toBe(true);
+  expect(await pastTheViewport(page)).toEqual([]);
 });

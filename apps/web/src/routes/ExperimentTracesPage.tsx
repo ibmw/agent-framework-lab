@@ -7,11 +7,24 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getExperimentTraces } from "../api/experiments";
-import { Card } from "../components/WorkspaceChrome";
+import { SheetCard, SheetLineStrip } from "../components/ArmSheet";
 import { breakable } from "../lib/breakable";
+import { armsInOrder } from "../lib/comparison";
 import { labelOf, TOOL_OUTCOME } from "../lib/enumLabels";
 import { describeFailure, TOOL_MARK } from "../lib/evidence";
-import { filterChipStateClasses } from "../lib/ui";
+import { sheetArmsOf } from "../lib/sheet";
+import {
+  sheetAttemptArmClasses,
+  sheetAttemptClasses,
+  sheetAttemptLabelClasses,
+  sheetAttemptListClasses,
+  sheetCellLineClasses,
+  sheetGroupEmptyClasses,
+  sheetSpanPanelClasses,
+  sheetSpanTitleClasses,
+  sheetTraceLayoutClasses,
+  sheetTraceMainClasses,
+} from "../lib/ui";
 import { useExperimentResults } from "./useExperimentResults";
 
 const UNAVAILABLE = "This experiment's traces are unavailable.";
@@ -100,83 +113,91 @@ export function ExperimentTracesPage() {
   }
 
   const detail = current?.spans.find((entry) => entry.span_id === span) ?? current?.spans[0];
+  const letters = sheetArmsOf(armsInOrder(experiment));
+  const letter = (runId: string) => letters.find((arm) => arm.key === runId)?.letter ?? "·";
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="grid min-w-0 content-start gap-4">
-        <Card
-          title="Traces"
-          footer={
-            <p className="text-xs text-admin-muted">
-              OpenTelemetry is the normalized format and an exporter such as Phoenix is a
-              replaceable consumer of it. A stored span carries no payload, no address, and no
-              free-form customer text — only the shape of the attempt and how long each part of it
-              took.
-            </p>
-          }
-        >
-          {attempts.length === 0 ? (
-            <p className="text-[13px] text-admin-muted">
-              Neither arm has been run yet, so there is nothing to trace.
-            </p>
-          ) : (
-            <div className="grid gap-3">
-              <Attempts attempts={attempts} selected={current} onSelect={select} />
+    // One page scroll (ADR 0080): the strip is the column's first child and holds over the tab;
+    // the attempts, the waterfall and the span's detail are one section under it.
+    <div className="grid min-w-0 gap-6">
+      {current === null ? null : (
+        <SheetLineStrip
+          label="Traces"
+          letter={letter(current.run_id)}
+          arm={current.arm_label}
+          detail={[
+            `Turn ${current.ordinal + 1} · attempt ${current.attempt}`,
+            detail === undefined ? null : `span ${describeSpan(detail)}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        />
+      )}
+      <SheetCard
+        id="traces"
+        title="Traces"
+        note="OpenTelemetry is the normalized format and an exporter such as Phoenix is a replaceable consumer of it. A stored span carries no payload, no address, and no free-form customer text — only the shape of the attempt and how long each part of it took."
+      >
+        {attempts.length === 0 ? (
+          <p className={sheetGroupEmptyClasses}>
+            Neither arm has been run yet, so there is nothing to trace.
+          </p>
+        ) : (
+          <div className={sheetTraceLayoutClasses}>
+            <Attempts attempts={attempts} selected={current} onSelect={select} />
+            <div className={sheetTraceMainClasses}>
               {current === null ? null : (
                 <Waterfall trace={current} selected={detail?.span_id ?? null} onSelect={setSpan} />
               )}
+              <SpanDetail trace={current} span={detail} />
             </div>
-          )}
-        </Card>
-      </div>
-
-      <div className="grid content-start gap-4">
-        <Card
-          title="Span"
-          footer={
-            <p className="text-xs text-admin-muted">
-              Which tool a span timed and what it answered are joined from the recorded tool event,
-              never stored on the span. The span itself is identifiers and milliseconds.
-            </p>
-          }
-        >
-          {current === null || detail === undefined ? (
-            <p className="text-[13px] text-admin-muted">Select a span to read what it covered.</p>
-          ) : (
-            <Attributes trace={current} span={detail} />
-          )}
-        </Card>
-
-        <Card
-          title="Arms"
-          footer={
-            <p className="text-xs text-admin-muted">
-              A trace belongs to one arm's attempt. The arm beside it is traced by its own advances
-              and never by this one.
-            </p>
-          }
-        >
-          <ul className="grid gap-2 text-[13px]">
-            {experiment.runs.map((run) => (
-              <li key={run.run_id} className="grid gap-0.5">
-                <span className="font-semibold text-lab-ink">{run.label}</span>
-                <span className="text-xs text-admin-muted">
-                  {run.framework_id} · {run.model_id}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
+          </div>
+        )}
+      </SheetCard>
     </div>
   );
 }
 
 /**
- * Every attempt both arms made, most recent last, as the frame's turn picker offers them.
- *
- * The selected attempt is drawn as the workspace's selected filter chip, so which attempt the
- * waterfall is of is seen and not only announced by `aria-pressed`.
+ * The span being read, under the waterfall (sheet mockup :347–352): the region "Span", its
+ * title naming the span, what it covered, and the note that says where its tool came from.
+ */
+function SpanDetail({
+  trace,
+  span,
+}: {
+  trace: RunTraceSchema | null;
+  span: RunTraceSpanSchema | undefined;
+}) {
+  return (
+    <section aria-label="Span" className={sheetSpanPanelClasses}>
+      <h3 className={sheetSpanTitleClasses}>
+        Span{" "}
+        {span === undefined ? null : (
+          <span className="font-mono font-medium [overflow-wrap:anywhere]">
+            {breakable(describeSpan(span))}
+          </span>
+        )}
+      </h3>
+      {trace === null || span === undefined ? (
+        <p className="text-[13px] text-admin-muted">Select a span to read what it covered.</p>
+      ) : (
+        <Attributes trace={trace} span={span} />
+      )}
+      <p className={sheetCellLineClasses}>
+        Which tool a span timed and what it answered are joined from the recorded tool event, never
+        stored on the span. The span itself is identifiers and milliseconds.
+      </p>
+    </section>
+  );
+}
+
+/**
+ * Every attempt both arms made, most recent last, as a list on the left (sheet mockup :330–336):
+ * each a press naming its arm over its turn and attempt, the one whose waterfall is drawn kept
+ * pressed and drawn on the selected chip's ground, so which it is is seen and not only announced.
+ * Pressed buttons rather than the mockup's `listbox`: a choice made by pressing needs no arrow-key
+ * model of its own, and each press is named whole, its arm, turn, attempt and failure.
  */
 function Attempts({
   attempts,
@@ -188,21 +209,23 @@ function Attempts({
   onSelect: (trace: RunTraceSchema) => void;
 }) {
   return (
-    <fieldset
-      className="m-0 flex flex-wrap items-center gap-1.5 border-0 p-0"
-      aria-label="Traced attempts"
-    >
+    <fieldset className={sheetAttemptListClasses} aria-label="Traced attempts">
       {attempts.map((trace) => {
         const active = selected !== null && traceKey(trace) === traceKey(selected);
         return (
           <button
             key={traceKey(trace)}
-            className={active ? filterChipStateClasses.selected : filterChipStateClasses.unselected}
+            className={sheetAttemptClasses[active ? "selected" : "unselected"]}
             type="button"
             aria-pressed={active}
+            aria-label={describeAttempt(trace)}
             onClick={() => onSelect(trace)}
           >
-            {describeAttempt(trace)}
+            <span className={sheetAttemptArmClasses}>{trace.arm_label}</span>
+            <span className={sheetAttemptLabelClasses}>
+              {`Turn ${trace.ordinal + 1} · attempt ${trace.attempt}`}
+              {trace.outcome === "failed" ? " · failed" : ""}
+            </span>
           </button>
         );
       })}

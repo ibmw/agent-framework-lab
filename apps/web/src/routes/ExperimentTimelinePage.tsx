@@ -6,16 +6,39 @@ import type {
   TimelineCategory,
   TimelineEntrySchema,
 } from "@agent-lab/contracts";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getExperimentTimeline } from "../api/experiments";
-import { Card } from "../components/WorkspaceChrome";
+import {
+  ArmStrip,
+  SheetBody,
+  SheetRow,
+  SheetSection,
+  SheetSpanningRow,
+  SheetTable,
+} from "../components/ArmSheet";
 import { breakable } from "../lib/breakable";
+import { armsInOrder } from "../lib/comparison";
 import { labelOf as enumLabel, TOOL_OUTCOME } from "../lib/enumLabels";
 import { describeFailure, TOOL_MARK } from "../lib/evidence";
+import { sheetArmsOf } from "../lib/sheet";
 import { timelineAnchor } from "../lib/timelineAnchors";
-import { chipClasses, filterChipStateClasses } from "../lib/ui";
+import {
+  chipClasses,
+  filterChipStateClasses,
+  sheetCellEmptyClasses,
+  sheetCodeBodyClasses,
+  sheetCodeCardClasses,
+  sheetCodeCountClasses,
+  sheetCodeSummaryClasses,
+  sheetEventClasses,
+  sheetEventListClasses,
+  sheetGroupEmptyClasses,
+  sheetLensRowClasses,
+  sheetNoteClasses,
+  sheetOpenerEventClasses,
+} from "../lib/ui";
 import { useExperimentResults } from "./useExperimentResults";
 
 const UNAVAILABLE = "This experiment's timeline is unavailable.";
@@ -94,6 +117,9 @@ export function ExperimentTimelinePage() {
     return () => controller.abort();
   }, [shopId, experimentId]);
 
+  const runs = armsInOrder(experiment);
+  const arms = sheetArmsOf(runs);
+
   if (timeline === null) {
     return error ? (
       <p role="alert" className="text-[13px] text-lab-error">
@@ -112,59 +138,42 @@ export function ExperimentTimelinePage() {
         );
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="grid min-w-0 content-start gap-4">
-        <Card
-          title="Execution timeline"
-          footer={
-            <p className="text-xs text-admin-muted">
-              Normalized events: a framework's own payloads never enter this stream, and no message
-              body does either. What was said is on the{" "}
-              <Link className="font-semibold text-lab-ink" to="../conversation">
-                Conversation
-              </Link>{" "}
-              tab; this is what happened.
-            </p>
-          }
-        >
-          <Lenses selected={lenses} onChange={setLenses} />
-          {shown.length === 0 ? (
-            <p className="text-[13px] text-admin-muted">No event matches this lens yet.</p>
-          ) : (
-            <Lanes
-              entries={shown}
-              experiment={experiment}
-              target={target}
-              filtered={lenses.length > 0}
-            />
-          )}
-        </Card>
-      </div>
+    // The strip is the column's first child, so it holds over the lanes for as long as the
+    // timeline is on screen; the executed code folds at the foot (ADR 0080).
+    <div className="grid min-w-0 gap-6">
+      <ArmStrip label="Execution timeline" arms={arms} />
+      <SheetSection
+        id="timeline"
+        title="Execution timeline"
+        note={
+          <>
+            Normalized events: a framework's own payloads never enter this stream, and no message
+            body does either. What was said is on the{" "}
+            <Link className="font-semibold text-lab-ink" to="../conversation">
+              Conversation
+            </Link>{" "}
+            tab; this is what happened.
+          </>
+        }
+        arms={arms}
+        labelHeader="Turn"
+        grouped
+        controls={<Lenses selected={lenses} onChange={setLenses} />}
+      >
+        {shown.length === 0 ? (
+          <p className={sheetGroupEmptyClasses}>No event matches this lens yet.</p>
+        ) : (
+          <Lanes
+            entries={shown}
+            experiment={experiment}
+            runs={runs}
+            target={target}
+            filtered={lenses.length > 0}
+          />
+        )}
+      </SheetSection>
 
-      <div className="grid content-start gap-4">
-        <CodePaths entries={timeline.entries} />
-
-        <Card
-          title="Arms"
-          footer={
-            <p className="text-xs text-admin-muted">
-              Each arm ran the framework and model its published configuration named, not whichever
-              this lab happens to be configured for now.
-            </p>
-          }
-        >
-          <ul className="grid gap-2 text-[13px]">
-            {experiment.runs.map((run) => (
-              <li key={run.run_id} className="grid gap-0.5">
-                <span className="font-semibold text-lab-ink">{run.label}</span>
-                <span className="text-xs text-admin-muted">
-                  {run.framework_id} · {run.model_id}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
+      <CodePaths entries={timeline.entries} />
     </div>
   );
 }
@@ -178,7 +187,7 @@ function Lenses({
   onChange: (next: TimelineCategory[]) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className={sheetLensRowClasses}>
       <button
         className={lensClasses(selected.length === 0)}
         type="button"
@@ -244,95 +253,84 @@ function bandsOf(entries: TimelineEntrySchema[]): Band[] {
 }
 
 /**
- * The arms in lanes on one clock: a band per turn, the arms side by side inside it.
- *
- * Desktop first: the lanes are columns from `md` up and stack beneath each other narrower,
- * each still named by its arm, so a phone reads one arm's turn and then the other's.
+ * The arms in lanes on one clock, on the sheet's columns (sheet mockup :282–309): per turn a
+ * group of two rows. The first spans the arms with the customer's event — what opened the turn,
+ * and which arms it reached; the second, *Events, in order*, holds each arm's lane in its column.
+ * The strip pinned over the page names the columns, so the lanes have no header row of their own;
+ * at a phone's width the lanes stack as every row of the sheet does, each under a line naming its
+ * arm.
  */
 function Lanes({
   entries,
   experiment,
+  runs,
   target,
   filtered,
 }: {
   entries: TimelineEntrySchema[];
   experiment: ExperimentResponse;
+  runs: ExperimentRunSchema[];
   target: string;
   filtered: boolean;
 }) {
-  const runs = experiment.runs;
-  const lanes = { "--lanes": runs.length } as CSSProperties;
-  const laneGrid = "grid gap-3 md:grid-cols-[repeat(var(--lanes),minmax(0,1fr))] md:gap-4";
   return (
-    <div className="grid gap-3">
-      <div aria-hidden="true" className={`hidden ${laneGrid} md:grid`} style={lanes}>
-        {runs.map((run) => (
-          <p
-            key={run.run_id}
-            className="border-b-2 border-admin-border pb-1 text-[11px] font-semibold uppercase tracking-wide text-admin-muted"
-          >
-            {run.label} · {run.framework_id} · {run.model_id}
-          </p>
-        ))}
-      </div>
+    <SheetTable label="Execution timeline">
       {bandsOf(entries).map((band) => {
         const turn = `Turn ${band.step + 1}`;
         return (
-          <section
-            key={band.step}
-            aria-label={turn}
-            className="grid gap-2 rounded-[10px] border border-admin-border bg-admin-canvas p-3"
-          >
-            <h3 className="text-xs font-bold text-admin-ink">{turn}</h3>
-            {band.customer ? (
-              <ol className="grid gap-2">
-                <Row
-                  entry={band.customer}
-                  experiment={experiment}
-                  target={target}
-                  className="border-b border-admin-border/60 px-1 pb-2"
-                />
-              </ol>
-            ) : null}
-            <div className={laneGrid} style={lanes}>
-              {runs.map((run) => {
+          <SheetBody key={band.step} label={turn}>
+            <SheetSpanningRow ground label={turn}>
+              {band.customer ? (
+                <ol className={sheetEventListClasses}>
+                  <Row
+                    entry={band.customer}
+                    experiment={experiment}
+                    target={target}
+                    className={sheetOpenerEventClasses}
+                  />
+                </ol>
+              ) : (
+                <p className={sheetCellEmptyClasses}>
+                  The customer's event is not under this lens.
+                </p>
+              )}
+            </SheetSpanningRow>
+            <SheetRow
+              label="Events, in order"
+              cells={runs.map((run) => {
                 const own = band.lanes.get(run.run_id) ?? [];
                 const heard = band.customer === null || band.customer.run_ids.includes(run.run_id);
-                const name = `${run.label}, ${turn.toLowerCase()}`;
-                return (
-                  <div key={run.run_id} className="grid min-w-0 content-start gap-1.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-admin-muted md:sr-only">
-                      {run.label}
-                    </p>
-                    {own.length === 0 ? (
-                      <p className="text-[12px] text-admin-muted">
-                        {!heard
-                          ? "Never received this turn."
-                          : filtered
-                            ? "Nothing under this lens."
-                            : "Nothing recorded yet."}
-                      </p>
-                    ) : (
-                      <ol aria-label={name} className="grid gap-2">
-                        {own.map((entry) => (
-                          <Row
-                            key={entryKey(entry)}
-                            entry={entry}
-                            experiment={experiment}
-                            target={target}
-                            className="rounded-lg border border-admin-border bg-admin-surface px-2.5 py-2"
-                          />
-                        ))}
-                      </ol>
-                    )}
-                  </div>
+                return own.length === 0 ? (
+                  <p key={run.run_id} className={sheetCellEmptyClasses}>
+                    {!heard
+                      ? "Never received this turn."
+                      : filtered
+                        ? "Nothing under this lens."
+                        : "Nothing recorded yet."}
+                  </p>
+                ) : (
+                  <ol
+                    key={run.run_id}
+                    aria-label={`${run.label}, ${turn.toLowerCase()}`}
+                    className={sheetEventListClasses}
+                  >
+                    {own.map((entry) => (
+                      <Row
+                        key={entryKey(entry)}
+                        entry={entry}
+                        experiment={experiment}
+                        target={target}
+                        className={sheetEventClasses}
+                      />
+                    ))}
+                  </ol>
                 );
               })}
-            </div>
-          </section>
+            />
+          </SheetBody>
         );
       })}
-    </div>
+    </SheetTable>
   );
 }
 
@@ -410,6 +408,11 @@ function Source({ location }: { location: SourceLocationSchema }) {
  *
  * Derived from the stream rather than fetched: the locations are already on the events that
  * reached them, so a separate listing could only ever disagree with the timeline beside it.
+ *
+ * Folded at the timeline's foot, closed, its count of functions in its summary (sheet mockup
+ * :313–322): it is the deepest reading of the tab, under the stream it is read from. The region
+ * keeps its name, "Executed project code", on a `section` around the disclosure, so it is found
+ * by its name whether it is open or not.
  */
 function CodePaths({ entries }: { entries: TimelineEntrySchema[] }) {
   const counted = new Map<string, { location: SourceLocationSchema; calls: number }>();
@@ -423,34 +426,45 @@ function CodePaths({ entries }: { entries: TimelineEntrySchema[] }) {
   }
   const paths = [...counted.values()].sort((left, right) => right.calls - left.calls);
   return (
-    <Card
-      title="Executed project code"
-      footer={
-        <p className="text-xs text-admin-muted">
-          Resolved from the recorded events, never from a map kept by hand. A framework's own
-          internals are deliberately absent: they are not this project's to explain.
-        </p>
-      }
-    >
-      {paths.length === 0 ? (
-        <p className="text-[13px] text-admin-muted">Nothing has run yet.</p>
-      ) : (
-        <ul className="grid gap-2 text-[13px]">
-          {paths.map(({ location, calls }) => (
-            <li key={`${location.path}:${location.symbol}`} className="grid gap-0.5">
-              <span className="font-semibold text-lab-ink [overflow-wrap:anywhere]">
-                {breakable(location.symbol)}
-              </span>
-              <span className="font-mono text-[11px] [overflow-wrap:anywhere] text-admin-muted">
-                {breakable(`${location.path}:${location.line}`)} · {calls}{" "}
-                {calls === 1 ? "call" : "calls"}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
+    <section aria-label="Executed project code" className={sheetCodeCardClasses}>
+      <details>
+        <summary className={sheetCodeSummaryClasses}>
+          Executed project code{" "}
+          <span className={sheetCodeCountClasses}>
+            · {paths.length === 0 ? "nothing yet" : countOf(paths.length, "function")}
+          </span>
+        </summary>
+        <div className={sheetCodeBodyClasses}>
+          <p className={sheetNoteClasses}>
+            Resolved from the recorded events, never from a map kept by hand. A framework's own
+            internals are deliberately absent: they are not this project's to explain.
+          </p>
+          {paths.length === 0 ? (
+            <p className="text-[13px] text-admin-muted">Nothing has run yet.</p>
+          ) : (
+            <ul className="grid gap-2 text-[13px]">
+              {paths.map(({ location, calls }) => (
+                <li key={`${location.path}:${location.symbol}`} className="grid gap-0.5">
+                  <span className="font-semibold text-lab-ink [overflow-wrap:anywhere]">
+                    {breakable(location.symbol)}
+                  </span>
+                  <span className="font-mono text-[11px] [overflow-wrap:anywhere] text-admin-muted">
+                    {breakable(`${location.path}:${location.line}`)} · {calls}{" "}
+                    {calls === 1 ? "call" : "calls"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </details>
+    </section>
   );
+}
+
+/** "1 function", "9 functions". */
+function countOf(count: number, noun: string): string {
+  return `${count} ${count === 1 ? noun : `${noun}s`}`;
 }
 
 /**

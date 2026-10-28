@@ -547,7 +547,9 @@ export async function recordDecidedRun(
 
   // Both arms on the control framework, which runs offline: the e2e stack has no provider key.
   // A new configuration enables every read tool and no write, which is all the policy needs.
-  const arms: { configuration_id: string; version: number }[] = [];
+  // Each arm named as the seed names its arms, at the length of "Arm A — Pydantic AI" and more,
+  // so a line that has to fit an arm's name beside other words is tried with a long one.
+  const arms: { configuration_id: string; version: number; label: string }[] = [];
   for (const name of ["Control A", "Control B"]) {
     const created = await json(request, "post", "/api/v1/agent-configurations", {
       name: `${name} ${unique}`,
@@ -573,7 +575,11 @@ export async function recordDecidedRun(
       `/api/v1/agent-configurations/${configurationId}/versions`,
       {},
     );
-    arms.push({ configuration_id: configurationId, version: Number(published.version) });
+    arms.push({
+      configuration_id: configurationId,
+      version: Number(published.version),
+      label: `Arm ${name.slice(-1)} — the offline control framework`,
+    });
   }
 
   const experiment = await json(request, "post", `/api/v1/shops/${lab.shopId}/experiments`, {

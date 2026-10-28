@@ -258,6 +258,49 @@ ring's clearance, through `clearStickyStrip` (`lib/stickyHeader.ts`), as `clearS
 So a focused control, a chip's jump and a tour step land clear of it (WCAG 2.2's 2.4.11). It
 gives the pane back when it goes.
 
+### The depth tabs under the strip
+
+The three depth tabs are drawn on the sheet, each in one column under its strip, and the *Arms*
+side cards on the timeline and on Traces go: each arm's framework and model are on the summary
+row, above every tab. Each card's footer becomes its section's note.
+
+- **Conversation** is a section of the sheet named "Conversation", its rows in one table of the
+  same name. Each composition is a group of rows, a `rowgroup` named *Trigger* or *Message N*.
+  Its first row spans the arms on the faint ground: its label is the composition's name over
+  where it came from, "Trigger" or "Customer", and its cell is the message once, held to a
+  reading measure, over which arms it reached. A composition every arm received says "Reached
+  both arms as one composition."; one that reached only some carries "this arm only", as the
+  bench marks it, and "Reached {arm} alone.", since the mark no longer sits in one arm's column;
+  a one-arm run says neither. The second row, *What each arm did*, holds each arm's attempts in
+  its column: an `article` named "{arm} · turn N", headed by that arm's own turn number, then
+  each attempt's calls, a line each with the glyph before the words, a fault where it fired, and
+  the reply. That is `ArmAttempts` (`components/ConversationThread.tsx`), the bench's thread
+  without the customer's message, with its calls drawn as lines rather than the bench's chips;
+  the words are the same, and the bench's `ArmThread` is unchanged. An arm that never received
+  the message says "{arm} did not receive this message." in its cell.
+- **Execution timeline** is a section named "Execution timeline", its lenses in its head under
+  the note, unchanged and still combining. Each turn is a group of rows named "Turn N": a row
+  spanning the arms, on the faint ground, with the customer's event, then *Events, in order*,
+  each arm's lane in its column, the list "{arm}, turn N". The lanes' header row goes, because
+  the strip names the columns; each event keeps its arm on its first line. A followed event is
+  scrolled to the middle of the pane and focused, so it lands clear of the strip, whose clearance
+  also holds for every scroll into view. *Executed project code* is a `section` named by those
+  words at the foot, around a closed `details` whose Georgia summary carries its count, "· N
+  functions"; the old card's footer and the list as it was are inside.
+- **Traces** is a section named "Traces". Under its head the attempts are a list on the left,
+  the group "Traced attempts", each a press with `aria-pressed` drawn on the selected chip's
+  ground, its arm over its turn and attempt and named whole, "{arm} · turn N · attempt M" with
+  "· failed" where it failed. Beside it, or under it at a phone's width, is the waterfall, still
+  the list "Span waterfall", each bar at its span's offset into the attempt (inventory T4, ADR
+  0037), then the span's detail, still the region "Span", titled by the span, its footer under
+  its terms. The strip is one line, `SheetLineStrip`: "Traces", the chosen arm's letter and name,
+  then the turn, the attempt and the span, cut with an ellipsis. It is pinned at every width and
+  for one arm, since it names a choice rather than columns, and it follows each press. The attempt
+  keeps room for "Turn N · attempt M" and a long arm name is cut first; below a phone's width the
+  label "Traces" is not drawn, because the tabs above already say it and the line needs its room.
+  At a phone's width the arm and the attempt are kept and the span is the first thing the
+  ellipsis cuts.
+
 ### A one-arm run is one column
 
 A one-arm run draws no strip, because the summary row already names the one column. It draws no
@@ -272,9 +315,11 @@ Below 48rem (ADR 0079, `useNarrowViewport`) every part of the table is a block. 
 on a line, then each arm's cell is under a line naming its arm, since no column is left to name
 it. A spanning row names no arm. The summary row stacks the same way. There is no strip, since
 there are no columns for it to name. Traces' one-line strip stays, cut with an ellipsis. This
-follows ADR 0079's column opened in place rather than a drawer, and it follows the timeline, whose
-lanes already stack under a line naming each arm (`ExperimentTimelinePage.tsx:304`). A switch
-between arms was refused, because it would show half a comparison at a time.
+follows ADR 0079's column opened in place rather than a drawer, and it follows what the timeline
+did before the sheet, whose lanes stacked under a line naming each arm; its lanes are now the
+sheet's rows and stack as they do. The conversation stacks the same way, and Traces' attempt list
+sits above its waterfall. A switch between arms was refused, because it would show half a
+comparison at a time.
 
 ### Fork stays the panel under the header
 
@@ -396,6 +441,27 @@ Each is recorded in `docs/design-direction.md`, *Departures from the handoff, in
   heading moved into the row header. The divergent verdict, "Not every turn reached both arms as
   one composition, so the comparison is not controlled.", is new and mirrors the controlled one.
 
+- `docs/design-direction.md`'s *The execution timeline's clock* and *The arm on a timeline card*:
+  the turn is a group of the sheet's rows, and the lanes have no header row; each event keeps its
+  arm. *The results' fourth tab*: the message is drawn once, spanning the arms, and the calls are
+  lines on the results and chips on the bench.
+- The sheet mockup draws each bar's length as its duration from the track's start. Each bar
+  stays at its span's offset, as ADR 0037 draws it, so the gap between two calls stays visible;
+  the operator decided this on 27 October 2026 (inventory T4).
+- The sheet mockup's attempts are a `listbox` of options. Here they are pressed buttons, with no
+  arrow-key model to build, each named by its arm, turn and attempt.
+- The sheet mockup's lens is one at a time. Here the lenses combine, as they did, so "what moved
+  this arm" is answered with the agent's write and the scenario's fault together.
+- The sheet mockup draws an arm's reply under "Answered" on the pine tint, and no "Agent" line.
+  Here an attempt keeps the bench's "Agent" line, which carries the attempt's number after a
+  retry, and the bench's reply box, so a reply reads as the one watched on the bench.
+- The sheet mockup labels a conversation's row "Turn N" and its timeline's "Turn N". Here the
+  conversation's row is *Trigger* or *Message N*, as the brief and the tab's own numbering say: a
+  composition is not one arm's turn, and each arm's cell carries its own turn number.
+- The sheet mockup's Traces note joins the *Arms* card's sentence and its own; its OpenTelemetry
+  sentence sits at the foot. Here the note is the Traces card's footer whole, the OpenTelemetry
+  sentence first, and the *Arms* card's sentence goes with the card.
+
 ## Consequences
 
 - `EvidenceMatrix` and its scroller, `EvidenceCell`, the `Verdicts` list, `describeVerdict`,
@@ -413,6 +479,14 @@ Each is recorded in `docs/design-direction.md`, *Departures from the handoff, in
   Usage, and the provenance step says Outcome lists the input divergence.
 - Measured on the seeded run at 1440×900: the strip holds at the pane's top with its columns over
   the sections' columns. At 390×844: nothing passes the viewport, and the pane is 338px of 338.
+
+- The depth tabs read the projections they read before: the conversation the experiment and
+  the timeline, the timeline its stream, Traces its traces. No request was added. The *Arms*
+  cards go; `ArmTurn` keeps the bench's thread and `ArmAttempts` is shared by both.
+- Measured on the seeded run's three depth tabs: at 1440×900 the arm strip holds at the pane's
+  top over the conversation's and the timeline's columns, and Traces' line once the waterfall is
+  scrolled; at 390×844 the pane is 338px of 338 and the document 390px of 390 on each, with
+  Traces' line held at the pane's top.
 
 ## Verification
 
@@ -504,6 +578,30 @@ Each is recorded in `docs/design-direction.md`, *Departures from the handoff, in
   changed. `tests/e2e/sticky-header.spec.ts`: the taller header still scrolls away, and its
   *Notes* lands the section under the strip. `tests/e2e/tour-anchors.spec.ts`: the last two
   steps' `results-provenance` and `results-notes` each resolve to one visible element.
+
+- `Experiments.test.tsx`, for the depth tabs: a message drawn once across the arms, said to have
+  reached both, and each arm's turn number, calls and reply in its column; a split message marked
+  "this arm only" and naming the arm it reached, the other arm's cell saying it never received
+  it; the timeline's order kept; a refused call as a line with its glyph; the strip on
+  Conversation and Execution timeline over their columns, and none for one arm or at a phone's
+  width; the conversation and the timeline stacked at a phone's width under their arms' lines;
+  the timeline's turn as a spanning row over the lanes in their columns, heard under the arms'
+  column headers, with no lanes' header row; the executed code closed at the foot with its count,
+  then open with its note and list; the attempts listed before the waterfall and the span, each
+  naming its arm over its turn and attempt; each bar's `left` at its span's offset; the one-line
+  strip naming the arm, attempt and span and following each press, at a phone's width too; the
+  span titled by the span with its note; no *Arms* card on either tab.
+- `ArmSheet.test.tsx`: a named group of rows, a spanning row on its ground, controls in a
+  section's head; `SheetLineStrip` `aria-hidden`, sticky and cut, for one arm at a phone's width.
+  `lib/ui.test.ts`: the line strip's pin and cut, and the chosen attempt's ground.
+- `tests/e2e/experiment-start.spec.ts`: the executed code closed with its count, opened before
+  its list is read. Its deciding-call journey, whose arms are now named at the seed's length,
+  opens Traces at 390×844: the line's label is hidden, "Turn 1 · attempt 1" ends inside the line
+  rather than under its ellipsis, its end measured against the ellipsis's own width, and nothing
+  passes the viewport. `tests/e2e/sticky-header.spec.ts`: on a 1280×560 pane the strip held at
+  the pane's top on Conversation and Execution timeline once the header has scrolled away; a
+  followed event that the pane scrolls to lands under the strip, focused; Traces' line held at
+  the top and following a span's press.
 
 ## Migration
 

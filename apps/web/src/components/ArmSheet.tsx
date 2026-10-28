@@ -19,11 +19,16 @@ import {
   sheetGroupNoteClasses,
   sheetHeadingRowClasses,
   sheetLabelCellClasses,
+  sheetLineStripArmClasses,
+  sheetLineStripClasses,
+  sheetLineStripDetailClasses,
+  sheetLineStripLabelClasses,
   sheetNoteClasses,
   sheetRowClasses,
   sheetSameSummaryClasses,
   sheetSectionClasses,
   sheetSectionHeadClasses,
+  sheetSpanningGroundClasses,
   sheetStripCellClasses,
   sheetStripClasses,
   sheetTitleClasses,
@@ -151,11 +156,14 @@ export function SheetTable({
   );
 }
 
-/** A table's rows: one body, or one per group of rows a heading row opens. */
-export function SheetBody({ children }: { children: ReactNode }) {
+/**
+ * A table's rows: one body, or one per group of rows a heading row opens. `label` names the
+ * group where it is one thing of its own — a message of the conversation, a turn of the timeline.
+ */
+export function SheetBody({ label, children }: { label?: string; children: ReactNode }) {
   const { narrow } = useSheet();
   return (
-    <tbody role="rowgroup" className={narrow ? "block" : undefined}>
+    <tbody role="rowgroup" aria-label={label} className={narrow ? "block" : undefined}>
       {children}
     </tbody>
   );
@@ -172,6 +180,7 @@ export function SheetSection({
   after,
   grouped = false,
   tour,
+  controls,
 }: {
   /** The `id` its chip in *Sections* jumps to. */
   id: string;
@@ -191,10 +200,12 @@ export function SheetSection({
   grouped?: boolean;
   /** The tour's hook, where a step lights this section (`lib/tours.ts`). */
   tour?: string;
+  /** Controls in the section's head, under its note: the timeline's lenses. */
+  controls?: ReactNode;
 }) {
   const narrow = useNarrowViewport();
   return (
-    <SheetCard id={id} title={title} note={note} tour={tour}>
+    <SheetCard id={id} title={title} note={note} tour={tour} controls={controls}>
       <SheetContext.Provider value={{ arms, narrow, labelHeader }}>
         {grouped ? (
           children
@@ -219,12 +230,15 @@ export function SheetCard({
   title,
   note,
   tour,
+  controls,
   children,
 }: {
   id: string;
   title: string;
   note?: ReactNode;
   tour?: string;
+  /** What the head holds under the note, before the rows: the timeline's lenses. */
+  controls?: ReactNode;
   children: ReactNode;
 }) {
   const titleId = useId();
@@ -243,6 +257,7 @@ export function SheetCard({
           {title}
         </h2>
         {note ? <p className={sheetNoteClasses}>{note}</p> : null}
+        {controls}
       </div>
       {children}
     </section>
@@ -333,12 +348,29 @@ export function SheetRow({
   );
 }
 
-/** A row whose one cell spans the arms: a fact about the run rather than about one arm. */
-export function SheetSpanningRow({ label, children }: { label: ReactNode; children: ReactNode }) {
+/**
+ * A row whose one cell spans the arms: a fact about the run rather than about one arm. `ground`
+ * lays it on the faint ground that sets it apart as what the rows under it answer — the
+ * customer's message over each arm's reply, a turn's opening over its lanes.
+ */
+export function SheetSpanningRow({
+  label,
+  ground = false,
+  children,
+}: {
+  label: ReactNode;
+  ground?: boolean;
+  children: ReactNode;
+}) {
   const { arms, narrow } = useSheet();
   const { extra } = useContext(SheetTableContext);
   return (
-    <tr role="row" className={rowClasses(narrow, false)}>
+    <tr
+      role="row"
+      className={[rowClasses(narrow, false), ground ? sheetSpanningGroundClasses : null]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <LabelCell label={label} narrow={narrow} />
       <td
         role="cell"
@@ -493,6 +525,38 @@ export function ArmStrip({ label, arms }: { label: string; arms: readonly SheetA
           <span className="truncate">{arm.label}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The strip Traces pins in place of the arms' columns: one line naming the arm, the attempt and
+ * the span being read (sheet mockup :105–110). Traces has no arm columns to name — its attempts
+ * are a list on the left — so the line says which of them the waterfall under it is.
+ *
+ * Unlike `ArmStrip` it is drawn for one arm and at a phone's width too, because it names a
+ * choice rather than columns, and the choice is as easy to lose there; it is cut with an
+ * ellipsis rather than wrapped, so it stays one line. `aria-hidden` for the reason `ArmStrip` is:
+ * the attempt is the pressed button in "Traced attempts" and the span the pressed bar, each heard
+ * where it is chosen. It keeps what is scrolled into view clear of it (`clearStickyStrip`).
+ */
+export function SheetLineStrip({
+  label,
+  letter,
+  arm,
+  detail,
+}: {
+  label: string;
+  letter: string;
+  arm: string;
+  detail: string;
+}) {
+  return (
+    <div aria-hidden data-sheet-strip="" ref={clearStickyStrip} className={sheetLineStripClasses}>
+      <span className={sheetLineStripLabelClasses}>{label}</span>
+      <span className={sheetArmLetterClasses}>{letter}</span>
+      <span className={sheetLineStripArmClasses}>{arm}</span>
+      <span className={sheetLineStripDetailClasses}>{detail}</span>
     </div>
   );
 }

@@ -1047,6 +1047,116 @@ export const sheetStripCellClasses =
 export const sheetArmLetterClasses =
   "inline-flex h-[22px] w-[22px] flex-none items-center justify-center rounded-md bg-lab-ink text-[11.5px] font-bold text-white";
 
+/**
+ * Traces' strip (sheet mockup :105–110): one line on the strip's ground and rule, cut rather than
+ * wrapped — its label in small capitals, the arm's letter and name, then the attempt and span.
+ */
+export const sheetLineStripClasses =
+  "sticky -top-5 z-10 flex min-w-0 items-center gap-2.5 overflow-hidden border-b border-admin-border bg-admin-canvas px-5 py-2.5 text-[13px] whitespace-nowrap text-admin-ink";
+
+/**
+ * The line's label, "Traces", from a phone's width up: below it the line has room for the arm
+ * and the attempt but not for the tab's name again, which the tabs above already say.
+ */
+export const sheetLineStripLabelClasses =
+  "hidden flex-none text-[11px] font-bold tracking-[0.07em] text-admin-muted uppercase md:inline";
+
+/**
+ * The arm's name and the attempt after it share what the line leaves: the attempt keeps enough
+ * room for "Turn N · attempt M" at a phone's width, and a long arm name is cut first.
+ */
+export const sheetLineStripArmClasses = "min-w-[3rem] shrink truncate font-bold";
+
+export const sheetLineStripDetailClasses = "min-w-[8rem] flex-1 truncate text-admin-muted";
+
+/** A spanning row on the faint ground: what the rows under it answer (sheet mockup :248, :285). */
+export const sheetSpanningGroundClasses = "bg-admin-canvas/50";
+
+/*
+ * The depth tabs on the sheet (ADR 0080; sheet mockup :243–362).
+ */
+
+/** A row's label with the line under it naming where it came from: "Trigger", "Customer". */
+export const sheetRowFromClasses =
+  "text-[11px] font-bold tracking-[0.07em] text-admin-muted uppercase";
+
+/** What the customer said, once, across the arms: a bubble held to a reading measure. */
+export const sheetMessageClasses =
+  "max-w-[72ch] rounded-xl border border-admin-border bg-admin-surface px-4 py-3 text-[14.5px] leading-[1.6] break-words text-admin-ink";
+
+/** The line under the message saying which arms it reached. */
+export const sheetReachLineClasses =
+  "flex flex-wrap items-center gap-2 text-[12px] leading-[1.5] text-admin-muted";
+
+/** An attempt's calls on the sheet: one call a line, its glyph before its words. */
+export const sheetCallListClasses = "grid gap-2";
+
+export const sheetCallLineClasses =
+  "text-[13px] leading-[1.45] text-admin-ink [overflow-wrap:anywhere]";
+
+/** An arm's own turn number heading its cell: "Turn 2", as that arm counts. */
+export const sheetCellHeadingClasses = "text-[12.5px] font-bold text-admin-ink-soft";
+
+/** An arm's events in its lane: a list, one event a line, each ruled from the next. */
+export const sheetEventListClasses = "grid";
+
+/** One event in a lane, ruled from the one under it. */
+export const sheetEventClasses =
+  "border-b border-admin-border/40 py-2.5 first:pt-0 last:border-b-0";
+
+/** The customer's event across a turn's spanning row: no rule, no box. */
+export const sheetOpenerEventClasses = "py-0.5";
+
+/** The timeline's lenses, in the section's head under its note. */
+export const sheetLensRowClasses = "flex flex-wrap items-center gap-1.5 pt-1.5";
+
+/**
+ * *Executed project code*, folded at the timeline's foot (sheet mockup :313–322): a card whose
+ * Georgia summary carries its count, its note and its list inside.
+ */
+export const sheetCodeCardClasses = surfaceClasses;
+
+export const sheetCodeSummaryClasses = `flex cursor-pointer flex-wrap items-baseline gap-x-2 rounded-[10px] px-5 py-[18px] font-display text-[17px] font-bold text-admin-ink ${focusRingClasses}`;
+
+export const sheetCodeCountClasses = "font-sans text-[13px] font-medium text-admin-muted";
+
+export const sheetCodeBodyClasses = "grid gap-3 px-5 pb-[18px]";
+
+/**
+ * Traces (sheet mockup :326–362): the attempts as a list on the left, the waterfall and the
+ * span's detail to its right; at a phone's width the list sits above them.
+ */
+export const sheetTraceLayoutClasses =
+  "grid border-t border-admin-border/60 md:grid-cols-[17rem_minmax(0,1fr)]";
+
+/** The attempts' list, ruled from the waterfall beside it, or from it below at a phone's width. */
+export const sheetAttemptListClasses =
+  "m-0 grid min-w-0 content-start gap-1.5 border-0 border-b border-admin-border/60 p-3 md:border-r md:border-b-0";
+
+/**
+ * An attempt: the arm over the turn and attempt, a press that stays pressed while its waterfall
+ * is read — the selected filter chip's ground and ink, so the choice is seen, not only heard.
+ */
+const sheetAttemptBase = `grid gap-0.5 rounded-[9px] border px-3.5 py-3 text-left ${focusRingClasses}`;
+
+export const sheetAttemptClasses: Readonly<Record<"selected" | "unselected", string>> = {
+  selected: `${sheetAttemptBase} border-admin-chip-border bg-admin-chip text-lab-primary`,
+  unselected: `${sheetAttemptBase} border-transparent bg-admin-surface text-admin-ink hover:bg-admin-canvas`,
+};
+
+export const sheetAttemptArmClasses = "text-[13.5px] font-bold";
+
+export const sheetAttemptLabelClasses = "text-[12.5px] text-admin-ink-soft";
+
+/** The waterfall and the span's detail, beside or under the attempts. */
+export const sheetTraceMainClasses = "grid min-w-0 content-start gap-[18px] p-5";
+
+/** The span's detail, a bordered box under the waterfall. */
+export const sheetSpanPanelClasses =
+  "grid gap-3 rounded-[10px] border border-admin-border px-[18px] py-4";
+
+export const sheetSpanTitleClasses = "text-[14px] font-bold text-admin-ink";
+
 /** A chip in the *Sections* row, a link to its section. */
 export const sheetSectionChipClasses = `rounded-full border border-admin-border bg-admin-surface px-3 py-1.5 text-[12.5px] font-semibold text-admin-ink-soft no-underline hover:text-admin-ink ${focusRingClasses}`;
 

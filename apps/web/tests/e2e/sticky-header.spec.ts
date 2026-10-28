@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { test as base, expect } from "./support/e2e";
-import { type BuiltLab, buildLab } from "./support/lab";
+import { type BuiltLab, buildLab, recordDecidedRun } from "./support/lab";
 import { webOrigin } from "./support/stack";
 
 /**
@@ -779,4 +779,75 @@ test("the results pin the arm strip over the sheet, and let their header scroll 
   await expect(header).not.toBeInViewport();
   const notes = await box(page.getByRole("heading", { level: 2, name: "Notes" }));
   expect(notes.y).toBeGreaterThanOrEqual((await box(strip)).y + held.height);
+});
+
+test("the depth tabs pin their strips, and a followed event lands clear of the arm strip", async ({
+  page,
+  lab,
+  request,
+}) => {
+  test.slow();
+  const run = await recordDecidedRun(request, lab);
+  const [armA] = run.runIds;
+  const results = `/lab/bench/${lab.shopId}/${run.experimentId}/results`;
+  const strip = page.locator("[data-sheet-strip]");
+  const main = page.locator("main");
+  // Short enough that each tab scrolls under its strip.
+  await page.setViewportSize({ width: 1280, height: 560 });
+
+  // The conversation and the timeline pin the arm strip over their columns, as General does,
+  // and it holds at the pane's top once the header and the summary row have scrolled away.
+  for (const [tab, section, label] of [
+    ["conversation", "Conversation", "Conversation"],
+    ["timeline", "Execution timeline", "Execution timeline"],
+  ] as const) {
+    await page.goto(`${results}/${tab}`);
+    await expect(page.getByRole("region", { name: section })).toBeVisible();
+    await expect(strip).toHaveText(new RegExp(`^${label}A`));
+    expect(await strip.evaluate((element) => getComputedStyle(element).position)).toBe("sticky");
+    await main.evaluate((pane) => pane.scrollTo(0, pane.scrollHeight));
+    await expect(pageHeader(page)).not.toBeInViewport();
+    const held = await box(strip);
+    expect(held.y, `${tab}'s strip is not held at the pane's top`).toBe((await box(main)).y);
+    expect(held.height).toBeLessThan(60);
+  }
+
+  // A followed event lands clear of the strip, not behind it: arm A's first event, below the fold
+  // of this short pane and far enough from the foot that the pane can scroll it to the top, so
+  // the strip pinned there is what it must land under.
+  await page.goto(`${results}/timeline`);
+  const first = page
+    .getByRole("region", { name: "Execution timeline" })
+    .getByRole("list", { name: /^.+, turn 1$/ })
+    .first()
+    .getByRole("listitem")
+    .first();
+  const anchor = await first.getAttribute("id");
+  expect(anchor, "arm A's first event has no anchor").toMatch(new RegExp(`^event-${armA}`));
+  // Opened afresh, as a link from another page opens it, rather than as a fragment change on
+  // the page already open, which the router did not make.
+  await page.goto("about:blank");
+  await page.goto(`${results}/timeline#${anchor}`);
+  const landed = page.locator(`li[id="${anchor}"]`);
+  await expect(landed).toBeFocused();
+  await expect.poll(() => main.evaluate((pane) => pane.scrollTop)).toBeGreaterThan(0);
+  await expect(landed).toBeInViewport();
+  const pinned = await box(strip);
+  const event = await box(landed);
+  expect(event.y, "the followed event is under the strip").toBeGreaterThanOrEqual(
+    pinned.y + pinned.height,
+  );
+
+  // Traces pins its one line, naming the arm, the attempt and the span, and keeps it as the
+  // page scrolls.
+  await page.goto(`${results}/traces`);
+  const waterfall = page.getByRole("list", { name: "Span waterfall" });
+  await expect(waterfall).toBeVisible();
+  await expect(strip).toHaveText(/^TracesA.+Turn 1 · attempt 1 · span experiment\.attempt$/);
+  await main.evaluate((pane) => pane.scrollTo(0, pane.scrollHeight));
+  const line = await box(strip);
+  expect(line.y).toBe((await box(main)).y);
+  expect(line.height).toBeLessThan(60);
+  await waterfall.getByRole("button").nth(1).click();
+  await expect(strip).toHaveText(/span agent\.answer$/);
 });

@@ -8,7 +8,7 @@ import type {
 } from "@agent-lab/contracts";
 import { labelOf, TOOL_OUTCOME } from "../lib/enumLabels";
 import { describeFailure, TOOL_MARK } from "../lib/evidence";
-import { chipClasses } from "../lib/ui";
+import { chipClasses, sheetCallLineClasses, sheetCallListClasses } from "../lib/ui";
 
 /**
  * What was said in a run, as the live bench draws it and the results' Conversation tab reads it.
@@ -61,12 +61,40 @@ export function ArmTurn({
   return (
     <>
       <CustomerTurn turn={turn} divergent={divergent.has(turn.turn_id)} />
+      <ArmAttempts experiment={experiment} run={run} turn={turn} calls="chips" />
+    </>
+  );
+}
+
+/**
+ * Every attempt one arm made at answering one customer turn, without the turn itself: what the
+ * results' Conversation draws in an arm's column, under the message it drew once across them
+ * (ADR 0080).
+ *
+ * `calls` is how each attempt's calls are drawn: the bench's chips, side by side, or the sheet's
+ * lines, one call a line, as the sheet draws every fact (sheet mockup :257–259). The words of a
+ * call are the same either way.
+ */
+export function ArmAttempts({
+  experiment,
+  run,
+  turn,
+  calls,
+}: {
+  experiment: ExperimentResponse;
+  run: ExperimentRunSchema;
+  turn: ParticipantTurnSchema;
+  calls: "chips" | "lines";
+}) {
+  return (
+    <>
       {attemptsFor(experiment, run, turn.ordinal).map((attempt) => (
         <Attempt
           key={attempt.attempt}
           turn={attempt}
           events={eventsFor(experiment, run, attempt)}
           faults={faultsFor(experiment, run, attempt)}
+          calls={calls}
         />
       ))}
       {passedOver(run, turn) ? (
@@ -106,11 +134,14 @@ function Attempt({
   turn,
   events,
   faults,
+  calls,
 }: {
   turn: AgentTurnSchema;
   events: ToolEventSchema[];
   faults: MutationEventSchema[];
+  calls: "chips" | "lines";
 }) {
+  const lines = calls === "lines";
   return (
     <div className="grid gap-1">
       <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
@@ -118,12 +149,12 @@ function Attempt({
         {turn.attempt > 1 ? <span className={chipClasses.mark}>attempt {turn.attempt}</span> : null}
       </p>
       {events.length > 0 || faults.length > 0 ? (
-        <ul className="flex flex-wrap gap-1.5">
+        <ul className={lines ? sheetCallListClasses : "flex flex-wrap gap-1.5"}>
           {interleave(events, faults).map((entry) =>
             "tool" in entry ? (
               <li
                 key={`call:${entry.ordinal}:${entry.attempt}:${entry.sequence}`}
-                className={`${chipClasses.quiet} gap-1`}
+                className={lines ? sheetCallLineClasses : `${chipClasses.quiet} gap-1`}
                 title={`${entry.tool} ${entry.version} → ${labelOf(TOOL_OUTCOME, entry.outcome)}`}
               >
                 <span aria-hidden="true">{`${TOOL_MARK[entry.outcome]} `}</span>
@@ -133,7 +164,7 @@ function Attempt({
             ) : (
               <li
                 key={`fault:${entry.mutation_id}`}
-                className={chipClasses.mark}
+                className={lines ? `${chipClasses.mark} justify-self-start` : chipClasses.mark}
                 title={`${entry.mutation_id} · ${entry.timing} · ${entry.target}`}
               >
                 scenario fault · moved this arm

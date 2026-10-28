@@ -44,6 +44,7 @@ import {
   searchFieldRowClasses,
   searchFieldWrapClasses,
   sheetArmLetterClasses,
+  sheetAttemptClasses,
   sheetCellClasses,
   sheetCellLinkClasses,
   sheetCellSummaryClasses,
@@ -54,6 +55,10 @@ import {
   sheetFigureDiffersClasses,
   sheetFootFormClasses,
   sheetLabelCellClasses,
+  sheetLineStripArmClasses,
+  sheetLineStripClasses,
+  sheetLineStripDetailClasses,
+  sheetLineStripLabelClasses,
   sheetNoteClasses,
   sheetOutcomeLineClasses,
   sheetOutcomePillClasses,
@@ -818,6 +823,42 @@ describe("the results sheet (ADR 0080)", () => {
         "bg-admin-canvas",
       ]),
     );
+  });
+
+  it("pins Traces' one line where the arm strip holds, cut rather than wrapped", () => {
+    const shared = [
+      "sticky",
+      "-top-5",
+      "z-10",
+      "border-b",
+      "border-admin-border",
+      "bg-admin-canvas",
+    ];
+    expect(utilities(sheetLineStripClasses)).toEqual(
+      expect.arrayContaining([...shared, "whitespace-nowrap", "overflow-hidden"]),
+    );
+    // Below a phone's width the line gives its label's room to the arm and the attempt.
+    expect(utilities(sheetLineStripLabelClasses)).toEqual(
+      expect.arrayContaining(["hidden", "md:inline"]),
+    );
+    // The attempt keeps room for "Turn N · attempt M"; the arm's name is cut first.
+    expect(utilities(sheetLineStripDetailClasses)).toEqual(
+      expect.arrayContaining(["truncate", "flex-1", "min-w-[8rem]"]),
+    );
+    expect(utilities(sheetLineStripArmClasses)).toEqual(
+      expect.arrayContaining(["truncate", "shrink"]),
+    );
+  });
+
+  it("draws the chosen attempt on the selected chip's ground, and the others plain", () => {
+    expect(utilities(sheetAttemptClasses.selected)).toEqual(
+      expect.arrayContaining(["border-admin-chip-border", "bg-admin-chip", "text-lab-primary"]),
+    );
+    expect(utilities(sheetAttemptClasses.unselected)).toContain("border-transparent");
+    expect(sheetAttemptClasses.unselected).not.toContain("bg-admin-chip");
+    for (const state of [sheetAttemptClasses.selected, sheetAttemptClasses.unselected]) {
+      expect(state).toContain("focus-visible:outline-lab-primary");
+    }
   });
 
   it("draws every arm's letter in one ink, ranking none", () => {

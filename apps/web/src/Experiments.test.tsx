@@ -6446,40 +6446,70 @@ function precedes(earlier: HTMLElement, later: HTMLElement): boolean {
   return Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
 }
 
-/** The conversation's rows, one per composition, without the chips nested inside them. */
+/**
+ * The conversation's compositions, in order: each a group of the sheet's rows named by its
+ * label — "Trigger", "Message N" — the header row's group aside.
+ */
 async function conversationRows(card: HTMLElement): Promise<HTMLElement[]> {
-  const items = await within(card).findAllByRole("listitem");
-  return items.filter((row) => row.parentElement?.closest("li") === null);
+  const table = await within(card).findByRole("table", { name: "Conversation" });
+  return within(table)
+    .getAllByRole("rowgroup")
+    .filter((group) => group.hasAttribute("aria-label"));
+}
+
+/** A composition's two rows: the message across the arms, and what each arm did with it. */
+function composition(group: HTMLElement) {
+  const [message, did] = within(group).getAllByRole("row");
+  return { message: within(message).getByRole("cell"), did: within(did).getAllByRole("cell") };
 }
 
 describe("the conversation on the results", () => {
-  it("sets both arms' answers to one message side by side, each under the message", async () => {
+  it("draws each message once across the arms, then each arm's calls and reply in its column", async () => {
     secondTurnRefused();
     renderConversation();
 
     const card = await screen.findByRole("region", { name: "Conversation" });
     const rows = await conversationRows(card);
-    expect(rows.map((row) => within(row).getByRole("heading", { level: 3 }).textContent)).toEqual([
-      "Trigger",
-      "Message 1",
-    ]);
+    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual(["Trigger", "Message 1"]);
 
-    // The second message is one row holding both arms, so the customer's question sits level
-    // with both answers to it rather than wherever each arm's thread happened to have reached.
-    const second = within(rows[1]);
-    const armA = second.getByRole("article", { name: "Arm A · turn 2" });
-    const armB = second.getByRole("article", { name: "Arm B · turn 2" });
-    expect(precedes(within(armA).getByText(QUESTION), within(armA).getByText(REPEATED))).toBe(true);
-    expect(precedes(within(armB).getByText(QUESTION), within(armB).getByText(REPLY_B))).toBe(true);
-    expect(within(armA).queryByText(TRIGGER)).toBeNull();
+    // The second message is drawn once, spanning the arms, and said to have reached both.
+    const second = composition(rows[1]);
+    expect(second.message).toHaveAttribute("colspan", "2");
+    expect(within(second.message).getByText(QUESTION)).toBeVisible();
+    expect(second.message).toHaveTextContent("Reached both arms as one composition.");
+    expect(within(rows[1]).getAllByText(QUESTION)).toHaveLength(1);
+    expect(within(rows[1]).getByRole("rowheader", { name: /^Message 1/ })).toHaveTextContent(
+      "Message 1Customer",
+    );
 
-    const first = within(rows[0]);
-    for (const name of ["Arm A · turn 1", "Arm B · turn 1"]) {
-      const cell = first.getByRole("article", { name });
-      expect(precedes(within(cell).getByText(TRIGGER), within(cell).getByText(REPEATED))).toBe(
-        true,
-      );
-      expect(within(cell).queryByText(QUESTION)).toBeNull();
+    // Under it, *What each arm did*: each arm's reply in its own column, headed by its turn.
+    const [cellA, cellB] = second.did;
+    expect(within(rows[1]).getAllByRole("rowheader")[1]).toHaveTextContent("What each arm did");
+    const armA = within(cellA).getByRole("article", { name: "Arm A · turn 2" });
+    const armB = within(cellB).getByRole("article", { name: "Arm B · turn 2" });
+    expect(within(armA).getByRole("heading", { name: "Turn 2" })).toBeVisible();
+    expect(within(armA).getByText(REPEATED)).toBeVisible();
+    expect(within(armB).getByText(REPLY_B)).toBeVisible();
+    // The message is not drawn again in either arm's column, and the reply follows the calls.
+    expect(within(armA).queryByText(QUESTION)).toBeNull();
+    expect(
+      precedes(
+        within(armB).getByText(/orders\.propose_address_change → Refused/),
+        within(armB).getByText(REPLY_B),
+      ),
+    ).toBe(true);
+    // And the message reads before the replies to it.
+    expect(precedes(within(second.message).getByText(QUESTION), armA)).toBe(true);
+
+    const first = composition(rows[0]);
+    expect(within(first.message).getByText(TRIGGER)).toBeVisible();
+    expect(within(rows[0]).getByRole("rowheader", { name: /^Trigger/ })).toHaveTextContent(
+      /^Trigger$/,
+    );
+    for (const [index, name] of ["Arm A · turn 1", "Arm B · turn 1"].entries()) {
+      const cell = within(first.did[index]).getByRole("article", { name });
+      expect(within(cell).getByText(REPEATED)).toBeVisible();
+      expect(within(cell).queryByText(TRIGGER)).toBeNull();
     }
   });
 
@@ -6502,28 +6532,33 @@ describe("the conversation on the results", () => {
 
     const card = await screen.findByRole("region", { name: "Conversation" });
     const rows = await conversationRows(card);
-    expect(rows.map((row) => within(row).getByRole("heading", { level: 3 }).textContent)).toEqual([
+    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual([
       "Trigger",
       "Message 1",
       "Message 2",
     ]);
 
-    const split = within(rows[1]);
-    const heard = split.getByRole("article", { name: "Arm A · turn 2" });
-    expect(within(heard).getByText(SPLIT)).toBeVisible();
-    expect(within(heard).getByText("this arm only")).toBeVisible();
-    expect(split.getByRole("article", { name: "Arm B" })).toHaveTextContent(
-      "Arm B did not receive this message.",
-    );
+    // The split message is drawn once, marked as reaching one arm and naming it.
+    const split = composition(rows[1]);
+    expect(within(split.message).getByText(SPLIT)).toBeVisible();
+    expect(within(split.message).getByText("this arm only")).toBeVisible();
+    expectInertChip(within(split.message).getByText("this arm only"));
+    expect(split.message).toHaveTextContent("Reached Arm A alone.");
+    expect(split.message).not.toHaveTextContent("as one composition");
+    // Its arm's column is headed by that arm's own turn; the other arm's says it never heard it.
+    expect(within(split.did[0]).getByRole("article", { name: "Arm A · turn 2" })).toBeVisible();
+    expect(split.did[1]).toHaveTextContent("Arm B did not receive this message.");
+    expect(within(split.did[1]).queryByRole("article")).toBeNull();
 
-    // Each cell is numbered as its own arm counts it, which is what each arm card's
-    // "answered n of m" counts in too.
-    const shared = within(rows[2]);
-    const armA = shared.getByRole("article", { name: "Arm A · turn 3" });
-    const armB = shared.getByRole("article", { name: "Arm B · turn 2" });
-    expect(precedes(within(armA).getByText(QUESTION), within(armA).getByText(REPEATED))).toBe(true);
-    expect(precedes(within(armB).getByText(QUESTION), within(armB).getByText(REPLY_B))).toBe(true);
-    expect(within(armB).queryByText("this arm only")).toBeNull();
+    // Each cell is numbered as its own arm counts it, which is what each arm's standing counts
+    // in too.
+    const shared = composition(rows[2]);
+    expect(within(shared.message).getByText(QUESTION)).toBeVisible();
+    expect(within(shared.message).queryByText("this arm only")).toBeNull();
+    const armA = within(shared.did[0]).getByRole("article", { name: "Arm A · turn 3" });
+    const armB = within(shared.did[1]).getByRole("article", { name: "Arm B · turn 2" });
+    expect(within(armA).getByText(REPEATED)).toBeVisible();
+    expect(within(armB).getByText(REPLY_B)).toBeVisible();
   });
 
   it("orders the messages as the timeline numbers them, not as the record lists them", async () => {
@@ -6540,6 +6575,7 @@ describe("the conversation on the results", () => {
     const card = await screen.findByRole("region", { name: "Conversation" });
     const rows = await conversationRows(card);
     expect(rows[1]).toHaveTextContent("For arm B alone.");
+    expect(composition(rows[1]).message).toHaveTextContent("Reached Arm B alone.");
     expect(rows[2]).toHaveTextContent("For arm A alone.");
   });
 
@@ -6552,12 +6588,49 @@ describe("the conversation on the results", () => {
 
     const card = await screen.findByRole("region", { name: "Conversation" });
     const rows = await conversationRows(card);
-    expect(rows).toHaveLength(2);
-    expect(within(rows[0]).getByRole("heading", { level: 3 })).toHaveTextContent("Trigger");
-    expect(within(rows[1]).getByRole("heading", { level: 3 })).toHaveTextContent("Message 1");
-    expect(within(rows[1]).getByRole("article", { name: "Arm A · turn 2" })).toHaveTextContent(
-      QUESTION,
+    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual(["Trigger", "Message 1"]);
+    expect(composition(rows[1]).message).toHaveTextContent(QUESTION);
+    expect(within(rows[1]).getByRole("article", { name: "Arm A · turn 2" })).toBeVisible();
+  });
+
+  it("names the arms over the conversation's columns in the pinned strip", async () => {
+    secondTurnRefused();
+    renderConversation();
+
+    await screen.findByRole("article", { name: "Arm A · turn 2" });
+    const pinned = document.querySelector("[data-sheet-strip]");
+    expect(pinned).toHaveAttribute("aria-hidden", "true");
+    expect(Array.from(pinned?.children ?? [], (cell) => cell.textContent)).toEqual([
+      "Conversation",
+      "AArm A",
+      "BArm B",
+    ]);
+    expect(pinned?.parentElement).toContainElement(
+      screen.getByRole("region", { name: "Conversation" }),
     );
+    // The section's note is its old card's footer, and no card footer is left.
+    expect(
+      within(screen.getByRole("region", { name: "Conversation" })).getByText(
+        /^The thread as each arm recorded it, read-only/,
+      ),
+    ).toBeVisible();
+  });
+
+  it("stacks the conversation at a phone's width, each arm's cell under a line naming it", async () => {
+    stubViewport("narrow");
+    secondTurnRefused();
+    renderConversation();
+
+    const card = await screen.findByRole("region", { name: "Conversation" });
+    const rows = await conversationRows(card);
+    expect(document.querySelector("[data-sheet-strip]")).toBeNull();
+    const second = composition(rows[1]);
+    // The message names no arm: it is the run's.
+    expect(second.message).not.toHaveTextContent(/^Arm /);
+    const [cellA, cellB] = second.did;
+    expect(cellA).toHaveClass("block");
+    expect(cellA).toHaveTextContent(/^Arm ATurn 2/);
+    expect(cellB).toHaveTextContent(/^Arm BTurn 2/);
   });
 
   it("reads a refused call as refused, in words and with its glyph", async () => {
@@ -6566,9 +6639,12 @@ describe("the conversation on the results", () => {
 
     for (const name of ["Arm A · turn 2", "Arm B · turn 2"]) {
       const cell = await screen.findByRole("article", { name });
-      const chip = within(cell).getByText(/orders\.propose_address_change → Refused/);
-      expect(chip.querySelector("[aria-hidden='true']")?.textContent).toBe("✗ ");
-      expectInertChip(chip);
+      const call = within(cell).getByText(/orders\.propose_address_change → Refused/);
+      expect(call.querySelector("[aria-hidden='true']")?.textContent).toBe("✗ ");
+      // A line of the sheet, one call a line, and nothing to press.
+      expect(call.tagName).toBe("LI");
+      expect(call.closest("button, a")).toBeNull();
+      expect(call.parentElement).toHaveClass("grid");
     }
   });
 
@@ -6659,10 +6735,10 @@ describe("the conversation on the results", () => {
     const stream = await screen.findByRole("region", { name: "Execution timeline" });
     await user.click(within(stream).getByRole("link", { name: "Conversation" }));
 
-    expect(await screen.findByRole("region", { name: "Conversation" })).toBeVisible();
-    expect(await screen.findByRole("article", { name: "Arm A · turn 2" })).toHaveTextContent(
-      QUESTION,
-    );
+    const card = await screen.findByRole("region", { name: "Conversation" });
+    const rows = await conversationRows(card);
+    expect(composition(rows[1]).message).toHaveTextContent(QUESTION);
+    expect(within(rows[1]).getByRole("article", { name: "Arm A · turn 2" })).toBeVisible();
   });
 });
 
@@ -6796,16 +6872,32 @@ describe("execution timeline in lanes", () => {
     renderTimeline();
 
     const stream = await screen.findByRole("region", { name: "Execution timeline" });
-    const bands = within(stream).getAllByRole("region");
+    const table = within(stream).getByRole("table", { name: "Execution timeline" });
+    const bands = within(table)
+      .getAllByRole("rowgroup")
+      .filter((group) => group.hasAttribute("aria-label"));
     expect(bands.map((band) => band.getAttribute("aria-label"))).toEqual(["Turn 1", "Turn 2"]);
 
-    // Turn 2 holds what the customer said across its top, then both arms side by side.
-    const second = within(stream).getByRole("region", { name: "Turn 2" });
-    expect(within(second).getAllByRole("listitem")[0]).toHaveTextContent(
-      "The customer sent a message.",
-    );
-    const laneA = within(second).getByRole("list", { name: "Arm A, turn 2" });
-    const laneB = within(second).getByRole("list", { name: "Arm B, turn 2" });
+    // Turn 2 is a row spanning the arms with the customer's event, then a row with each arm's
+    // lane in its own column, in the arms' order.
+    const second = within(stream).getByRole("rowgroup", { name: "Turn 2" });
+    const [opening, events] = within(second).getAllByRole("row");
+    const [opened] = within(opening).getAllByRole("cell");
+    expect(within(opening).getByRole("rowheader")).toHaveTextContent("Turn 2");
+    expect(opened).toHaveAttribute("colspan", "2");
+    expect(within(opened).getByRole("listitem")).toHaveTextContent("The customer sent a message.");
+    expect(within(events).getByRole("rowheader")).toHaveTextContent("Events, in order");
+    const [columnA, columnB] = within(events).getAllByRole("cell");
+    const laneA = within(columnA).getByRole("list", { name: "Arm A, turn 2" });
+    const laneB = within(columnB).getByRole("list", { name: "Arm B, turn 2" });
+    // The lanes have no header row of their own: the strip names their columns, and each cell
+    // is heard with its arm's column header.
+    expect(within(stream).queryByText(/Arm A · .* · /)).toBeNull();
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent),
+    ).toEqual(["Turn", "Arm A", "Arm B"]);
     expect(
       within(laneA)
         .getAllByRole("listitem")
@@ -6830,7 +6922,7 @@ describe("execution timeline in lanes", () => {
       within(laneA).getAllByRole("listitem")[1].querySelector('[aria-hidden="true"]'),
     ).toBeNull();
     // Arm B's events never land in arm A's lane, nor in turn 1's band.
-    const first = within(stream).getByRole("region", { name: "Turn 1" });
+    const first = within(stream).getByRole("rowgroup", { name: "Turn 1" });
     expect(within(first).getByRole("list", { name: "Arm B, turn 1" })).not.toHaveTextContent(
       /Refused/,
     );
@@ -6839,7 +6931,7 @@ describe("execution timeline in lanes", () => {
   it("marks a scenario fault in the lane of the arm it fired into, where it fired", async () => {
     renderTimeline();
 
-    const second = await screen.findByRole("region", { name: "Turn 2" });
+    const second = await screen.findByRole("rowgroup", { name: "Turn 2" });
     const laneA = within(second).getByRole("list", { name: "Arm A, turn 2" });
     const [fault] = within(laneA).getAllByRole("listitem");
 
@@ -6878,9 +6970,9 @@ describe("execution timeline in lanes", () => {
     expect(refusals).toHaveAttribute("aria-pressed", "true");
     expect(refusals).toHaveClass("bg-admin-chip");
     expect(within(stream).getAllByRole("listitem")).toHaveLength(1);
-    const second = within(stream).getByRole("region", { name: "Turn 2" });
+    const second = within(stream).getByRole("rowgroup", { name: "Turn 2" });
     expect(within(second).getByText("Nothing under this lens.")).toBeVisible();
-    expect(within(stream).queryByRole("region", { name: "Turn 1" })).toBeNull();
+    expect(within(stream).queryByRole("rowgroup", { name: "Turn 1" })).toBeNull();
   });
 
   it("lands on the event a link names, and says so in words", async () => {
@@ -6902,7 +6994,7 @@ describe("execution timeline in lanes", () => {
 
     const stream = await screen.findByRole("region", { name: "Execution timeline" });
 
-    expect(within(stream).getByRole("region", { name: "Turn 2" })).toBeVisible();
+    expect(within(stream).getByRole("rowgroup", { name: "Turn 2" })).toBeVisible();
     expect(within(stream).queryByText("the event you followed")).toBeNull();
   });
 
@@ -6984,7 +7076,7 @@ describe("execution timeline", () => {
     expect(within(split).getByText("this arm only")).toBeVisible();
     expectInertChip(within(split).getByText("this arm only"));
     // The arm that never heard it says so in its own lane, rather than reading as idle.
-    const band = within(stream).getByRole("region", { name: "Turn 2" });
+    const band = within(stream).getByRole("rowgroup", { name: "Turn 2" });
     expect(within(band).getByText("Never received this turn.")).toBeVisible();
     expect(within(band).getByText("Nothing recorded yet.")).toBeVisible();
   });
@@ -7449,6 +7541,174 @@ describe("traces", () => {
     renderTraces();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("the trace store is unavailable");
+  });
+});
+
+describe("the depth tabs under the strip", () => {
+  /** The one-line strip Traces pins: its words, as the eye reads them. */
+  function traceStrip(): HTMLElement | null {
+    return document.querySelector("[data-sheet-strip]");
+  }
+
+  it("draws the timeline's footer as its note, and no Arms card beside it", async () => {
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+    expect(
+      within(stream).getByText(/^Normalized events: a framework's own payloads/),
+    ).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Arms" })).toBeNull();
+    // What the Arms card said — each arm's framework and model — is the summary row's.
+    expect(
+      within(screen.getByRole("region", { name: "Arm A summary" })).getByText(/deterministic/),
+    ).toBeVisible();
+  });
+
+  it("folds the executed code at the timeline's foot, closed, with its count of functions", async () => {
+    const user = userEvent.setup();
+    renderTimeline();
+
+    const paths = await screen.findByRole("region", { name: "Executed project code" });
+    const stream = screen.getByRole("region", { name: "Execution timeline" });
+    expect(precedes(stream, paths)).toBe(true);
+    const disclosure = paths.querySelector("details");
+    expect(disclosure).not.toHaveAttribute("open");
+    const summary = paths.querySelector("summary") as HTMLElement;
+    expect(summary).toHaveTextContent(/^Executed project code · \d+ functions?$/);
+    const listed = within(paths).getByText("SandboxActionService._apply").closest("li");
+    expect(listed).not.toBeVisible();
+    expect(within(paths).getByText(/^Resolved from the recorded events/)).not.toBeVisible();
+
+    await user.click(summary);
+
+    expect(disclosure).toHaveAttribute("open");
+    expect(listed).toBeVisible();
+    expect(listed).toHaveTextContent("sandbox_actions.py:311 · 1 call");
+    expect(within(paths).getByText(/^Resolved from the recorded events/)).toBeVisible();
+    // Its count is of the functions it lists.
+    expect(summary).toHaveTextContent(
+      `· ${within(paths).getAllByRole("listitem").length} function`,
+    );
+  });
+
+  it("stacks the timeline at a phone's width, each lane under a line naming its arm", async () => {
+    stubViewport("narrow");
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/timeline`, () =>
+        HttpResponse.json(LANED),
+      ),
+    );
+    renderTimeline();
+
+    const second = await screen.findByRole("rowgroup", { name: "Turn 2" });
+    expect(document.querySelector("[data-sheet-strip]")).toBeNull();
+    const [, events] = within(second).getAllByRole("row");
+    const [laneA, laneB] = within(events).getAllByRole("cell");
+    expect(laneA).toHaveClass("block");
+    expect(laneA).toHaveTextContent(/^Arm A/);
+    expect(laneB).toHaveTextContent(/^Arm B/);
+    expect(within(laneB).getByRole("list", { name: "Arm B, turn 2" })).toBeVisible();
+  });
+
+  it("lists the attempts on the left, each naming its arm over its turn and attempt", async () => {
+    traced = twoArmTraces();
+    renderTraces();
+
+    const card = await screen.findByRole("region", { name: "Traces" });
+    const picker = within(card).getByRole("group", { name: "Traced attempts" });
+    const presses = within(picker).getAllByRole("button");
+    expect(presses.map((press) => press.getAttribute("aria-label"))).toEqual([
+      "Arm B · turn 1 · attempt 1",
+      "Arm A · turn 2 · attempt 1",
+      "Arm A · turn 1 · attempt 1",
+      "Arm B · turn 2 · attempt 1",
+    ]);
+    // The arm over the turn, a line each.
+    expect(Array.from(presses[1].children, (line) => line.textContent)).toEqual([
+      "Arm A",
+      "Turn 2 · attempt 1",
+    ]);
+    // Before the waterfall and the span in reading order, which a phone's width stacks.
+    const waterfall = within(card).getByRole("list", { name: "Span waterfall" });
+    const span = within(card).getByRole("region", { name: "Span" });
+    expect(precedes(picker, waterfall)).toBe(true);
+    expect(precedes(waterfall, span)).toBe(true);
+    expect(picker.parentElement).toHaveClass("md:grid-cols-[17rem_minmax(0,1fr)]");
+    expect(screen.queryByRole("region", { name: "Arms" })).toBeNull();
+  });
+
+  it("draws each bar at its span's start, so the gaps between calls stay visible", async () => {
+    renderTraces();
+
+    const waterfall = await screen.findByRole("list", { name: "Span waterfall" });
+    const bars = within(waterfall)
+      .getAllByRole("button")
+      .map((row) => row.querySelector<HTMLElement>(".absolute"));
+    // The attempt is 3400 ms: the read starts 1700 ms in, the write 2600 ms in.
+    expect(bars.map((bar) => bar?.style.left)).toEqual([
+      "0%",
+      `${(90 / 3400) * 100}%`,
+      "50%",
+      `${(2600 / 3400) * 100}%`,
+    ]);
+    expect(bars[2]?.style.width).toBe(`${(310 / 3400) * 100}%`);
+  });
+
+  it("names the chosen arm, attempt and span in a one-line strip pinned over Traces", async () => {
+    const user = userEvent.setup();
+    traced = twoArmTraces();
+    renderTraces();
+
+    await screen.findByRole("group", { name: "Traced attempts" });
+    const pinned = traceStrip();
+    expect(pinned).toHaveAttribute("aria-hidden", "true");
+    expect(pinned).toHaveClass("sticky", "-top-5", "whitespace-nowrap", "overflow-hidden");
+    expect(Array.from(pinned?.children ?? [], (part) => part.textContent)).toEqual([
+      "Traces",
+      "A",
+      "Arm A",
+      "Turn 1 · attempt 1 · span experiment.attempt",
+    ]);
+    expect(pinned?.lastElementChild).toHaveClass("truncate");
+    expect(pinned?.parentElement?.firstElementChild).toBe(pinned);
+    expect(pinned?.parentElement).toContainElement(screen.getByRole("region", { name: "Traces" }));
+
+    // It follows the span pressed, and the attempt chosen, letter and all.
+    await user.click(
+      within(screen.getByRole("list", { name: "Span waterfall" })).getByRole("button", {
+        name: /read_order/,
+      }),
+    );
+    expect(pinned?.lastElementChild).toHaveTextContent(
+      "Turn 1 · attempt 1 · span agent.tool · orders.read_order",
+    );
+    await user.click(screen.getByRole("button", { name: "Arm B · turn 2 · attempt 1" }));
+    expect(Array.from(traceStrip()?.children ?? [], (part) => part.textContent)).toEqual([
+      "Traces",
+      "B",
+      "Arm B",
+      "Turn 2 · attempt 1 · span experiment.attempt",
+    ]);
+  });
+
+  it("keeps Traces' strip at a phone's width, where the arm strip is not drawn", async () => {
+    stubViewport("narrow");
+    renderTraces();
+
+    await screen.findByRole("group", { name: "Traced attempts" });
+    expect(traceStrip()).toHaveTextContent("TracesAArm ATurn 1 · attempt 1");
+  });
+
+  it("titles the span's detail by the span, its footer its note, still the region Span", async () => {
+    renderTraces();
+
+    const panel = await screen.findByRole("region", { name: "Span" });
+    expect(within(panel).getByRole("heading", { level: 3 })).toHaveTextContent(
+      "Span experiment.attempt",
+    );
+    expect(within(panel).getByText(/^Which tool a span timed and what it answered/)).toBeVisible();
+    const card = screen.getByRole("region", { name: "Traces" });
+    expect(within(card).getByText(/^OpenTelemetry is the normalized format/)).toBeVisible();
   });
 });
 
@@ -9088,11 +9348,47 @@ describe("the results as one sheet", () => {
     expect(pinned?.parentElement).toContainElement(screen.getByRole("region", { name: "Usage" }));
   });
 
-  it("pins no strip on a tab this slice has not put on the columns", async () => {
+  it("pins the strip over the timeline's lanes too, named for the tab", async () => {
     renderTimeline();
 
-    await screen.findByRole("region", { name: "Arm A summary" });
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+    const pinned = strip();
+    expect(pinned).toHaveAttribute("aria-hidden", "true");
+    expect(pinned).toHaveClass("sticky", "-top-5");
+    expect(pinned?.style.gridTemplateColumns).toBe("240px repeat(2, minmax(0, 1fr))");
+    expect(Array.from(pinned?.children ?? [], (cell) => cell.textContent)).toEqual([
+      "Execution timeline",
+      "AArm A",
+      "BArm B",
+    ]);
+    // Over the timeline and the folded code under it, as their column's first child.
+    expect(pinned?.parentElement?.firstElementChild).toBe(pinned);
+    expect(pinned?.parentElement).toContainElement(stream);
+    expect(pinned?.parentElement).toContainElement(
+      screen.getByRole("region", { name: "Executed project code" }),
+    );
+  });
+
+  it("pins no arm strip for a one-arm run on the conversation and the timeline", async () => {
+    serveOneArm();
+    const { unmount } = renderTimeline();
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
     expect(strip()).toBeNull();
+    const [, events] = within(
+      within(stream).getByRole("rowgroup", { name: "Turn 1" }),
+    ).getAllByRole("row");
+    expect(within(events).getAllByRole("cell")).toHaveLength(1);
+    unmount();
+
+    renderConversation();
+    const card = await screen.findByRole("region", { name: "Conversation" });
+    const [trigger] = await conversationRows(card);
+    expect(strip()).toBeNull();
+    // One column, and nothing said about which arms a message reached: there is no other.
+    expect(composition(trigger).did).toHaveLength(1);
+    expect(within(trigger).getAllByRole("rowheader")[1]).toHaveTextContent(/^What the arm did$/);
+    expect(composition(trigger).message).not.toHaveTextContent(/Reached|this arm only/);
   });
 
   it("reads a one-arm run as one column, with no strip and nothing compared", async () => {
