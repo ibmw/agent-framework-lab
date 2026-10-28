@@ -13,6 +13,11 @@ import {
   sheetColumns,
   sheetDiffersRowClasses,
   sheetDiffersTagClasses,
+  sheetExtraColumnClasses,
+  sheetGroupEmptyClasses,
+  sheetGroupHeadingClasses,
+  sheetGroupNoteClasses,
+  sheetHeadingRowClasses,
   sheetLabelCellClasses,
   sheetNoteClasses,
   sheetRowClasses,
@@ -43,9 +48,17 @@ import { useNarrowViewport } from "../lib/viewport";
 interface SheetFrame {
   arms: readonly SheetArm[];
   narrow: boolean;
+  /** The section's label column header, which a group's table names its rows by too. */
+  labelHeader: string;
 }
 
 const SheetContext = createContext<SheetFrame | null>(null);
+
+/**
+ * The table a row is drawn in: whether it adds a column after the arms' — the business state's
+ * field table adds its *Assessment* — and that column's header.
+ */
+const SheetTableContext = createContext<{ extra: string | undefined }>({ extra: undefined });
 
 function useSheet(): SheetFrame {
   const frame = useContext(SheetContext);
@@ -69,20 +82,28 @@ function everyArm(count: number): string {
  * equally between the arms, which is `sheetColumns` drawn by the table itself. At a phone's width
  * every part of it is a block, and the rows stack.
  *
+ * `extra` adds one column after the arms', at a fixed width, whose header it is: a row then
+ * carries that column's cell (`SheetRow`'s `extra`), and at a phone's width that cell is stacked
+ * last under a line naming the column, as an arm's is under its arm.
+ *
  * Its header row is `sr-only`, and so absolutely placed: the box around the table is `relative`
  * so that it is laid out against the table rather than the pane, which it could otherwise widen
  * at a phone's width (ADR 0079).
  */
-function SheetTable({
+export function SheetTable({
   label,
   labelHeader,
+  extra,
   children,
 }: {
   label: string;
-  labelHeader: string;
+  /** The label column's header; the section's when not given. */
+  labelHeader?: string;
+  /** The header of a column after the arms', when the table adds one. */
+  extra?: string;
   children: ReactNode;
 }) {
-  const { arms, narrow } = useSheet();
+  const { arms, narrow, labelHeader: sectionHeader } = useSheet();
   return (
     <div className="relative">
       <table
@@ -96,25 +117,47 @@ function SheetTable({
             {arms.map((arm) => (
               <col key={arm.key} />
             ))}
+            {extra ? <col className={sheetExtraColumnClasses} /> : null}
           </colgroup>
         )}
+        {/* At a phone's width the header row is a block too, so its cells stack inside the
+            `sr-only` box rather than laying a row out past the viewport's edge, clipped but
+            still there to be measured. */}
         <thead role="rowgroup" className="sr-only">
-          <tr role="row">
-            <th role="columnheader" scope="col">
-              {labelHeader}
+          <tr role="row" className={narrow ? "block" : undefined}>
+            <th role="columnheader" scope="col" className={narrow ? "block" : undefined}>
+              {labelHeader ?? sectionHeader}
             </th>
             {arms.map((arm) => (
-              <th key={arm.key} role="columnheader" scope="col">
+              <th
+                key={arm.key}
+                role="columnheader"
+                scope="col"
+                className={narrow ? "block" : undefined}
+              >
                 {arm.label}
               </th>
             ))}
+            {extra ? (
+              <th role="columnheader" scope="col" className={narrow ? "block" : undefined}>
+                {extra}
+              </th>
+            ) : null}
           </tr>
         </thead>
-        <tbody role="rowgroup" className={narrow ? "block" : undefined}>
-          {children}
-        </tbody>
+        <SheetTableContext.Provider value={{ extra }}>{children}</SheetTableContext.Provider>
       </table>
     </div>
+  );
+}
+
+/** A table's rows: one body, or one per group of rows a heading row opens. */
+export function SheetBody({ children }: { children: ReactNode }) {
+  const { narrow } = useSheet();
+  return (
+    <tbody role="rowgroup" className={narrow ? "block" : undefined}>
+      {children}
+    </tbody>
   );
 }
 
@@ -127,6 +170,8 @@ export function SheetSection({
   labelHeader,
   children,
   after,
+  grouped = false,
+  tour,
 }: {
   /** The `id` its chip in *Sections* jumps to. */
   id: string;
@@ -139,6 +184,13 @@ export function SheetSection({
   children: ReactNode;
   /** What follows the rows inside the card: the disclosure of what every arm reads alike. */
   after?: ReactNode;
+  /**
+   * Whether `children` are `SheetGroup`s, each drawing its own table under its heading, rather
+   * than the rows of the section's one table.
+   */
+  grouped?: boolean;
+  /** The tour's hook, where a step lights this section (`lib/tours.ts`). */
+  tour?: string;
 }) {
   const narrow = useNarrowViewport();
   const titleId = useId();
@@ -149,6 +201,7 @@ export function SheetSection({
       id={id}
       tabIndex={-1}
       aria-labelledby={titleId}
+      data-tour={tour}
       className={`${sheetSectionClasses} ${focusRingClasses}`}
     >
       <div className={sheetSectionHeadClasses}>
@@ -157,17 +210,24 @@ export function SheetSection({
         </h2>
         {note ? <p className={sheetNoteClasses}>{note}</p> : null}
       </div>
-      <SheetContext.Provider value={{ arms, narrow }}>
-        <SheetTable label={title} labelHeader={labelHeader}>
-          {children}
-        </SheetTable>
+      <SheetContext.Provider value={{ arms, narrow, labelHeader }}>
+        {grouped ? (
+          children
+        ) : (
+          <SheetTable label={title}>
+            <SheetBody>{children}</SheetBody>
+          </SheetTable>
+        )}
         {after}
       </SheetContext.Provider>
     </section>
   );
 }
 
-/** A row's label cell: the label, and *Differs* where the arms do. */
+/**
+ * A row's label cell: the label, and *Differs* where the arms do. Its lines and a cell's are
+ * `div`s, so a cell may hold flow content — a disclosure, a group of lines.
+ */
 function LabelCell({
   label,
   differs,
@@ -183,10 +243,10 @@ function LabelCell({
       scope="row"
       className={`${sheetLabelCellClasses} ${narrow ? "block" : "align-top"}`}
     >
-      <span className="grid gap-1.5">
-        <span>{label}</span>
+      <div className="grid gap-1.5">
+        <div>{label}</div>
         {differs ? <span className={sheetDiffersTagClasses}>Differs</span> : null}
-      </span>
+      </div>
     </th>
   );
 }
@@ -208,6 +268,7 @@ export function SheetRow({
   differs = false,
   cells,
   cellClassName,
+  extra,
 }: {
   label: ReactNode;
   differs?: boolean;
@@ -215,29 +276,34 @@ export function SheetRow({
   cells: ReactNode[];
   /** Classes for every arm's cell, such as the larger figure of a differing measure. */
   cellClassName?: (index: number) => string | undefined;
+  /** The cell of the column the table adds after the arms' (`SheetTable`'s `extra`). */
+  extra?: ReactNode;
 }) {
   const { arms, narrow } = useSheet();
+  const { extra: extraHeader } = useContext(SheetTableContext);
+  const cell = (key: string, line: string, content: ReactNode, className?: string) => (
+    <td
+      key={key}
+      role="cell"
+      className={[
+        sheetCellClasses,
+        narrow ? "block pt-0" : `align-top ${sheetArmCellRuleClasses}`,
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <div className="grid gap-1.5">
+        {narrow ? <span className={sheetCellArmClasses}>{line}</span> : null}
+        {content}
+      </div>
+    </td>
+  );
   return (
     <tr role="row" className={rowClasses(narrow, differs)}>
       <LabelCell label={label} differs={differs} narrow={narrow} />
-      {arms.map((arm, index) => (
-        <td
-          key={arm.key}
-          role="cell"
-          className={[
-            sheetCellClasses,
-            narrow ? "block pt-0" : `align-top ${sheetArmCellRuleClasses}`,
-            cellClassName?.(index),
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          <span className="grid gap-1.5">
-            {narrow ? <span className={sheetCellArmClasses}>{arm.label}</span> : null}
-            {cells[index]}
-          </span>
-        </td>
-      ))}
+      {arms.map((arm, index) => cell(arm.key, arm.label, cells[index], cellClassName?.(index)))}
+      {extraHeader ? cell("extra", extraHeader, extra) : null}
     </tr>
   );
 }
@@ -245,17 +311,81 @@ export function SheetRow({
 /** A row whose one cell spans the arms: a fact about the run rather than about one arm. */
 export function SheetSpanningRow({ label, children }: { label: ReactNode; children: ReactNode }) {
   const { arms, narrow } = useSheet();
+  const { extra } = useContext(SheetTableContext);
   return (
     <tr role="row" className={rowClasses(narrow, false)}>
       <LabelCell label={label} narrow={narrow} />
       <td
         role="cell"
-        colSpan={arms.length}
+        colSpan={arms.length + (extra ? 1 : 0)}
         className={`${sheetCellClasses} ${narrow ? "block pt-0" : "align-top"}`}
       >
-        <span className="grid gap-1.5">{children}</span>
+        <div className="grid gap-1.5">{children}</div>
       </td>
     </tr>
+  );
+}
+
+/**
+ * A row that opens a group of the rows under it, across every column: the field table's
+ * "shipping address" over that group's paths. Its one header names the rows that follow
+ * (`scope="rowgroup"`), so it is the first row of its own body.
+ */
+export function SheetHeadingRow({ children }: { children: ReactNode }) {
+  const { arms, narrow } = useSheet();
+  const { extra } = useContext(SheetTableContext);
+  return (
+    <tr role="row" className={rowClasses(narrow, false)}>
+      {/* The native header of a group of rows rather than of one, its role explicit for the
+          reason the file's first lines give. */}
+      {/* biome-ignore lint/a11y/useSemanticElements: it is a `th`, with `scope="rowgroup"`. */}
+      <th
+        role="rowheader"
+        scope="rowgroup"
+        colSpan={arms.length + 1 + (extra ? 1 : 0)}
+        className={`${sheetHeadingRowClasses} ${narrow ? "block" : ""}`}
+      >
+        {children}
+      </th>
+    </tr>
+  );
+}
+
+/**
+ * A labelled group of a section's rows (sheet mockup :139–141): its heading, its note, then
+ * its rows in a table of its own named by the heading — or, with no row to draw, its empty
+ * sentence.
+ *
+ * A table of its own, so a group can be `busy` (ADR 0065) while the rest of its section is not:
+ * the judged objectives while a judge scores them, and never the controls at the section's foot.
+ */
+export function SheetGroup({
+  heading,
+  note,
+  empty,
+  busy = false,
+  children,
+}: {
+  heading: string;
+  /** One sentence on what the group is; a card's footer before the sheet. */
+  note?: ReactNode;
+  /** What the group says in place of rows when it has none. */
+  empty?: ReactNode;
+  busy?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <div aria-busy={busy || undefined} className="grid">
+      <h3 className={sheetGroupHeadingClasses}>{heading}</h3>
+      {note ? <p className={sheetGroupNoteClasses}>{note}</p> : null}
+      {empty ? (
+        <p className={sheetGroupEmptyClasses}>{empty}</p>
+      ) : (
+        <SheetTable label={heading}>
+          <SheetBody>{children}</SheetBody>
+        </SheetTable>
+      )}
+    </div>
   );
 }
 
@@ -290,13 +420,15 @@ export function SameForEveryArm({
     <details className="border-t border-admin-border/60">
       <summary className={sheetSameSummaryClasses}>{summary}</summary>
       <SheetTable label={`${title}: ${summary}`} labelHeader={labelHeader}>
-        {rows.map((row) => (
-          <SheetSpanningRow key={row.key} label={row.label}>
-            <span className={`whitespace-pre-line ${row.className ?? "text-admin-ink-soft"}`}>
-              {row.value}
-            </span>
-          </SheetSpanningRow>
-        ))}
+        <SheetBody>
+          {rows.map((row) => (
+            <SheetSpanningRow key={row.key} label={row.label}>
+              <span className={`whitespace-pre-line ${row.className ?? "text-admin-ink-soft"}`}>
+                {row.value}
+              </span>
+            </SheetSpanningRow>
+          ))}
+        </SheetBody>
       </SheetTable>
     </details>
   );

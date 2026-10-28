@@ -883,8 +883,143 @@ export const sheetArmCellRuleClasses = "border-l border-admin-border/60";
 export const sheetCellArmClasses =
   "text-[11px] font-bold tracking-[0.07em] text-admin-muted uppercase";
 
-/** *Differs*, in words beside the tint: the neutral pill, so it reads as a fact and not a mark. */
-export const sheetDiffersTagClasses = `${neutralPillClasses} justify-self-start`;
+/**
+ * A tag under a row's label: the neutral pill, so it reads as a fact and not a mark — an
+ * objective's severity, and *Differs* in words beside the tint.
+ */
+export const sheetLabelTagClasses = `${neutralPillClasses} justify-self-start`;
+
+/** *Differs*, in words beside the tint. */
+export const sheetDiffersTagClasses = sheetLabelTagClasses;
+
+/** A label's second line, muted: an objective's slug, a field's starting value. */
+export const sheetLabelDetailClasses =
+  "text-[12px] font-normal leading-[1.45] text-admin-muted [overflow-wrap:anywhere]";
+
+/** The record's own name for a thing, in the mono face, broken anywhere rather than overflowing. */
+export const sheetCodeClasses = "font-mono [overflow-wrap:anywhere]";
+
+/**
+ * The column a table adds after the arms' — the field table's *Assessment* — wide enough for its
+ * longest word, "Not compared".
+ */
+export const sheetExtraColumnClasses = "w-[9.5rem]";
+
+/**
+ * A labelled group of a section's rows (sheet mockup :140): its heading in small capitals, ruled
+ * from what is above it, over its note.
+ */
+export const sheetGroupHeadingClasses =
+  "border-t border-admin-border/60 px-5 pt-4 pb-1.5 text-[11px] font-bold tracking-[0.07em] text-admin-muted uppercase";
+
+/** A group's note, under its heading: the footer of the card the group was. */
+export const sheetGroupNoteClasses =
+  "max-w-[75ch] px-5 pb-3 text-[13px] leading-[1.55] text-admin-muted";
+
+/** What a group with no row says in its place, ruled and padded as a row is. */
+export const sheetGroupEmptyClasses =
+  "border-t border-admin-border/60 px-5 py-[18px] text-[13.5px] text-admin-muted";
+
+/** A row opening a group of a table's rows across every column: the field table's group. */
+export const sheetHeadingRowClasses =
+  "px-5 pt-3 pb-1.5 text-left text-[12.5px] font-semibold text-admin-ink first-letter:uppercase";
+
+/**
+ * An objective's outcome in an arm's cell, as the sheet mockup draws it (:154): a pill holding the
+ * glyph and the one word — *met* on the published green, *missed* on the error tint, *pending*
+ * neutral. The pill is one arm's against one objective, never one arm's against another's.
+ *
+ * Only the one-word outcomes are pills. "a judge scores this after the run", "no evidence this lab
+ * reads decides this" and "not judged" are sentences, which a pill would wrap into a rounded
+ * block at two columns and at a phone's width; they are the cell's first line instead, at the
+ * cell's size in the soft ink (`sheetOutcomeLineClasses`), with the glyph where they have one.
+ */
+const sheetOutcomePillBase =
+  "inline-flex items-center gap-1.5 justify-self-start rounded-full px-2.5 py-0.5 text-[13px] font-bold";
+
+export const sheetOutcomePillClasses: Readonly<Record<"met" | "missed" | "pending", string>> = {
+  met: `${sheetOutcomePillBase} bg-admin-published text-admin-published-ink`,
+  missed: `${sheetOutcomePillBase} bg-lab-error-tint text-lab-error`,
+  pending: `${sheetOutcomePillBase} bg-admin-border text-admin-ink-soft`,
+};
+
+/** An outcome that is a sentence rather than a word: the cell's first line, never a pill. */
+export const sheetOutcomeLineClasses =
+  "flex items-start gap-1.5 text-[13.5px] font-semibold leading-[1.45] text-admin-ink-soft";
+
+/** A cell's evidence line under its fact, in the soft ink (sheet mockup :155). */
+export const sheetCellLineClasses =
+  "text-[12.5px] leading-[1.5] text-admin-ink-soft [overflow-wrap:anywhere]";
+
+/** A link out of a cell: "Open the deciding event" (sheet mockup :156). */
+export const sheetCellLinkClasses = `justify-self-start rounded text-[12.5px] font-semibold text-lab-primary underline underline-offset-[3px] hover:text-lab-primary-hover ${focusRingClasses}`;
+
+/** A disclosure inside a cell, *Verdict details*, and its press (sheet mockup :157). */
+export const sheetCellDisclosureClasses = "grid gap-1.5 text-[12.5px] text-admin-ink-soft";
+
+export const sheetCellSummaryClasses = `w-fit cursor-pointer rounded font-semibold ${focusRingClasses}`;
+
+/** What a cell says where its arm has nothing of a row's kind: "None", "Nothing". */
+export const sheetCellEmptyClasses = "text-admin-muted";
+
+/** Two lines read as one fact in a cell: a write's name over its move, a path over its change. */
+export const sheetCellPairClasses = "grid gap-0.5";
+
+/** A label's lines: an objective's statement over its slug and tag, a path over what it was. */
+export const sheetLabelLinesClasses = "grid gap-1.5";
+
+/** A group of rows named in a label cell, its first letter raised: "Shipping address". */
+export const sheetGroupLabelClasses = "block first-letter:uppercase";
+
+/** A cell's line in the error ink, with its glyph: a change made outside every order. */
+export const sheetCellAlertClasses =
+  "flex items-start gap-1 text-[12.5px] font-semibold text-lab-error [overflow-wrap:anywhere]";
+
+/**
+ * The controls at a section's foot, on a faint ground under a rule (sheet mockup :166–171): the
+ * judge picker beside its press where the width allows, then the scoring queue.
+ */
+export const sheetFootClasses =
+  "grid gap-3 border-t border-admin-border/60 bg-admin-canvas/50 px-5 py-[18px]";
+
+/** A line in a section's foot: a failure in the error ink, or why there is nothing to press. */
+export const sheetFootLineClasses: Readonly<Record<"error" | "muted", string>> = {
+  error: "text-[13px] text-lab-error",
+  muted: "text-[13px] text-admin-muted",
+};
+
+/**
+ * The judge picker and its press. From a phone's width up the picker's label is a subgrid of
+ * three rows — its word, its select, its note — and the press sits in the select's row, stretched
+ * to its height, so the two are one height with their bottoms aligned whether or not the note is
+ * drawn (sheet mockup :167–174); below it,
+ * the press is under the picker.
+ */
+export const sheetFootFormClasses =
+  "grid justify-start gap-3 sm:grid-cols-[minmax(0,320px)_auto] sm:gap-y-1 sm:[&>button]:col-start-2 sm:[&>button]:row-start-2 sm:[&>button]:self-stretch sm:[&>label]:row-span-3 sm:[&>label]:grid-rows-subgrid";
+
+/** A disclosure under a section's rows: "Every changed field of NS-10482 (17)" (mockup :174). */
+export const sheetDisclosureClasses = "grid gap-3 border-t border-admin-border/60 px-5 py-4";
+
+/**
+ * The box of a note under a disclosure's table, ruled from its last row across the whole card;
+ * the note inside it keeps its reading measure (`sheetGroupNoteClasses`).
+ */
+export const sheetDisclosureNoteClasses = "border-t border-admin-border/60 pt-3";
+
+export const sheetDisclosureButtonClasses = `flex w-fit items-center gap-1 rounded text-left text-[13.5px] font-semibold text-admin-ink ${focusRingClasses}`;
+
+/** A field's value in an arm's cell: drawn heavier where the arms left it differently. */
+export const sheetFieldValueClasses: Readonly<Record<"differs" | "other", string>> = {
+  differs: "font-semibold text-admin-ink [overflow-wrap:anywhere]",
+  other: "text-admin-ink-soft [overflow-wrap:anywhere]",
+};
+
+/** A field's assessment, in its column: *Difference* in the draft ink, the rest muted. */
+export const sheetAssessmentClasses: Readonly<Record<"differs" | "other", string>> = {
+  differs: "font-semibold text-admin-draft-ink",
+  other: "text-admin-muted",
+};
 
 /** The disclosure that folds what every arm reads alike. */
 export const sheetSameSummaryClasses = `cursor-pointer px-5 py-4 text-[13.5px] font-semibold text-admin-ink ${focusRingClasses}`;

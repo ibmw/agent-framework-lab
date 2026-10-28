@@ -1,19 +1,15 @@
 import type {
-  ArmEvaluationSchema,
   ArmMetricsSchema,
   ExperimentAnnotationsResponse,
   ExperimentEvaluationResponse,
   ExperimentResponse,
   ExperimentRunSchema,
-  JudgementSchema,
-  ObjectiveResultSchema,
   ParticipantTurnSchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { describeApiError } from "../api/client";
-import { addExperimentNote, scoreExperiment, setExperimentTags } from "../api/experiments";
-import { ActionStatus } from "../components/ActionStatus";
+import { addExperimentNote, setExperimentTags } from "../api/experiments";
 import { AttributionLine, ConfigurationSection } from "../components/ArmComparison";
 import {
   ArmStrip,
@@ -23,17 +19,15 @@ import {
   SheetSpanningRow,
 } from "../components/ArmSheet";
 import { ButtonIcon } from "../components/ButtonIcon";
-import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
+import { ObjectivesSection } from "../components/ObjectivesSection";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { RunProvenance } from "../components/RunProvenance";
-import { BusinessStateComparison } from "../components/StateDiff";
-import { Card, Fingerprint } from "../components/WorkspaceChrome";
-import { scoreReport, TAKES_A_MINUTE } from "../lib/actionStatus";
+import { BusinessStateSection } from "../components/StateDiff";
+import { Card } from "../components/WorkspaceChrome";
 import { armsInOrder } from "../lib/comparison";
 import {
   describeArmStanding,
   describeFailure,
-  describeJudgeFailure,
   formatCost,
   formatDuration,
   formatTokens,
@@ -54,7 +48,6 @@ import {
   sheetSectionChipClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { usePublishedJudges } from "../lib/usePublishedJudges";
 import { useExperimentResults } from "./useExperimentResults";
 
 /**
@@ -101,33 +94,6 @@ type Measure = (typeof MEASURES)[number];
 export function ExperimentResultsPage() {
   const { shopId, experimentId, experiment, evaluation, annotations, onEvaluated, onAnnotated } =
     useExperimentResults();
-  const { judges, judgeId, setJudgeId } = usePublishedJudges();
-  const [scoring, setScoring] = useState(false);
-  // What the last scoring pass on this page answered, for the queue's settled rows.
-  const [scored, setScored] = useState<ArmEvaluationSchema[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const scoreNoteId = useId();
-
-  const score = async () => {
-    setScoring(true);
-    setScored(null);
-    setError(null);
-    try {
-      const judged = await scoreExperiment(shopId, experimentId, { judge_id: judgeId });
-      onEvaluated(judged);
-      setScored(judged.arms);
-    } catch (cause: unknown) {
-      setError(describeApiError(cause, "This experiment could not be scored."));
-    } finally {
-      setScoring(false);
-    }
-  };
-
-  const arms = evaluation.arms;
-  const rows = arms[0]?.objectives ?? [];
-  const deterministic = rows.filter((row) => row.assessment === "deterministic");
-  const judged = rows.filter((row) => row.assessment === "judge");
-
   const runs = armsInOrder(experiment);
   const sheetArms = sheetArmsOf(runs);
 
@@ -159,12 +125,6 @@ export function ExperimentResultsPage() {
         ))}
       </nav>
 
-      {error ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
-        </p>
-      ) : null}
-
       {/* One column in the sheet's order (ADR 0080). The strip is this column's first child, so
           it holds at the pane's top for as long as the sections are on screen. The cards not
           yet drawn as sheet sections carry their section's id, so their chip already reaches
@@ -174,104 +134,15 @@ export function ExperimentResultsPage() {
 
         <Outcome experiment={experiment} runs={runs} arms={sheetArms} evaluation={evaluation} />
 
-        <div tabIndex={-1} id="objectives" className={`grid min-w-0 gap-4 ${focusRingClasses}`}>
-          <Card
-            title="Deterministic evidence"
-            footer={
-              <p className="text-xs text-admin-muted">
-                Decided from each arm's own recorded calls and the state it started in and is in
-                now.
-              </p>
-            }
-          >
-            {deterministic.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">
-                This scenario composes no objective a rule decides.
-              </p>
-            ) : (
-              <ObjectiveMatrix
-                runs={experiment.runs}
-                arms={arms}
-                rows={deterministic}
-                caption="Objectives decided from the record"
-                timeline={{ shopId, experimentId }}
-              />
-            )}
-          </Card>
+        <ObjectivesSection
+          of={{ shopId, experimentId }}
+          runs={runs}
+          arms={sheetArms}
+          evaluation={evaluation}
+          onEvaluated={onEvaluated}
+        />
 
-          <Card
-            title="LLM judge evidence"
-            footer={
-              <p className="text-xs text-admin-muted">
-                Each arm is judged on an anonymized record of its own run, and the judge is told
-                nothing about what ran it.
-              </p>
-            }
-          >
-            {judged.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">
-                This scenario leaves no objective to a judge.
-              </p>
-            ) : (
-              <>
-                {/* Busy while a judge scores them, and only these: the card also holds the
-                    scoring queue, which a busy card would keep from being announced. */}
-                <div aria-busy={scoring || undefined} className="grid gap-3">
-                  <ObjectiveMatrix
-                    runs={experiment.runs}
-                    arms={arms}
-                    rows={judged}
-                    caption="Objectives a judge scored"
-                    judges={judges}
-                  />
-                  <Verdicts runs={experiment.runs} arms={arms} rows={judged} />
-                </div>
-                {judges.length === 0 ? (
-                  <p className="text-[13px] text-admin-muted">
-                    Publish a judge to score {judged.length} row(s) no rule decides.
-                  </p>
-                ) : (
-                  <div className="grid gap-2 border-t border-admin-border pt-3">
-                    <JudgePicker
-                      judges={judges}
-                      judgeId={judgeId}
-                      // Once a verdict stands, scoring again is what ADR 0031 made it: a new
-                      // attempt beside the last, never over it.
-                      action={
-                        judged.some((row) => Boolean(row.judgement))
-                          ? "Score again"
-                          : `Score ${judged.length} judged objective(s)`
-                      }
-                      scoring={scoring}
-                      noteId={scoreNoteId}
-                      onSelectJudge={setJudgeId}
-                      onScore={() => void score()}
-                    />
-                    <ActionStatus
-                      label="Where each arm's scoring stands"
-                      report={scoreReport(experiment.runs, scoring, scored)}
-                      note={TAKES_A_MINUTE}
-                      noteId={scoreNoteId}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </Card>
-        </div>
-
-        <div tabIndex={-1} id="state" className={`min-w-0 ${focusRingClasses}`}>
-          <Card
-            title="Business state — verified, not claimed"
-            footer={
-              <p className="text-xs text-admin-muted">
-                Read from each arm's own state rather than from what its agent said it did.
-              </p>
-            }
-          >
-            <BusinessStateComparison experiment={experiment} />
-          </Card>
-        </div>
+        <BusinessStateSection experiment={experiment} runs={runs} arms={sheetArms} />
 
         {/* Below the evidence it explains: what the arms differed on is what any difference
             above can, or cannot, be attributed to (ADR 0025, ADR 0042). */}
@@ -603,63 +474,6 @@ function NotesAndTags({
       </form>
     </Card>
   );
-}
-
-/**
- * What produced each judged verdict: the version, the model, the attempt, and the input.
- *
- * On the page rather than only in a tooltip, because it is what separates a verdict from a
- * number. A row a judge could not reach says so here too — the lab's own outage is a fact
- * about the lab, and leaving it invisible would read as an arm that was simply not judged.
- */
-function Verdicts({
-  runs,
-  arms,
-  rows,
-}: {
-  runs: ExperimentRunSchema[];
-  arms: ArmEvaluationSchema[];
-  rows: ObjectiveResultSchema[];
-}) {
-  const scored = arms.flatMap((arm) =>
-    arm.objectives.flatMap((entry) => {
-      // Bound before the test so the verdict below is a value rather than a lookup the
-      // renderer has to defend against: a row a judge has not touched simply is not here.
-      const judgement = entry.judgement;
-      return judgement && rows.some((row) => row.objective_id === entry.objective_id)
-        ? [{ arm, entry, judgement }]
-        : [];
-    }),
-  );
-  if (scored.length === 0) {
-    return null;
-  }
-  return (
-    <ul className="grid gap-1 text-xs text-admin-muted">
-      {scored.map(({ arm, entry, judgement }) => (
-        <li key={`${arm.run_id}:${entry.objective_id}`}>
-          {runs.find((run) => run.run_id === arm.run_id)?.label ?? "Unknown arm"} ·{" "}
-          {entry.objective_id} · {describeVerdict(judgement)} · judge v{judgement.judge_version} ·{" "}
-          {judgement.model_id} · attempt {judgement.attempt} · brief{" "}
-          <Fingerprint value={judgement.brief_fingerprint} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/**
- * One judge execution's answer: its verdict, or why it produced none.
- *
- * A failed execution is reported rather than left blank. The lab's own outage is a fact about
- * the lab, and an empty cell where a judge could not be reached would read as an arm nobody
- * thought worth judging (ADR 0031).
- */
-function describeVerdict(judgement: JudgementSchema): string {
-  if (judgement.failure !== null) {
-    return `no verdict — ${describeJudgeFailure(judgement.failure)}`;
-  }
-  return judgement.outcome ?? "no verdict";
 }
 
 /**

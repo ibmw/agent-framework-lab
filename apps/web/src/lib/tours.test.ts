@@ -67,13 +67,7 @@ describe("the tour table", () => {
     // every anchor still resolved: the sweep proves an anchor is on the page, not that it is
     // the element the step talks about. A step titled after one of the panel's cards lights
     // that card, whose name is its title (`Card`'s `aria-label`).
-    const cards = [
-      "Publish gate",
-      "What publishing freezes",
-      "Deterministic evidence",
-      "Business state — verified, not claimed",
-      "Notes & tags",
-    ];
+    const cards = ["Publish gate", "What publishing freezes", "Notes & tags"];
     const titled = STEPS.filter(([, step]) => cards.includes(step.title));
     expect(titled.length).toBeGreaterThan(0);
     for (const [id, step] of titled) {
@@ -81,6 +75,17 @@ describe("the tour table", () => {
         `[aria-label="${step.title}"]`,
       );
     }
+  });
+
+  it("lights the results' evidence sections by their own hooks", () => {
+    // A sheet section is named by its heading (`aria-labelledby`), which no anchor can select,
+    // so each carries a hook named after it — and the step titled after the section lights it,
+    // rather than the card it replaced (ADR 0080).
+    const anchors = Object.fromEntries(
+      TOURS.results.steps.map((step) => [step.title, step.anchor] as const),
+    );
+    expect(anchors.Objectives).toBe('[data-tour="results-objectives"]');
+    expect(anchors["Business state"]).toBe('[data-tour="results-state"]');
   });
 
   it("names the route each surface is at, filled from the identifiers a route can carry", () => {
@@ -278,8 +283,8 @@ describe("the tour a location is on", () => {
     expect(titles(results)).toEqual([
       "How to read the results",
       "No aggregate, and nothing hidden",
-      "Deterministic evidence",
-      "Business state — verified, not claimed",
+      "Objectives",
+      "Business state",
       "What this run pinned",
       "Notes & tags",
     ]);

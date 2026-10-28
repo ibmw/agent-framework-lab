@@ -125,6 +125,71 @@ The attribution sentences no longer point "above": the one-difference sentence s
 here", and the no-difference sentence says "nothing here". In Outcome they stand above the
 evidence, and the bench reads the same sentences.
 
+### The evidence: Objectives and Business state
+
+*Objectives* replaces the *Deterministic evidence* and *LLM judge evidence* cards. It is one
+section with two labelled groups, "Decided by a rule" and "Scored by a judge". Each group has a
+small-capital heading, the old card's footer as its note, and its rows in a table of its own named
+by the heading (`SheetGroup`). A group with no row says "This scenario composes no objective a
+rule decides." or "This scenario leaves no objective to a judge." in its place. The section's note
+is "A rule decides what the record can, and a judge scores what no rule can."
+
+A row's label is the objective's statement, then on lines of their own its slug in the mono face,
+its severity as a neutral tag, and "must never happen" when it is forbidden. Each arm's cell is
+paired by the objective and by the arm's run, never by position. Its first line is the outcome, the
+glyph beside the word (`OUTCOMES`). The one-word outcomes are pills, as the mockup draws them:
+*met* on the published green, *missed* on the error tint, *pending* neutral. The pill is one arm's
+against one objective and never one arm's against another's. The outcomes that are sentences — "a
+judge scores this after the run", "no evidence this lab reads decides this", and "not judged" where
+an arm has no result — are the cell's first line in the soft ink and never a pill, which would wrap
+them into a rounded block at two columns and at a phone's width. A rule's evidence line is drawn
+whole. Where one recorded call decided it (`decided_by`), "Open the deciding event →" links into
+the timeline on that event. The link is named "Open the deciding event for {statement}, {arm}",
+because every decided cell draws the same words. A judged cell draws the rationale's first
+sentence, the control judge's sentence where the offline control judged, and one closed *Verdict
+details*. That disclosure holds the whole rationale where it is more than its first sentence,
+`judgementProvenance` (the judge by its published name with its version, its model and the attempt,
+or "Attempted by …; no verdict: {why}" for an execution that produced none) and the brief's
+fingerprint. It is what the list of verdicts beside the judged matrix said, cell by cell. The judge
+picker, *Score* or *Score again*, the scoring queue and a scoring failure sit at the section's
+foot. `aria-busy` is on the judged group alone while a judge scores, so the queue at the foot is
+still heard (ADR 0065).
+
+*Business state* replaces its card. It is a row per fact with each arm's value in its column, one
+fact per line. *Scenario fault* and *Agent write* draw each write's name over "Revision r0 → r1",
+or "None" for an arm that made none of that kind. Each row is drawn only where some arm made a
+write of its kind, and its label is plural, *Scenario faults* or *Agent writes*, where an arm made
+more than one. *Order {reference}* draws "3 groups changed" over a group a line. *Changed outside
+every order* draws each change in the error ink with its glyph, where any arm has one. *Fingerprint
+now* draws the fingerprint over the revision, "Started from" and the snapshot's fingerprint, then
+"No other state changed." or "Nothing wrote — this arm's world is the one it started in.".
+*Compared* is the comparison sentence as a spanning row. The section's note is "Verified, not
+claimed: read from each arm's own state rather than from what its agent said it did."
+
+Under the rows, where the arms changed the same paths, a group headed "Where the arms differ on
+{order}" draws the rows they differ on, on load. Then the disclosure "Every changed field of
+{order} ({n})" holds every path. The field table is on the sheet's rows (`SheetTable`): a heading
+row per group across every column (`SheetHeadingRow`), and a row per path. A row's header is the
+path over the value every arm started from, with "Was" drawn before it and `aria-hidden`, since the
+label column's header, "Field and what it was", says it. Each arm's value is in its column, and an
+*Assessment* column that the table adds after the arms' (`extra`) ends the row. So a row is heard
+as field, starting value, each arm's value, assessment, which the journey reads as
+`/^shipping_address\.city Bordeaux Lyon Lyon /`. One arm draws no *Assessment* column. Where the
+arms changed different paths, the table is a row per group with each arm's paths in its column,
+each over what it was and what it became. The added column takes its width from the arms', so
+the field table's arm columns are narrower than the strip's by the *Assessment* column. That seam
+is a recorded choice: the brief orders the fourth column and the order a row is heard in.
+
+A cell's and a label's lines sit in a `div`, so a cell may hold flow content such as *Verdict
+details*. From a phone's width up the foot's judge picker is a subgrid of its word, its select and
+its note, with the press in the select's row and stretched to its height, so the two are one
+height with their bottoms aligned whether or not the note is drawn.
+
+Nothing in either section scrolls inside the page. At a phone's width every table stacks as the
+sheet does, the added column's cell last under a line naming it. Each table's `sr-only` header row
+stacks too. Laid out as a row, the field table's four headers ran past the viewport's edge inside
+their clipped box, and `pastTheViewport` found them there.
+
 ### One page scroll, with a strip pinned and not the header
 
 Nothing scrolls inside the page and nothing covers it: no nested scrolling region, no overlay,
@@ -170,9 +235,14 @@ The tabs stay links in `nav[aria-label="Results views"]`, not the mockup's `tabl
 place in the experiment, and ADR 0054's routes address it, so an operator can share or reopen the
 view they were in. These names stay where the sheet mockup draws others: "{label} summary",
 "Back to the live bench", "Add a tag", "Remove tag {tag}", "Add a note", "Fork this experiment",
-"Span", "Span waterfall", "Traced attempts" and "Every field of {order} each arm changed". Specs
-and the tour reach the page by them, which is `docs/design-direction.md`'s *Authority* rule 5. A
-card that becomes a section takes the section's name: "Outcome", "Configuration", "Usage".
+"Span", "Span waterfall", "Traced attempts", "Every changed field of {order} ({n})" and "Every
+field of {order} each arm changed". Specs and the tour reach the page by them, which is
+`docs/design-direction.md`'s *Authority* rule 5. A card that becomes a section takes the section's
+name: "Outcome", "Objectives", "Business state", "Configuration", "Usage". A section is named by
+its heading, which no tour anchor can select (`lib/tours.test.ts` holds anchors to an
+`aria-label` or a `data-tour`), so the tour's two evidence steps anchor on
+`data-tour="results-objectives"` and `data-tour="results-state"`, set on the sections
+(`SheetSection`'s `tour`), and take the sections' titles.
 
 ## Amendments
 
@@ -182,8 +252,11 @@ card that becomes a section takes the section's name: "Outcome", "Configuration"
   Usage's rows. A retry above zero keeps the error ink. "Leave a figure off where nobody measured
   it" becomes "not reported" in its row, as *Quantitative* already said. `armFigures` goes with
   the card that read it.
-- **ADR 0079.** The results stack at a phone's width as decided above. The results matrices'
-  `tableScrollerClasses` stay until Slice 60 replaces the matrices with sheet rows. The last
+- **ADR 0079.** The results stack at a phone's width as decided above. *The results' matrices
+  keep their reading widths* is superseded: the matrices are Objectives' rows and the field
+  table is on the sheet's rows, so neither has a scroller, a reading width or an `sr-only` line
+  to hold in one. Its *Verification* line on the deciding-call journey is superseded too: the
+  journey follows the link from a stacked cell reached by the page's own scroll. The last
   consequence's *Quantitative* table "nobody has measured at 390" is settled: it is Usage, its
   rows stack, and at 390×844 on the seeded run the pane is 338px of 338 and the document 390px of
   390.
@@ -207,6 +280,25 @@ Each is recorded in `docs/design-direction.md`, *Departures from the handoff, in
 - The sheet mockup's tabs are links, and there is no strip for one arm or at a phone's width.
 - The mockup tags Usage's differing rows *Tokens* and *Cost*. They say *Differs*, as every
   differing row does, because one word for one fact is what the tint stands beside.
+- The mockup draws a judged cell's *Verdict details* as "Judge v1 · deterministic", "Attempt 1"
+  and "Brief". Here it is `judgementProvenance`'s sentence and "Brief" with its fingerprint: the
+  judge by its published name, because the lab's judges are named rubrics, and the attempt and a
+  failed execution's reason in the sentence the results already said them in.
+- The mockup's *Fingerprint now* is one line, "r2 · 533822bfcf99…". Here the fingerprint, the
+  revision and where it started are a line each, one fact per line. The card's "Nothing wrote —
+  this arm's world is the one it started in." is that cell's last line, where the mockup has no
+  place for an arm that did not write.
+- The mockup draws Business state's rows and the disclosure only. The rows the arms differ on
+  are also drawn on load, under the rows, because a difference behind a press is one an operator
+  can miss. Where the arms changed different paths, the disclosure is a row per group with each
+  arm's paths in its column, which the mockup does not draw.
+- The mockup's "Fulfilment" group is "Fulfillment", as Milestone 13 spells it.
+- The mockup draws "Open the deciding event →" as a button. Here it is a link, since it opens an
+  address in the timeline, named with its objective and its arm.
+- The mockup gives Objectives one note for both groups. Here each group carries its card's old
+  footer under its heading, and the section's note is new.
+- A scoring failure is said at the section's foot, beside the press that failed, where the page
+  said it above the sections.
 - The brief and the mockup draw a divergent comparison as a row per divergent turn under the
   label *Input divergence*. Here the *Input divergence* row is present in both states, a spanning
   row, so the old card's footer can be its cell's second line without entering the divergent
@@ -216,6 +308,10 @@ Each is recorded in `docs/design-direction.md`, *Departures from the handoff, in
 
 ## Consequences
 
+- `EvidenceMatrix` and its scroller, `EvidenceCell`, the `Verdicts` list, `describeVerdict`,
+  `BusinessStateComparison` and `summarizeGroups` are gone. `ObjectiveMatrix` is the bench's
+  compact matrix alone and is unchanged there. `ObjectivesSection` and `BusinessStateSection`
+  read the same projections, and no request was added.
 - `ComparisonTable` and *Quantitative* are gone. `ConfigurationSection` and *Usage* read the same
   projections, and no request was added.
 - The summary row is now under the tabs. The tour's first two steps keep their anchors
@@ -240,14 +336,48 @@ Each is recorded in `docs/design-direction.md`, *Departures from the handoff, in
   one, two and no differences and for one arm; Configuration's order; the chips' targets in the
   sheet's order in one column; the strip's names, absent on another tab, for one arm and at a
   phone's width, and back when it widens.
+- `Experiments.test.tsx`, for the evidence: the two groups, their headings, notes and empty
+  sentences, and no picker with nothing to score; a row's statement, slug, severity tag and
+  forbidden line; each cell's pill with its glyph `aria-hidden`, an outcome that is a sentence drawn
+  as a line and not a pill, its evidence line, and no `title` or hidden copy; the deciding link by
+  its name and target, absent where no call decided, and followed into the timeline; a judged cell's
+  first sentence, *Verdict details* closed then open with the whole rationale, the judge by its
+  name, version, model and attempt and the brief, a failed execution as an attempt with its reason,
+  a one-sentence rationale said once, and the control's sentence only for the control; the scoring
+  queue at the foot with `aria-busy` on the judged group alone; the state's write rows per kind with
+  their revision lines, the order's groups a line each, *Fingerprint now* with its last line, a
+  change outside every order with its glyph and no `alert` on load, *Compared* as a spanning row;
+  the field table's headers, group rows, every path, each row's computed accessible name read as
+  field, starting value, arms, assessment, and part by part, "Was" `aria-hidden`, and one arm
+  without *Assessment*; the arms' own columns where they changed different paths; at a phone's width
+  the objectives and the field table stacked under their arms' lines, and no scroller on General.
+  The seeded run holds no refused proposal (the control policy never makes one,
+  `infrastructure/agents/fake/runtime.py`), so the evidence that a refusal is readable from its cell
+  is the case reading a missed rule-decided cell: its pill with ✗ and its whole sentence.
+- `ArmSheet.test.tsx`: a grouped section, a group's own table, note and empty sentence, and its
+  `busy` alone; the added column's header, `col` and cell, a heading row and a spanning row across
+  it, and the added cell stacked last under its header's line at a phone's width.
+- `lib/tours.test.ts`: the two evidence steps titled after their sections and anchored on their
+  hooks.
 - `lib/stickyHeader.test.ts`: the strip's clearance follows its height and is given back.
 - `lib/ui.test.ts`: the sheet's columns, spacing, tint token, strip and letter.
 - `tests/e2e/experiment-start.spec.ts`: no figures on the summary, Usage's rows, the strip, the
   phone width with no strip, stacked Usage and nothing past the viewport, and the divergence in
   Outcome; and at 390×844, Chromium's accessibility tree holding the stacked Usage table's rows
-  and cells (`support/accessibility.ts`). `tests/e2e/sticky-header.spec.ts`: the results' header is static and the strip sticky,
-  and a chip's jump to Usage lands the section under the strip held at the pane's top.
-  `tests/e2e/tour-anchors.spec.ts`: `results-arms` resolves where it moved.
+  and cells (`support/accessibility.ts`). `tests/e2e/sticky-header.spec.ts`: the results' header
+  is static and the strip sticky, and a chip's jump to Usage lands the section under the strip
+  held at the pane's top.
+  `tests/e2e/tour-anchors.spec.ts`: `results-arms` resolves where it moved, and the evidence
+  steps' `results-objectives` and `results-state`.
+- `tests/e2e/experiment-start.spec.ts`, for the evidence: the two groups' cells, the control's
+  sentence and *Verdict details* hidden then shown; at 390×844, Chromium's accessibility tree
+  holding the stacked "Decided by a rule" and field tables' rows and cells, a cell naming its
+  arm, and nothing past the viewport with the field table open; the write rows, the order's
+  groups, "No other state changed." and *Compared*; and the field row heard as
+  `/^shipping_address\.city Bordeaux Lyon Lyon /`. Its second journey, *a deciding call followed
+  from a stacked results cell…*, reaches arm B's link at 390×844 under the line naming its arm,
+  with no scroller above it and inside the viewport's width, passes nothing past the viewport,
+  and lands focused on that call in the timeline.
 
 ## Migration
 

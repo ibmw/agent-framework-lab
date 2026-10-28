@@ -3,9 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ArmStrip,
   SameForEveryArm,
+  SheetBody,
+  SheetGroup,
+  SheetHeadingRow,
   SheetRow,
   SheetSection,
   SheetSpanningRow,
+  SheetTable,
 } from "./components/ArmSheet";
 import { type SheetArm, sheetArmsOf } from "./lib/sheet";
 import { stubViewport } from "./test/viewport";
@@ -224,5 +228,104 @@ describe("the arm-column sheet", () => {
     const row = screen.getByRole("row", { name: /^Input tokens/ });
     expect(row).not.toHaveClass("block");
     expect(rowCells(row)).toEqual(["7.8k", "1.3k"]);
+  });
+
+  it("draws a section's rows in labelled groups, each its own table, one of them busy alone", () => {
+    render(
+      <SheetSection id="objectives" title="Objectives" arms={TWO} labelHeader="Objective" grouped>
+        <SheetGroup heading="Decided by a rule" note="Decided from the record.">
+          <SheetRow label="Read document" cells={["met", "met"]} />
+        </SheetGroup>
+        <SheetGroup heading="Scored by a judge" empty="No objective is left to a judge." busy />
+      </SheetSection>,
+    );
+
+    const section = screen.getByRole("region", { name: "Objectives" });
+    // One table per group, named by its heading, its columns the section's.
+    const [ruled] = within(section).getAllByRole("table");
+    expect(ruled).toHaveAccessibleName("Decided by a rule");
+    expect(
+      within(ruled)
+        .getAllByRole("columnheader")
+        .map((head) => head.textContent),
+    ).toEqual(["Objective", "Arm A — Pydantic AI", "Arm B — OpenAI Agents SDK"]);
+    const heading = within(section).getByRole("heading", { level: 3, name: "Decided by a rule" });
+    expect(heading.nextElementSibling).toHaveTextContent("Decided from the record.");
+    // A group with nothing to draw says so in its place, and draws no table.
+    expect(within(section).getAllByRole("table")).toHaveLength(1);
+    expect(within(section).getByText("No objective is left to a judge.")).toBeVisible();
+    // Busy is the group's own: neither its neighbour nor the section is.
+    const judged = within(section).getByRole("heading", { level: 3, name: "Scored by a judge" });
+    expect(judged.parentElement).toHaveAttribute("aria-busy", "true");
+    expect(ruled.closest("[aria-busy]")).toBeNull();
+    expect(section).not.toHaveAttribute("aria-busy");
+    expect(section).not.toHaveAttribute("data-tour");
+  });
+
+  it("adds a column after the arms', and a heading row across every column", () => {
+    render(
+      <SheetSection
+        id="state"
+        title="Business state"
+        arms={TWO}
+        labelHeader="Fact"
+        tour="hook"
+        grouped
+      >
+        <SheetTable label="Every field" labelHeader="Field" extra="Assessment">
+          <SheetBody>
+            <SheetHeadingRow>shipping address</SheetHeadingRow>
+            <SheetRow label="city" cells={["Lyon", "Paris"]} extra="Difference" />
+            <SheetSpanningRow label="Compared">Both differ.</SheetSpanningRow>
+          </SheetBody>
+        </SheetTable>
+      </SheetSection>,
+    );
+
+    expect(screen.getByRole("region", { name: "Business state" })).toHaveAttribute(
+      "data-tour",
+      "hook",
+    );
+    const table = screen.getByRole("table", { name: "Every field" });
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((head) => head.textContent),
+    ).toEqual(["Field", "Arm A — Pydantic AI", "Arm B — OpenAI Agents SDK", "Assessment"]);
+    expect(table.querySelectorAll("col")).toHaveLength(4);
+    expect(rowCells(within(table).getByRole("row", { name: /^city/ }))).toEqual([
+      "Lyon",
+      "Paris",
+      "Difference",
+    ]);
+    // A heading row and a spanning row reach across the added column too.
+    const heading = within(table).getByRole("rowheader", { name: "shipping address" });
+    expect(heading).toHaveAttribute("scope", "rowgroup");
+    expect(heading).toHaveAttribute("colspan", "4");
+    const spanning = within(within(table).getByRole("row", { name: /^Compared/ })).getByRole(
+      "cell",
+    );
+    expect(spanning).toHaveAttribute("colspan", "3");
+  });
+
+  it("stacks the added column last under a line naming it, at a phone's width", () => {
+    stubViewport("narrow");
+    render(
+      <SheetSection id="state" title="Business state" arms={TWO} labelHeader="Fact" grouped>
+        <SheetTable label="Every field" extra="Assessment">
+          <SheetBody>
+            <SheetRow label="city" cells={["Lyon", "Paris"]} extra="Difference" />
+          </SheetBody>
+        </SheetTable>
+      </SheetSection>,
+    );
+
+    const row = screen.getByRole("row", { name: /^city/ });
+    expect(row).toHaveClass("block");
+    expect(rowCells(row)).toEqual([
+      "Arm A — Pydantic AILyon",
+      "Arm B — OpenAI Agents SDKParis",
+      "AssessmentDifference",
+    ]);
   });
 });

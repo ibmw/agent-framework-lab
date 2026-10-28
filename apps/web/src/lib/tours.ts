@@ -339,16 +339,17 @@ export const TOURS: Record<TourId, Tour> = {
         ],
       },
       {
-        anchor: '[aria-label="Deterministic evidence"]',
-        title: "Deterministic evidence",
+        anchor: '[data-tour="results-objectives"]',
+        title: "Objectives",
         at: [""],
         body: [
-          "Each row is decided from the arm's own recorded calls and the state it started in and is in now. A pending row is one the arm can still meet, and an undecidable one is a limit of this build rather than a fault of the agent — neither is a miss.",
+          "A row per objective and a column per arm. The rows decided by a rule are decided from the arm's own recorded calls and the state it started in and is in now, and where one call decided a row, its cell opens that event in the timeline. A pending row is one the arm can still meet, and an undecidable one is a limit of this build rather than a fault of the agent — neither is a miss.",
+          "The rows scored by a judge carry the first sentence of its reason, and Verdict details holds the rest: the judge by its published name, its version and model, the attempt, and the brief it read.",
         ],
       },
       {
-        anchor: '[aria-label="Business state — verified, not claimed"]',
-        title: "Business state — verified, not claimed",
+        anchor: '[data-tour="results-state"]',
+        title: "Business state",
         at: [""],
         body: [
           "Read from each arm's own state rather than from what its agent said it did. A scenario fault appears beside the tools because it moved the same world, and the fields listed are the whole difference between the world an arm was cloned into and the one it is in now — so nothing can have moved without appearing there.",

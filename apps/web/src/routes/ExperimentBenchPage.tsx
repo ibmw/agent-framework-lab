@@ -698,7 +698,7 @@ function Objectives({
         // Busy while a judge scores it, and only the matrix: the card also holds the scoring
         // queue, which a busy card would keep from being announced (ADR 0065).
         <div aria-busy={scoring || undefined}>
-          <ObjectiveMatrix runs={experiment.runs} arms={arms} rows={rows} compact />
+          <ObjectiveMatrix runs={experiment.runs} arms={arms} rows={rows} />
         </div>
       )}
 

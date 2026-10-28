@@ -45,12 +45,18 @@ import {
   searchFieldWrapClasses,
   sheetArmLetterClasses,
   sheetCellClasses,
+  sheetCellLinkClasses,
+  sheetCellSummaryClasses,
   sheetColumns,
   sheetDiffersRowClasses,
   sheetDiffersTagClasses,
+  sheetDisclosureButtonClasses,
   sheetFigureDiffersClasses,
+  sheetFootFormClasses,
   sheetLabelCellClasses,
   sheetNoteClasses,
+  sheetOutcomeLineClasses,
+  sheetOutcomePillClasses,
   sheetSameSummaryClasses,
   sheetSectionChipClasses,
   sheetStripClasses,
@@ -819,8 +825,46 @@ describe("the results sheet (ADR 0080)", () => {
     );
   });
 
+  it("draws an objective's outcome as a pill, met in the published green and missed in the error ink", () => {
+    // The mockup's met pill, `#dff0e7` under `#0f5132` (:154), is the published pair.
+    expect(utilities(sheetOutcomePillClasses.met)).toEqual(
+      expect.arrayContaining(["rounded-full", "bg-admin-published", "text-admin-published-ink"]),
+    );
+    expect(utilities(sheetOutcomePillClasses.missed)).toEqual(
+      expect.arrayContaining(["rounded-full", "bg-lab-error-tint", "text-lab-error"]),
+    );
+    // Pending is not a finding against the arm, so it is not coloured as one.
+    expect(sheetOutcomePillClasses.pending).toContain("bg-admin-border");
+    expect(sheetOutcomePillClasses.pending).not.toMatch(/lab-(error|success)|published/);
+    // Only the one-word outcomes are pills; a sentence is a line, with no pill's ground.
+    expect(Object.keys(sheetOutcomePillClasses).sort()).toEqual(["met", "missed", "pending"]);
+    expect(sheetOutcomeLineClasses).not.toMatch(/rounded|(^|\s)bg-/);
+  });
+
+  it("sets the judge's press in the row of the picker's select, at its height", () => {
+    // From a phone's width up the picker's label is a subgrid of its word, its select and its
+    // note, and the press takes the select's row and height, so the two line up whether or not
+    // the note is drawn (sheet mockup :167–174).
+    expect(utilities(sheetFootFormClasses)).toEqual(
+      expect.arrayContaining([
+        "sm:grid-cols-[minmax(0,320px)_auto]",
+        "sm:[&>label]:row-span-3",
+        "sm:[&>label]:grid-rows-subgrid",
+        "sm:[&>button]:col-start-2",
+        "sm:[&>button]:row-start-2",
+        "sm:[&>button]:self-stretch",
+      ]),
+    );
+  });
+
   it("rings the chips and the disclosure for a keyboard reader", () => {
-    for (const classes of [sheetSectionChipClasses, sheetSameSummaryClasses]) {
+    for (const classes of [
+      sheetSectionChipClasses,
+      sheetSameSummaryClasses,
+      sheetCellLinkClasses,
+      sheetCellSummaryClasses,
+      sheetDisclosureButtonClasses,
+    ]) {
       expect(classes).toMatch(/(^|\s)focus-visible:outline-2(\s|$)/);
     }
   });

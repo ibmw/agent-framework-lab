@@ -631,13 +631,60 @@ function editedDiff(
 }
 
 /** The row a table holds for one path, found by its row header. */
+/** A field table's row, by the path its header names on its first line. */
 function rowOf(table: HTMLElement, path: string): HTMLElement {
-  const header = within(table).getByRole("rowheader", { name: path });
-  const row = header.closest("tr");
+  const headers = within(table)
+    .getAllByRole("rowheader")
+    .filter((cell) => cell.querySelector(".font-mono")?.textContent === path);
+  expect(headers, `rows naming ${path}`).toHaveLength(1);
+  const row = headers[0]?.closest("tr");
   if (!row) {
     throw new Error(`no row holds ${path}`);
   }
   return row;
+}
+
+/** What an element says to a reader who hears it: its text without what is `aria-hidden`. */
+function heard(element: Element): string {
+  const clone = element.cloneNode(true) as Element;
+  for (const hidden of clone.querySelectorAll('[aria-hidden="true"]')) {
+    hidden.remove();
+  }
+  return (clone.textContent ?? "").trim();
+}
+
+/**
+ * A field table's row as it is heard, part by part: the path, the value every arm started from,
+ * each arm's value, then the assessment where there is one.
+ */
+function heardFieldRow(row: HTMLElement): string[] {
+  const header = within(row).getByRole("rowheader");
+  const path = header.querySelector(".font-mono");
+  return [
+    path?.textContent ?? "",
+    heard(path?.nextElementSibling ?? document.createElement("span")),
+    ...within(row)
+      .getAllByRole("cell")
+      .map((cell) => heard(cell)),
+  ];
+}
+
+/** One of the Objectives section's two groups, by its heading: the table it draws its rows in. */
+function objectivesGroup(name: "Decided by a rule" | "Scored by a judge"): HTMLElement {
+  return within(screen.getByRole("region", { name: "Objectives" })).getByRole("table", { name });
+}
+
+/** Serves the evaluation with each arm's objectives edited, as one scenario's would be. */
+function serveObjectives(edit: (rows: ObjectiveResultSchema[]) => ObjectiveResultSchema[]): void {
+  server.use(
+    http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/evaluation`, () => {
+      const base = evaluation(turns, agentTurns, toolEvents);
+      return HttpResponse.json({
+        ...base,
+        arms: base.arms.map((arm) => ({ ...arm, objectives: edit(arm.objectives) })),
+      });
+    }),
+  );
 }
 
 /**
@@ -1340,6 +1387,9 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 // case below.
 beforeEach(() => window.localStorage.setItem("agent-lab.last-visited-shop", SHOP_ID));
 afterEach(() => {
+  // A case that moved the viewport across the narrow breakpoint (`stubViewport`) leaves the
+  // next one wide.
+  vi.unstubAllGlobals();
   window.localStorage.clear();
   server.resetHandlers();
   started = [];
@@ -1421,6 +1471,14 @@ function sheetRow(section: HTMLElement, label: string): HTMLElement {
     );
   expect(rows, `rows labelled ${label}`).toHaveLength(1);
   return rows[0];
+}
+
+/** A cell's lines, one fact each: the children of the grid every sheet cell holds them in. */
+function lines(cell: HTMLElement | undefined): (string | null)[] {
+  return Array.from(
+    cell?.querySelectorAll(":scope > div > span") ?? [],
+    (line) => line.textContent,
+  );
 }
 
 /** A sheet row's cells after its label, read left to right: one per arm, or one spanning. */
@@ -4367,32 +4425,40 @@ describe("a long-running action on the bench reports itself", () => {
 });
 
 describe("a long-running action on the results reports itself", () => {
-  it("reports a scoring pass per arm on the judge's card", async () => {
+  it("reports a scoring pass per arm at the foot of Objectives, busy on the judged rows alone", async () => {
     const user = userEvent.setup();
     const judging = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/judgements`);
     renderResults();
 
-    const card = await screen.findByRole("region", { name: "LLM judge evidence" });
-    const score = await within(card).findByRole("button", { name: /Score 1 judged/ });
+    const section = await screen.findByRole("region", { name: "Objectives" });
+    const score = await within(section).findByRole("button", { name: /Score 1 judged/ });
     await user.click(score);
 
-    const queue = within(card).getByRole("status", { name: "Where each arm's scoring stands" });
+    const queue = within(section).getByRole("status", { name: "Where each arm's scoring stands" });
     await waitFor(() => expect(queue).toHaveTextContent("2 of 2 being scored."));
     // A press made again meanwhile, by a click or a key, starts nothing more (ADR 0065).
     await user.click(score);
     await user.keyboard("{Enter}");
     expect(judging.arrived).toHaveLength(1);
     expectBusy(score);
-    expect(card).not.toHaveAttribute("aria-busy");
-    expect(within(card).getAllByRole("table")[0].closest("[aria-busy]")).toHaveAttribute(
-      "aria-busy",
-      "true",
+    // What is about to change is the judged rows: their group is busy, and neither the rule's
+    // group, nor the section, nor the foot holding the queue is, so the queue is still heard.
+    const judged = objectivesGroup("Scored by a judge");
+    expect(judged.closest("[aria-busy]")).toHaveAttribute("aria-busy", "true");
+    expect(objectivesGroup("Decided by a rule").closest("[aria-busy]")).toBeNull();
+    expect(section).not.toHaveAttribute("aria-busy");
+    expect(queue.closest("[aria-busy]")).toBeNull();
+    expect(score.closest("[aria-busy]")).toBeNull();
+    // At the section's foot, under both groups.
+    expect(judged.compareDocumentPosition(score) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
     );
 
     judging.release();
     await waitFor(() =>
       expect(queue).toHaveTextContent("Arm A has been scored · Arm B has been scored"),
     );
+    expect(objectivesGroup("Scored by a judge").closest("[aria-busy]")).toBeNull();
     expect(score).toHaveFocus();
   });
 
@@ -4802,18 +4868,23 @@ describe("experiment results", () => {
     toolEvents = [toolEvent(ARM_A, 0, "support.read_document")];
     renderResults();
 
-    const evidence = await screen.findByRole("region", { name: "Deterministic evidence" });
-    const row = within(evidence).getByRole("row", { name: /Read the address-change policy/ });
+    await screen.findByRole("region", { name: "Objectives" });
+    const row = within(objectivesGroup("Decided by a rule")).getByRole("row", {
+      name: /Read the address-change policy/,
+    });
     const [armA, armB] = within(row).getAllByRole("cell");
 
-    // The arm that read the document and the arm that has not, side by side, each with the
-    // evidence sentence that makes the cell a finding rather than a mark — drawn under the
-    // mark for everyone, not left to a hover or a screen reader.
-    expect(within(armA).getByText("met")).toBeVisible();
+    // Each arm's outcome as a pill, its glyph beside its word, then the evidence sentence that
+    // makes the cell a finding rather than a mark — drawn for everyone, not left to a hover.
+    const met = within(armA).getByText("met");
+    expect(met).toHaveClass("rounded-full", "bg-admin-published");
+    expect(within(met).getByText("✓")).toHaveAttribute("aria-hidden", "true");
     expect(
       within(armA).getByText("support.read_document answered policy:address-change"),
     ).toBeVisible();
-    expect(within(armB).getByText("pending")).toBeVisible();
+    const pending = within(armB).getByText("pending");
+    expect(pending).toHaveClass("rounded-full", "bg-admin-border");
+    expect(within(pending).getByText("·")).toHaveAttribute("aria-hidden", "true");
     expect(
       within(armB).getByText("support.read_document never answered policy:address-change"),
     ).toBeVisible();
@@ -4822,86 +4893,214 @@ describe("experiment results", () => {
       expect(cell).not.toHaveAttribute("title");
       expect(cell.querySelector(".sr-only")).toBeNull();
     }
-    // The objective by its statement, its slug beneath it as the secondary text.
+    // The objective by its statement, then its slug and its severity as a tag, a line each.
     const objective = within(row).getByRole("rowheader");
     expect(within(objective).getByText("Read the address-change policy")).toBeVisible();
-    expect(within(objective).getByText(/^read-address-change-policy · /)).toBeVisible();
+    expect(within(objective).getByText("read-address-change-policy")).toHaveClass("font-mono");
+    expect(within(objective).getByText("Required")).toHaveClass("rounded-full");
+    expect(objective).not.toHaveTextContent("·");
+    expect(within(objective).queryByText("must never happen")).toBeNull();
   });
 
-  it("names each matrix by the half of the evidence it holds", async () => {
+  it("reads a missed rule-decided cell as its pill and the whole sentence that decided it", async () => {
+    // The evidence the sheet mockup draws for a refused proposal, which the seeded run's control
+    // policy never makes: a miss, readable from its cell without opening anything.
+    const refused =
+      "orders.propose_address_change was refused at turn 2: the customer had not confirmed the new address, so nothing was proposed.";
+    serveObjectives((rows) =>
+      rows.map((row) =>
+        row.objective_id === "read-address-change-policy"
+          ? { ...row, outcome: "missed" as const, detail: refused, decided_by: null }
+          : row,
+      ),
+    );
     renderResults();
 
-    const evidence = await screen.findByRole("region", { name: "Deterministic evidence" });
-    const judged = screen.getByRole("region", { name: "LLM judge evidence" });
-
-    expect(
-      within(evidence).getByRole("table", { name: "Objectives decided from the record" }),
-    ).toBeVisible();
-    expect(within(judged).getByRole("table", { name: "Objectives a judge scored" })).toBeVisible();
-  });
-
-  it("scrolls each matrix in its card at a phone's width, keeping the objective and the arms readable", async () => {
-    renderResults();
-
-    await screen.findByRole("region", { name: "Deterministic evidence" });
-    for (const name of ["Objectives decided from the record", "Objectives a judge scored"]) {
-      const table = screen.getByRole("table", { name });
-      const scroller = table.parentElement;
-      // The card scrolls, not the pane (ADR 0079). `relative`, because a cell's `sr-only`
-      // line is absolutely placed: against the pane it would widen the pane past a phone's
-      // viewport by however far the table runs, and the whole page would scroll sideways.
-      expect(scroller).toHaveClass("overflow-x-auto", "relative");
-      const [objective, ...arms] = within(table).getAllByRole("columnheader");
-      // Neither the objective nor an arm's head gives its width up to the other at 390.
-      expect(objective).toHaveClass("min-w-[10rem]");
-      expect(arms.length).toBeGreaterThan(0);
-      for (const arm of arms) {
-        expect(arm).toHaveClass("w-[220px]");
-      }
+    await screen.findByRole("region", { name: "Objectives" });
+    const row = within(objectivesGroup("Decided by a rule")).getByRole("row", {
+      name: /Read the address-change policy/,
+    });
+    for (const cell of within(row).getAllByRole("cell")) {
+      const missed = within(cell).getByText("missed");
+      expect(missed).toHaveClass("rounded-full", "bg-lab-error-tint", "text-lab-error");
+      expect(within(missed).getByText("✗")).toHaveAttribute("aria-hidden", "true");
+      // Whole, every sentence of it, and not cut to its first.
+      expect(within(cell).getByText(refused)).toBeVisible();
+      expect(within(cell).queryByText("Verdict details")).toBeNull();
     }
   });
 
-  it("shows a judge's first sentence, and opens the whole of it with the judge by its name", async () => {
+  it("says a forbidden objective must never happen, under its severity", async () => {
+    serveObjectives((rows) =>
+      rows.map((row) =>
+        row.objective_id === "read-address-change-policy"
+          ? { ...row, evidence: "forbidden" as const, severity: "expected" as const }
+          : row,
+      ),
+    );
+    renderResults();
+
+    await screen.findByRole("region", { name: "Objectives" });
+    const objective = within(
+      within(objectivesGroup("Decided by a rule")).getByRole("row", {
+        name: /Read the address-change policy/,
+      }),
+    ).getByRole("rowheader");
+    expect(within(objective).getByText("Expected")).toHaveClass("rounded-full");
+    expect(within(objective).getByText("must never happen")).toBeVisible();
+  });
+
+  it("holds every objective in one section, a rule's rows and a judge's in two labelled groups", async () => {
+    renderResults();
+
+    const section = await screen.findByRole("region", { name: "Objectives" });
+    expect(
+      within(section)
+        .getAllByRole("heading", { level: 3 })
+        .map((heading) => heading.textContent),
+    ).toEqual(["Decided by a rule", "Scored by a judge"]);
+    // Each group's note is the footer of the card it was, under its heading.
+    for (const [group, note] of [
+      [
+        "Decided by a rule",
+        "Decided from each arm's own recorded calls and the state it started in and is in now.",
+      ],
+      [
+        "Scored by a judge",
+        "Each arm is judged on an anonymized record of its own run, and the judge is told nothing about what ran it.",
+      ],
+    ] as const) {
+      const heading = within(section).getByRole("heading", { level: 3, name: group });
+      expect(heading.nextElementSibling).toHaveTextContent(note);
+    }
+    // One section where there were two cards.
+    expect(screen.queryByRole("region", { name: "Deterministic evidence" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "LLM judge evidence" })).toBeNull();
+  });
+
+  it("says so in a group's place when the scenario composes none of its objectives", async () => {
+    serveObjectives((rows) => rows.filter((row) => row.assessment === "deterministic"));
+    const { unmount } = renderResults();
+
+    const section = await screen.findByRole("region", { name: "Objectives" });
+    expect(
+      within(section).getByText("This scenario leaves no objective to a judge."),
+    ).toBeVisible();
+    expect(within(section).queryByRole("table", { name: "Scored by a judge" })).toBeNull();
+    // Nothing to score, so no judge to pick.
+    expect(within(section).queryByRole("combobox", { name: "Judge" })).toBeNull();
+    expect(within(section).queryByRole("button", { name: /Score/ })).toBeNull();
+    unmount();
+
+    serveObjectives((rows) => rows.filter((row) => row.assessment === "judge"));
+    renderResults();
+
+    const judgedOnly = await screen.findByRole("region", { name: "Objectives" });
+    expect(
+      within(judgedOnly).getByText("This scenario composes no objective a rule decides."),
+    ).toBeVisible();
+    expect(within(judgedOnly).queryByRole("table", { name: "Decided by a rule" })).toBeNull();
+    expect(within(judgedOnly).getByRole("table", { name: "Scored by a judge" })).toBeVisible();
+  });
+
+  it("stacks the evidence at a phone's width rather than scrolling it inside the page", async () => {
+    stubViewport("narrow");
+    stateDiffs = { [ARM_A]: seededDiff(ARM_A_WORLD), [ARM_B]: seededDiff(ARM_B_WORLD) };
+    const user = userEvent.setup();
+    renderResults();
+
+    const objectives = await screen.findByRole("region", { name: "Objectives" });
+    const state = screen.getByRole("region", { name: "Business state" });
+    await user.click(
+      within(state).getByRole("button", { name: "Every changed field of NS-10482 (17)" }),
+    );
+
+    // Each objective's row stacks, its cells under a line naming their arm (ADR 0080).
+    const row = within(objectivesGroup("Decided by a rule")).getByRole("row", {
+      name: /Read the address-change policy/,
+    });
+    expect(row).toHaveClass("block");
+    expect(
+      within(row)
+        .getAllByRole("cell")
+        .map((cell) => cell.firstElementChild?.firstElementChild?.textContent),
+    ).toEqual(["Arm A", "Arm B"]);
+    // So does every field, its assessment last under a line naming its column.
+    const field = rowOf(
+      within(state).getByRole("table", { name: "Every field of NS-10482 each arm changed" }),
+      "shipping_address.city",
+    );
+    expect(field).toHaveClass("block");
+    expect(
+      within(field)
+        .getAllByRole("cell")
+        .map((cell) => cell.firstElementChild?.firstElementChild?.textContent),
+    ).toEqual(["Arm A", "Arm B", "Assessment"]);
+    // Nothing on General scrolls inside the page: no table keeps a scroller of its own.
+    const sheet = objectives.parentElement as HTMLElement;
+    expect(sheet.querySelector(".overflow-x-auto, .overflow-auto, .overflow-x-scroll")).toBeNull();
+  });
+
+  it("shows a judge's first sentence, and keeps the rest and who gave it under Verdict details", async () => {
     scored = true;
     judgeRationale =
       "The arm named the order back to the customer. It then said the city had moved to Lyon.";
     const user = userEvent.setup();
     renderResults();
 
-    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
-    const row = within(judged).getByRole("row", { name: /Explain the outcome/ });
-    const [armA] = within(row).getAllByRole("cell");
-    const disclosure = within(armA).getByRole("button", {
-      name: "The arm named the order back to the customer.",
+    await screen.findByRole("region", { name: "Objectives" });
+    const row = within(objectivesGroup("Scored by a judge")).getByRole("row", {
+      name: /Explain the outcome/,
     });
+    const [armA] = within(row).getAllByRole("cell");
 
-    // One line on screen; the rest of the reason, and who gave it, wait behind the press.
-    expect(disclosure).toHaveAttribute("aria-expanded", "false");
-    expect(within(armA).queryByText(/It then said the city had moved to Lyon/)).toBeNull();
-    expect(within(armA).queryByText(/^Judged by/)).toBeNull();
+    // The pill, then one line: the rationale's first sentence.
+    expect(within(armA).getByText("met")).toHaveClass("rounded-full");
+    expect(within(armA).getByText("The arm named the order back to the customer.")).toBeVisible();
+    // The rest of the reason, and who gave it, wait behind one disclosure, closed.
+    const summary = within(armA).getByText("Verdict details");
+    const details = summary.closest("details") as HTMLElement;
+    expect(details).not.toHaveAttribute("open");
+    expect(within(details).getByText(judgeRationale)).not.toBeVisible();
 
-    await user.click(disclosure);
+    await user.click(summary);
 
-    expect(disclosure).toHaveAttribute("aria-expanded", "true");
-    expect(within(armA).getByText(judgeRationale)).toBeVisible();
-    // The judge by the name it was published under, not by the model that read its rubric.
+    expect(details).toHaveAttribute("open");
+    expect(within(details).getByText(judgeRationale)).toBeVisible();
+    // The judge by the name it was published under, with its version, its model and the
+    // attempt, and the brief it read by its fingerprint.
     expect(
-      await within(armA).findByText(
+      await within(details).findByText(
         "Judged by Resolution quality, version 2, on gpt-5-mini — attempt 1.",
       ),
     ).toBeVisible();
+    expect(within(details).getByText(`${"e".repeat(12)}…`)).toHaveAttribute(
+      "title",
+      "e".repeat(64),
+    );
+    // One disclosure in each judged cell, and no list of verdicts beside the rows any more.
+    expect(within(row).getAllByText("Verdict details")).toHaveLength(2);
+    expect(screen.queryByText(/judge v2 · /)).toBeNull();
   });
 
-  it("discloses a judge execution that produced no verdict as an attempt, never a judgement", async () => {
+  it("says why a judge execution produced no verdict, as an attempt and never a judgement", async () => {
     scored = true;
     judgeFailed = true;
     const user = userEvent.setup();
     renderResults();
 
-    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
-    const row = within(judged).getByRole("row", { name: /Explain the outcome/ });
+    await screen.findByRole("region", { name: "Objectives" });
+    const row = within(objectivesGroup("Scored by a judge")).getByRole("row", {
+      name: /Explain the outcome/,
+    });
     const [armA] = within(row).getAllByRole("cell");
-    await user.click(within(armA).getByRole("button", { name: "the judge could not be reached" }));
+    // Not left blank: the row is still the judge's to score, and the line says why. A sentence,
+    // so the cell's first line and not a pill it would wrap inside.
+    const outcome = within(armA).getByText("a judge scores this after the run");
+    expect(outcome).toBeVisible();
+    expect(outcome).not.toHaveClass("rounded-full");
+    expect(within(armA).getAllByText("the judge could not be reached")[0]).toBeVisible();
+    await user.click(within(armA).getByText("Verdict details"));
 
     // The outage is the lab's: the arm was not judged, and the disclosure does not say it was.
     expect(
@@ -4918,8 +5117,10 @@ describe("experiment results", () => {
     judgeRationale = "the arm answered every turn it received (1 of them)";
     renderResults();
 
-    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
-    const row = within(judged).getByRole("row", { name: /Explain the outcome/ });
+    await screen.findByRole("region", { name: "Objectives" });
+    const row = within(objectivesGroup("Scored by a judge")).getByRole("row", {
+      name: /Explain the outcome/,
+    });
 
     for (const cell of within(row).getAllByRole("cell")) {
       expect(
@@ -4927,6 +5128,8 @@ describe("experiment results", () => {
           "Offline control judge: it checks that every turn was answered, not what the reply said.",
         ),
       ).toBeVisible();
+      // A one-sentence rationale is the line, said once: Verdict details does not repeat it.
+      expect(within(cell).getAllByText(judgeRationale)).toHaveLength(1);
     }
   });
 
@@ -4934,10 +5137,9 @@ describe("experiment results", () => {
     scored = true;
     renderResults();
 
-    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
-    await within(judged).findAllByRole("button", {
-      name: "the arm named the order and said what it changed",
-    });
+    await screen.findByRole("region", { name: "Objectives" });
+    const judged = objectivesGroup("Scored by a judge");
+    await within(judged).findAllByText("the arm named the order and said what it changed");
 
     expect(within(judged).queryByText(/Offline control judge/)).toBeNull();
   });
@@ -5317,30 +5519,40 @@ describe("experiment results", () => {
     expect(within(provenance).queryByRole("link", { name: "warehouse v1" })).toBeNull();
   });
 
-  it("keeps the rows a judge owns out of the deterministic evidence", async () => {
+  it("keeps the rows a judge owns out of the rule's group", async () => {
     renderResults();
 
-    const evidence = await screen.findByRole("region", { name: "Deterministic evidence" });
-    const judged = screen.getByRole("region", { name: "LLM judge evidence" });
+    await screen.findByRole("region", { name: "Objectives" });
 
-    expect(within(evidence).queryByText("Explain the outcome to the customer")).toBeNull();
-    expect(within(judged).getByText("Explain the outcome to the customer")).toBeVisible();
+    expect(
+      within(objectivesGroup("Decided by a rule")).queryByText(
+        "Explain the outcome to the customer",
+      ),
+    ).toBeNull();
+    expect(
+      within(objectivesGroup("Scored by a judge")).getByText("Explain the outcome to the customer"),
+    ).toBeVisible();
   });
 
   it("names the judge, the version, the model, and the attempt behind a verdict", async () => {
     const user = userEvent.setup();
     renderResults();
 
-    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
+    const section = await screen.findByRole("region", { name: "Objectives" });
     // Awaited: the published judges arrive on their own read, and the control appears with
-    // them — before that the card says a judge owns these rows and offers nothing.
-    await user.click(await within(judged).findByRole("button", { name: /Score 1 judged/ }));
+    // them — before that the section says a judge owns these rows and offers nothing.
+    await user.click(await within(section).findByRole("button", { name: /Score 1 judged/ }));
 
     await waitFor(() => expect(scoredBy).toEqual([{ judge_id: JUDGE_ID }]));
-    expect(within(judged).getAllByText(/judge v2 · gpt-5-mini · attempt 1/)).toHaveLength(2);
+    // Each judged cell's own disclosure says what produced its verdict.
+    expect(
+      await within(objectivesGroup("Scored by a judge")).findAllByText(
+        "Judged by Resolution quality, version 2, on gpt-5-mini — attempt 1.",
+      ),
+    ).toHaveLength(2);
     // Scoring again is offered as what it is: the previous verdict stands and a new attempt
     // is recorded beside it.
-    expect(within(judged).getByRole("button", { name: "Score again" })).toBeVisible();
+    expect(within(section).getByRole("button", { name: "Score again" })).toBeVisible();
   });
 
   it("reads what each arm spent, and says so where nobody measured", async () => {
@@ -5440,7 +5652,7 @@ describe("experiment results", () => {
       within(row).getByText("One send is one composition however many arms it reaches."),
     ).toBeVisible();
     // Above the evidence it governs.
-    const evidence = screen.getByRole("region", { name: "Deterministic evidence" });
+    const evidence = screen.getByRole("region", { name: "Objectives" });
     expect(outcome.compareDocumentPosition(evidence) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
@@ -5453,14 +5665,45 @@ describe("experiment results", () => {
     const user = userEvent.setup();
     renderResults();
 
-    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
-    await user.click(await within(judged).findByRole("button", { name: /Score 1 judged/ }));
+    const section = await screen.findByRole("region", { name: "Objectives" });
+    await user.click(await within(section).findByRole("button", { name: /Score 1 judged/ }));
 
+    const judged = objectivesGroup("Scored by a judge");
+    // Each arm's cell says, on its line, that no verdict came back; its disclosure says why.
     await waitFor(() =>
       expect(
-        within(judged).getAllByText(/no verdict — the provider was briefly unavailable/),
+        within(judged).getAllByText(/; no verdict: the provider was briefly unavailable\.$/),
       ).toHaveLength(2),
     );
+    for (const cell of within(judged).getAllByRole("cell")) {
+      expect(within(cell).getAllByText("the judge could not be reached")[0]).toBeVisible();
+    }
+  });
+
+  it("says a scoring pass the lab refused at the section's foot, beside the press", async () => {
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/judgements`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "the judge store is unavailable", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderResults();
+
+    const section = await screen.findByRole("region", { name: "Objectives" });
+    const score = await within(section).findByRole("button", { name: /Score 1 judged/ });
+    await user.click(score);
+
+    const alert = await within(section).findByRole("alert");
+    expect(alert).toHaveTextContent("the judge store is unavailable");
+    // In the foot with the press, under both groups, rather than at the top of the page.
+    expect(alert.parentElement).toContainElement(score);
+    expect(
+      objectivesGroup("Scored by a judge").compareDocumentPosition(alert) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("marks which depth tab is open", async () => {
@@ -5524,7 +5767,7 @@ describe("experiment results", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "the experiment store is unavailable",
     );
-    expect(screen.queryByRole("region", { name: "Deterministic evidence" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Objectives" })).toBeNull();
   });
 
   it("reads what moved each arm from its revisions rather than from what it said", async () => {
@@ -5532,15 +5775,23 @@ describe("experiment results", () => {
     mutationEvents = [mutationEvent(ARM_B, 0)];
     renderResults();
 
-    const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
-    });
-    const rows = within(state).getAllByRole("listitem");
+    const state = await screen.findByRole("region", { name: "Business state" });
 
-    expect(rows[0]).toHaveTextContent("orders.apply_address_change · r0 → r1");
-    // The scenario's own fault is a writer beside the tools: two arms at different
-    // revisions is only explainable when both writers are on the page.
-    expect(rows[1]).toHaveTextContent("order-moves-under-the-arm · scenario fault · r0 → r1");
+    // Each write in its arm's column, its name over the revision it moved the world across. The
+    // scenario's own fault is a writer beside the tools: two arms at different revisions is
+    // only explainable when both writers are on the page.
+    expect(sheetCells(state, "Scenario fault")).toEqual([
+      "None",
+      "order-moves-under-the-armRevision r0 → r1",
+    ]);
+    expect(sheetCells(state, "Agent write")).toEqual([
+      "orders.apply_address_changeRevision r0 → r1",
+      "None",
+    ]);
+    // One fact per line: the name and its move are two lines, never "a · b".
+    const write = within(sheetRow(state, "Agent write")).getByText("orders.apply_address_change");
+    expect(write.nextElementSibling).toHaveTextContent(/^Revision r0 → r1$/);
+    expect(state).not.toHaveTextContent(" · ");
   });
 
   it("says what each write moved the world to, group by group", async () => {
@@ -5548,47 +5799,57 @@ describe("experiment results", () => {
     stateDiffs = { [ARM_A]: REDIRECTED };
     renderResults();
 
-    const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
-    });
-    const [moved, untouched] = within(state).getAllByRole("listitem");
+    const state = await screen.findByRole("region", { name: "Business state" });
+    // The order the customer quotes is a row of its own, and in each arm's column what about it
+    // moved: the groups counted, then one a line. The scenario's own fault moved the same world,
+    // so its group is among them.
+    const [moved, untouched] = within(sheetRow(state, "Order NS-10482")).getAllByRole("cell");
+    expect(lines(moved)).toEqual(["2 groups changed", "shipping address", "fulfillment"]);
+    expect(untouched).toHaveTextContent(/^No field of this order changed\.$/);
+    // The claim the section makes, checked rather than assumed, under where each world is now.
+    const [nowA, nowB] = within(sheetRow(state, "Fingerprint now")).getAllByRole("cell");
+    expect(nowA).toHaveTextContent("No other state changed.");
+    expect(nowB).toHaveTextContent("Nothing wrote — this arm's world is the one it started in.");
+    expect(nowB).not.toHaveTextContent("No other state changed.");
 
-    // The order the customer quotes, and what about it moved, in one line: the scenario's
-    // own fault moved the same world, so its group is in the same summary.
-    expect(moved).toHaveTextContent("NS-10482 · 2 groups changed: shipping address, fulfillment");
-    // The claim the card makes, checked rather than assumed.
-    expect(moved).toHaveTextContent("no other state changed");
-    expect(untouched).toHaveTextContent(
-      "Nothing wrote — this arm's world is the one it started in",
-    );
-
-    // The values a revision counter cannot say, one press away.
+    // The values a revision counter cannot say, one press away: one arm changed fields the other
+    // did not, so each keeps its own column, a row per group.
     await userEvent.click(
       within(state).getByRole("button", { name: "Every changed field of NS-10482 (3)" }),
     );
-    expect(state).toHaveTextContent("shipping_address.city: Bordeaux → Lyon");
-    expect(state).toHaveTextContent("fulfilment.status: unfulfilled → partially_fulfilled");
+    const fields = within(state).getByRole("table", {
+      name: "Every field of NS-10482 each arm changed",
+    });
+    const [cityA, cityB] = within(sheetRow(fields, "shipping address")).getAllByRole("cell");
+    expect(within(cityA).getByText("shipping_address.city").nextElementSibling).toHaveTextContent(
+      "Bordeaux → Lyon",
+    );
+    expect(cityB).toHaveTextContent(/^Nothing in this group changed\.$/);
+    expect(within(fields).getByText("fulfilment.status").nextElementSibling).toHaveTextContent(
+      "unfulfilled → partially_fulfilled",
+    );
   });
 
-  it("opens each arm's diff on one line counting its groups and the entries it added", async () => {
+  it("counts each arm's groups on a line, then names one group a line", async () => {
     stateDiffs = { [ARM_A]: seededDiff(ARM_A_WORLD), [ARM_B]: seededDiff(ARM_B_WORLD) };
     renderResults();
 
-    const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
-    });
-    const [armA, armB] = within(state).getAllByRole("listitem");
+    const state = await screen.findByRole("region", { name: "Business state" });
 
     // Seventeen paths read as three groups: the biggest first, the history counted by the
     // entries it gained rather than by their eight fields.
-    for (const arm of [armA, armB]) {
-      expect(arm).toHaveTextContent(
-        "NS-10482 · 3 groups changed: shipping address, fulfillment, 2 events added",
-      );
-      expect(arm).not.toHaveTextContent("shipping_address.city");
+    for (const cell of within(sheetRow(state, "Order NS-10482")).getAllByRole("cell")) {
+      expect(lines(cell)).toEqual([
+        "3 groups changed",
+        "shipping address",
+        "fulfillment",
+        "2 events added",
+      ]);
+      expect(cell).not.toHaveTextContent("shipping_address.city");
     }
     // Every path is still one press away, and nowhere else until then.
-    expect(within(state).queryByRole("table")).toBeNull();
+    expect(within(state).queryByRole("table", { name: /^Every field/ })).toBeNull();
+    expect(within(state).queryByRole("table", { name: /^Where the arms differ/ })).toBeNull();
     expect(
       within(state).getByRole("button", { name: "Every changed field of NS-10482 (17)" }),
     ).toHaveAttribute("aria-expanded", "false");
@@ -5599,9 +5860,7 @@ describe("experiment results", () => {
     stateDiffs = diffs;
     renderResults();
 
-    const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
-    });
+    const state = await screen.findByRole("region", { name: "Business state" });
     await userEvent.click(
       within(state).getByRole("button", { name: "Every changed field of NS-10482 (17)" }),
     );
@@ -5609,12 +5868,13 @@ describe("experiment results", () => {
       name: "Every field of NS-10482 each arm changed",
     });
 
-    // One table, the arms in columns under their names.
+    // One table on the sheet's columns, the arms under their names and the assessment the table
+    // adds after them; what each field was is the column the paths are in.
     expect(
       within(table)
         .getAllByRole("columnheader")
         .map((cell) => cell.textContent),
-    ).toEqual(["Field", "Was", "Arm A", "Arm B", "Assessment"]);
+    ).toEqual(["Field and what it was", "Arm A", "Arm B", "Assessment"]);
     // Grouped by the path's first segment, in the summary's order.
     expect(
       within(table)
@@ -5626,19 +5886,26 @@ describe("experiment results", () => {
     const paths = within(table)
       .getAllByRole("rowheader")
       .filter((cell) => cell.getAttribute("scope") === "row")
-      .map((cell) => cell.textContent);
+      .map((cell) => cell.querySelector(".font-mono")?.textContent);
     expect([...paths].sort()).toEqual(
       (diffs[ARM_A].orders[0]?.changes ?? []).map((change) => change.path).sort(),
     );
-    // What it was, and what each arm left it at.
+    // Heard as the journey reads it: the field, what it was with no word before it, each arm's
+    // value, then the assessment — the row's own accessible name, then part by part.
     expect(
-      within(rowOf(table, "shipping_address.city"))
-        .getAllByRole("cell")
-        .map((cell) => cell.textContent),
-    ).toEqual(["Bordeaux", "Lyon", "Lyon", "Same"]);
-    expect(
-      within(rowOf(table, "shipping_address.line2")).getAllByRole("cell")[0],
-    ).toHaveTextContent("not set");
+      within(table).getByRole("row", { name: /^shipping_address\.city Bordeaux Lyon Lyon Same$/ }),
+    ).toBe(rowOf(table, "shipping_address.city"));
+    expect(heardFieldRow(rowOf(table, "shipping_address.city"))).toEqual([
+      "shipping_address.city",
+      "Bordeaux",
+      "Lyon",
+      "Lyon",
+      "Same",
+    ]);
+    // "Was" is drawn and not heard: the column's header says it.
+    const header = within(rowOf(table, "shipping_address.city")).getByRole("rowheader");
+    expect(within(header).getByText("Was")).toHaveAttribute("aria-hidden", "true");
+    expect(heardFieldRow(rowOf(table, "shipping_address.line2"))[1]).toBe("not set");
   });
 
   it("marks a value the arms left differently, in words and with its glyph, on load", async () => {
@@ -5648,13 +5915,12 @@ describe("experiment results", () => {
     };
     renderResults();
 
-    const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
-    });
-    // What was set aside is counted, so "the same" never stands for more than was checked.
-    expect(state).toHaveTextContent(
+    const state = await screen.findByRole("region", { name: "Business state" });
+    // What was set aside is counted, so "the same" never stands for more than was checked: one
+    // spanning row, the order's comparison.
+    expect(sheetCells(state, "Compared")).toEqual([
       "Both arms changed the same 17 fields, and differ on 2: shipping_address.city, shipping_address.source_address_id. Not compared: 4 timestamps and 1 event identifier.",
-    );
+    ]);
     // The differing rows are on the page before anything is pressed, and only they are.
     const differing = within(state).getByRole("table", {
       name: "Where the arms differ on NS-10482",
@@ -5663,21 +5929,29 @@ describe("experiment results", () => {
       within(differing)
         .getAllByRole("rowheader")
         .filter((cell) => cell.getAttribute("scope") === "row")
-        .map((cell) => cell.textContent),
+        .map((cell) => cell.querySelector(".font-mono")?.textContent),
     ).toEqual(["shipping_address.city", "shipping_address.source_address_id"]);
     expect(
-      within(rowOf(differing, "shipping_address.city"))
-        .getAllByRole("cell")
-        .map((cell) => cell.textContent),
-    ).toEqual(["Bordeaux", "Lyon", "Paris", "≠ Difference"]);
+      within(differing).getByRole("row", {
+        name: /^shipping_address\.city Bordeaux Lyon Paris Difference$/,
+      }),
+    ).toBe(rowOf(differing, "shipping_address.city"));
+    expect(heardFieldRow(rowOf(differing, "shipping_address.city"))).toEqual([
+      "shipping_address.city",
+      "Bordeaux",
+      "Lyon",
+      "Paris",
+      "Difference",
+    ]);
+    // The glyph is drawn beside the word and not heard instead of it.
+    const assessment = within(rowOf(differing, "shipping_address.city")).getAllByRole("cell")[2];
+    expect(assessment).toHaveTextContent(/^≠ Difference$/);
+    expect(within(assessment as HTMLElement).getByText("≠")).toHaveAttribute("aria-hidden", "true");
     // An identifier the operator chose is a value like any other: only the lab's own name
     // for an event it wrote is set aside.
-    expect(
-      within(rowOf(differing, "shipping_address.source_address_id")).getAllByRole("cell"),
-    ).toHaveLength(4);
-    expect(
-      within(rowOf(differing, "shipping_address.source_address_id")).getAllByRole("cell")[3],
-    ).toHaveTextContent("Difference");
+    expect(heardFieldRow(rowOf(differing, "shipping_address.source_address_id")).at(-1)).toBe(
+      "Difference",
+    );
 
     // And the full list still holds them, marked the same way.
     await userEvent.click(
@@ -5686,7 +5960,7 @@ describe("experiment results", () => {
     const table = within(state).getByRole("table", {
       name: "Every field of NS-10482 each arm changed",
     });
-    expect(within(rowOf(table, "shipping_address.city")).getAllByRole("cell")[3]).toHaveTextContent(
+    expect(within(rowOf(table, "shipping_address.city")).getAllByRole("cell")[2]).toHaveTextContent(
       "≠ Difference",
     );
   });
@@ -5695,35 +5969,34 @@ describe("experiment results", () => {
     stateDiffs = { [ARM_A]: seededDiff(ARM_A_WORLD), [ARM_B]: seededDiff(ARM_B_WORLD) };
     renderResults();
 
-    const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
-    });
+    const state = await screen.findByRole("region", { name: "Business state" });
     // The seeded run's two arms wrote the same world at different moments, and says how much
     // it set aside to call it that.
     expect(state).toHaveTextContent(
       "Both arms changed the same 17 fields to the same values, apart from 4 timestamps and 1 event identifier, which are not compared.",
     );
-    expect(within(state).queryByRole("table")).toBeNull();
+    expect(within(state).queryByRole("table", { name: /^Where the arms differ/ })).toBeNull();
     await userEvent.click(
       within(state).getByRole("button", { name: "Every changed field of NS-10482 (17)" }),
     );
-    const table = within(state).getByRole("table");
+    const table = within(state).getByRole("table", {
+      name: "Every field of NS-10482 each arm changed",
+    });
     // Both values on the page, neither marked.
     expect(
-      within(rowOf(table, "events[4].id"))
-        .getAllByRole("cell")
-        .map((cell) => cell.textContent),
-    ).toEqual([
+      within(table).getByRole("row", {
+        name: "events[4].id not set address-change-e72248418ca9 address-change-d1a644321b81 Not compared",
+      }),
+    ).toBe(rowOf(table, "events[4].id"));
+    expect(heardFieldRow(rowOf(table, "events[4].id"))).toEqual([
+      "events[4].id",
       "not set",
       "address-change-e72248418ca9",
       "address-change-d1a644321b81",
       "Not compared",
     ]);
-    expect(
-      within(rowOf(table, "fulfilment.shipped_at"))
-        .getAllByRole("cell")
-        .map((cell) => cell.textContent),
-    ).toEqual([
+    expect(heardFieldRow(rowOf(table, "fulfilment.shipped_at"))).toEqual([
+      "fulfilment.shipped_at",
       "not set",
       "2026-08-24T09:00:55.000000Z",
       "2026-08-24T09:01:15.000000Z",
@@ -5744,7 +6017,7 @@ describe("experiment results", () => {
     renderResults();
 
     const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
+      name: "Business state",
     });
     expect(state).toHaveTextContent(
       "and differ on 1: events[3].id. Not compared: 4 timestamps and 1 event identifier.",
@@ -5770,7 +6043,7 @@ describe("experiment results", () => {
     renderResults();
 
     const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
+      name: "Business state",
     });
     // Six of the history's fields differ, named five at a time; the two moments are still
     // each arm's own clock.
@@ -5791,7 +6064,7 @@ describe("experiment results", () => {
     renderResults();
 
     const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
+      name: "Business state",
     });
     // A date somebody chose is a value, whatever it looks like: only the fields the run's own
     // clock writes are set aside.
@@ -5808,7 +6081,7 @@ describe("experiment results", () => {
     renderResults();
 
     const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
+      name: "Business state",
     });
     // Absent and present are different facts (ADR 0035), whatever shape the present one has.
     expect(state).toHaveTextContent("differ on 1: fulfilment.shipped_at.");
@@ -5828,13 +6101,12 @@ describe("experiment results", () => {
     stateDiffs = { [ARM_A]: moved, [ARM_B]: moved };
     renderResults();
 
-    const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
-    });
+    const state = await screen.findByRole("region", { name: "Business state" });
     expect(state).toHaveTextContent("Both arms changed the same 1 field to the same values.");
-    expect(within(state).getAllByRole("listitem")[0]).toHaveTextContent(
-      "NS-10482 · 1 group changed: shipping address",
-    );
+    expect(lines(within(sheetRow(state, "Order NS-10482")).getAllByRole("cell")[0])).toEqual([
+      "1 group changed",
+      "shipping address",
+    ]);
   });
 
   it("reads one arm's diff without a comparison", async () => {
@@ -5847,19 +6119,26 @@ describe("experiment results", () => {
     );
     renderResults();
 
-    const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
-    });
+    const state = await screen.findByRole("region", { name: "Business state" });
     // Nothing to compare against: no sentence about the arms, and no Assessment column.
     await userEvent.click(
       await within(state).findByRole("button", { name: "Every changed field of NS-10482 (17)" }),
     );
     expect(state).not.toHaveTextContent(/arms changed/);
+    expect(within(state).queryByRole("row", { name: /^Compared/ })).toBeNull();
+    const table = within(state).getByRole("table", {
+      name: "Every field of NS-10482 each arm changed",
+    });
     expect(
-      within(within(state).getByRole("table"))
+      within(table)
         .getAllByRole("columnheader")
         .map((cell) => cell.textContent),
-    ).toEqual(["Field", "Was", "Arm A"]);
+    ).toEqual(["Field and what it was", "Arm A"]);
+    expect(heardFieldRow(rowOf(table, "shipping_address.city"))).toEqual([
+      "shipping_address.city",
+      "Bordeaux",
+      "Lyon",
+    ]);
   });
 
   it("keeps each arm's column where the arms changed different fields", async () => {
@@ -5867,29 +6146,35 @@ describe("experiment results", () => {
     stateDiffs = { [ARM_A]: REDIRECTED, [ARM_B]: seededDiff(ARM_B_WORLD) };
     renderResults();
 
-    const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
-    });
+    const state = await screen.findByRole("region", { name: "Business state" });
     // What only one arm changed is named, a whole history entry folded, the rest counted.
-    expect(state).toHaveTextContent(
+    expect(sheetCells(state, "Compared")).toEqual([
       "The arms changed different fields, so each keeps its own column. Only Arm B changed events[3].*, events[4].*, fulfilment.shipped_at, shipping_address.line1, shipping_address.line2 and 3 more.",
-    );
+    ]);
     expect(state).not.toHaveTextContent("Only Arm A");
-    // Every path either arm moved, counted once.
+    // Every path either arm moved, counted once, each in its own arm's column.
     await userEvent.click(
       within(state).getByRole("button", { name: "Every changed field of NS-10482 (17)" }),
     );
-    expect(within(state).queryByRole("table")).toBeNull();
-    const columns = within(state)
-      .getAllByRole("listitem")
-      .filter((item) => item.querySelector("dl"));
-    expect(columns).toHaveLength(2);
-    const [armA, armB] = columns;
-    expect(armA).toHaveTextContent("Arm A");
-    expect(within(armA as HTMLElement).getAllByRole("definition")).toHaveLength(3);
-    expect(armB).toHaveTextContent("Arm B");
-    expect(within(armB as HTMLElement).getAllByRole("definition")).toHaveLength(17);
-    expect(armB).toHaveTextContent("events[4].id: not set → address-change-d1a644321b81");
+    const fields = within(state).getByRole("table", {
+      name: "Every field of NS-10482 each arm changed",
+    });
+    expect(within(fields).queryByRole("columnheader", { name: "Assessment" })).toBeNull();
+    const pathsOf = (index: number) =>
+      within(fields)
+        .getAllByRole("row")
+        .slice(1)
+        .flatMap((row) =>
+          Array.from(
+            within(row).getAllByRole("cell")[index]?.querySelectorAll(".font-mono") ?? [],
+            (path) => path.textContent,
+          ),
+        );
+    expect(pathsOf(0)).toHaveLength(3);
+    expect(pathsOf(1)).toHaveLength(17);
+    expect(within(fields).getByText("events[4].id").nextElementSibling).toHaveTextContent(
+      "not set → address-change-d1a644321b81",
+    );
   });
 
   it("does not fold an entry another arm also changed", async () => {
@@ -5907,7 +6192,7 @@ describe("experiment results", () => {
     renderResults();
 
     const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
+      name: "Business state",
     });
     // Arm B touched the same entry, so "only Arm A changed events[3].*" would be false.
     expect(state).toHaveTextContent(
@@ -5941,7 +6226,7 @@ describe("experiment results", () => {
     renderResults();
 
     const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
+      name: "Business state",
     });
     expect(state).toHaveTextContent(
       "Both arms changed the same 2 fields to the same values, apart from 1 timestamp, which is not compared.",
@@ -5963,7 +6248,7 @@ describe("experiment results", () => {
     renderResults();
 
     const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
+      name: "Business state",
     });
     expect(state).toHaveTextContent(
       "Only Arm A changed fulfilment.*. Only Arm B changed shipping_address.city.",
@@ -5985,16 +6270,16 @@ describe("experiment results", () => {
     };
     renderResults();
 
-    const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
-    });
+    const state = await screen.findByRole("region", { name: "Business state" });
     await userEvent.click(
       within(state).getByRole("button", { name: "Every changed field of NS-10482 (1)" }),
     );
 
     // An order that had no address and now has one is a different fact from one whose city
     // was blanked, and an empty cell would read as the same thing for both.
-    expect(state).toHaveTextContent("shipping_address.city: not set → Lyon");
+    expect(within(state).getByText("shipping_address.city").nextElementSibling).toHaveTextContent(
+      "not set → Lyon",
+    );
   });
 
   it("reports a change outside every order rather than hiding it, without an alert", async () => {
@@ -6006,15 +6291,18 @@ describe("experiment results", () => {
     };
     renderResults();
 
-    const state = await screen.findByRole("region", {
-      name: "Business state — verified, not claimed",
-    });
+    const state = await screen.findByRole("region", { name: "Business state" });
     // Nothing in this build can produce one, which is exactly why it must be visible if one
-    // appears: the card's "no other state changed" is otherwise unfalsifiable. It was on the
+    // appears: the section's "No other state changed" is otherwise unfalsifiable. It was on the
     // record when the page loaded, so nothing announces it as if it had just happened.
-    expect(within(state).getAllByRole("listitem")[0]).toHaveTextContent(
-      "Changed outside every order: interaction.ticket_reference: T-204 → T-999",
+    const [armA, armB] = within(sheetRow(state, "Changed outside every order")).getAllByRole(
+      "cell",
     );
+    expect(armA).toHaveTextContent("interaction.ticket_reference: T-204 → T-999");
+    // Its glyph and its words, never the colour alone.
+    expect(armA.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(armA.querySelector(".text-lab-error")).not.toBeNull();
+    expect(armB).toHaveTextContent(/^Nothing$/);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -6555,21 +6843,31 @@ describe("execution timeline in lanes", () => {
     expect(within(stream).queryByText("the event you followed")).toBeNull();
   });
 
-  it("links an evidence line to the call that decided it, and lands there", async () => {
+  it("links an arm's cell to the call that decided it, named for its objective and arm, and lands there", async () => {
     const user = userEvent.setup();
     renderResults();
 
-    const card = await screen.findByRole("region", { name: "Deterministic evidence" });
-    const row = await within(card).findByRole("row", { name: /Read the address-change policy/ });
-    const [armA, armB] = within(row).getAllByRole("cell");
-    const link = within(armA).getByRole("link", {
-      name: /support\.read_document answered policy:address-change/,
+    await screen.findByRole("region", { name: "Objectives" });
+    const row = within(objectivesGroup("Decided by a rule")).getByRole("row", {
+      name: /Read the address-change policy/,
     });
+    const [armA, armB] = within(row).getAllByRole("cell");
+    // Every decided cell draws the same words, so each link is named for its objective and its
+    // arm: read out of context, a list of them is not a column of twins.
+    const link = within(armA).getByRole("link", {
+      name: "Open the deciding event for Read the address-change policy, Arm A",
+    });
+    expect(link).toHaveTextContent(/^Open the deciding event →$/);
     expect(link).toHaveAttribute(
       "href",
       `/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results/timeline#event-${ARM_A}-0-1-call-0`,
     );
-    // Arm B's row was decided by no call, so its line is text and never a guessed link.
+    // Under the pill and the evidence line it opens.
+    expect(within(armA).getByText("met")).toBeVisible();
+    expect(
+      within(armA).getByText("support.read_document answered policy:address-change"),
+    ).toBeVisible();
+    // Arm B's row was decided by no call, so it draws no link rather than a guessed one.
     expect(within(armB).queryByRole("link")).toBeNull();
     expect(armB).toHaveTextContent("support.read_document never answered");
 
@@ -8209,13 +8507,8 @@ describe("the results as one sheet", () => {
     // Each chip lands on what it names, the cards not yet drawn as sections included.
     const [outcome, objectives, state, configuration, usage, provenance, notes] = targets;
     expect(outcome).toBe(screen.getByRole("region", { name: "Outcome" }));
-    expect(objectives).toContainElement(
-      screen.getByRole("region", { name: "Deterministic evidence" }),
-    );
-    expect(objectives).toContainElement(screen.getByRole("region", { name: "LLM judge evidence" }));
-    expect(state).toContainElement(
-      screen.getByRole("region", { name: "Business state — verified, not claimed" }),
-    );
+    expect(objectives).toBe(screen.getByRole("region", { name: "Objectives" }));
+    expect(state).toBe(screen.getByRole("region", { name: "Business state" }));
     expect(configuration).toBe(screen.getByRole("region", { name: "Configuration" }));
     expect(usage).toBe(screen.getByRole("region", { name: "Usage" }));
     expect(provenance).toContainElement(screen.getByRole("region", { name: "Provenance" }));
@@ -8565,22 +8858,23 @@ describe("the record on the General tab", () => {
     renderResults();
 
     await screen.findByRole("region", { name: "Provenance" });
-    for (const name of [
-      "Deterministic evidence",
-      "Business state — verified, not claimed",
-      "LLM judge evidence",
-      "Provenance",
-      "Notes & tags",
-    ]) {
+    for (const name of ["Provenance", "Notes & tags"]) {
       const footer = screen.getByRole("region", { name }).lastElementChild as HTMLElement;
       const text = (footer.textContent ?? "").trim();
       expect(text.match(/[.!?](\s|$)/g), `${name}: ${text}`).toHaveLength(1);
     }
-    // A section of the sheet says it in one note under its title, where the card had a footer.
-    for (const name of ["Outcome", "Configuration", "Usage"]) {
-      const note = screen.getByRole("region", { name }).querySelector("h2 + p");
+    // A section of the sheet says it in one note under its title, where the card had a footer,
+    // and a group of its rows in one note under its heading.
+    const notes = [
+      ...["Outcome", "Objectives", "Business state", "Configuration", "Usage"].map(
+        (name) => screen.getByRole("region", { name }).querySelector("h2 + p") as HTMLElement,
+      ),
+      ...screen.getByRole("region", { name: "Objectives" }).querySelectorAll("h3 + p"),
+    ];
+    expect(notes).toHaveLength(7);
+    for (const note of notes) {
       const text = (note?.textContent ?? "").trim();
-      expect(text.match(/[.!?](\s|$)/g), `${name}: ${text}`).toHaveLength(1);
+      expect(text.match(/[.!?](\s|$)/g), text).toHaveLength(1);
     }
 
     // What the footers said and no longer say is still said, by the walk around this screen.

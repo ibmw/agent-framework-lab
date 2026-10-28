@@ -8,6 +8,13 @@ record left unmeasured: it is *Usage*, its rows stack, and at 390×844 it passes
 the viewport. The matrices' scroller (*The results' matrices keep their reading widths*) stands
 until the objectives are drawn as sheet rows.
 
+Amendment: 2026-10-28 — the objectives are drawn as sheet rows (ADR 0080, *The evidence*):
+*The results' matrices keep their reading widths*, the `Experiments.test.tsx` line holding both
+matrices in a `relative` scroller, and the `experiment-start.spec.ts` line on a deciding call
+scrolled to inside the matrix are superseded. The results' tables stack at a phone's width and
+none scrolls inside the page; the deciding-call journey reaches arm B's link by the page's own
+scroll. The indexes keep `tableScrollerClasses`.
+
 Amends ADR 0016, *The helpdesk workspace* ("The rail collapses to icons **only when the author
 asks**"); ADR 0055, *The bar is one row*; and ADR 0058, its *Reset to defaults…* section, as to
 what the rail's preference governs. Every other decision of the three stands, as do ADR 0044's and

@@ -663,80 +663,108 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(strip).toHaveAttribute("aria-hidden", "true");
   await expect(strip).toContainText("Arm A");
 
-  // Each cell's mark with the sentence that decided it, drawn under the mark rather than heard
-  // or hovered: the arm that completed missed the read, the one still open can make it.
-  const deterministic = card(page, "Deterministic evidence");
-  await expect(deterministic.getByRole("cell").filter({ hasText: /missed/ })).toHaveCount(1);
-  await expect(deterministic.getByRole("cell").filter({ hasText: /pending/ })).toHaveCount(1);
-  await expect(deterministic.getByText(/^support\.read_document never answered/)).toHaveCount(2);
-  // The judge's row is on its own card with the version and model that produced it, never
-  // mixed in with the evidence a rule decided.
-  await expect(deterministic.getByText("Read document")).toBeVisible();
-  await expect(deterministic.getByText("Resolve the incident")).toHaveCount(0);
-  const judgeCard = card(page, "LLM judge evidence");
-  await expect(judgeCard.getByText("Resolve the incident")).toBeVisible();
-  await expect(judgeCard.getByText(/judge v1 · deterministic · attempt 1/)).toHaveCount(2);
-  // The control judge read whether each turn was answered, and says so beside its mark; the
-  // whole of its reason, and the judge by its published name, open under the first sentence.
-  await expect(judgeCard.getByText(/^Offline control judge: it checks/)).toHaveCount(2);
-  await judgeCard.getByRole("button", { name: /^the arm answered every turn it received/ }).click();
+  // Each arm's outcome on each objective with the sentence that decided it, drawn under its pill
+  // rather than heard or hovered: the arm that completed missed the read, the one still open can
+  // make it. A rule's rows and a judge's are two labelled groups of one section (ADR 0080).
+  const objectives = card(page, "Objectives");
+  const ruled = objectives.getByRole("table", { name: "Decided by a rule" });
+  await expect(ruled.getByRole("cell").filter({ hasText: /missed/ })).toHaveCount(1);
+  await expect(ruled.getByRole("cell").filter({ hasText: /pending/ })).toHaveCount(1);
+  await expect(ruled.getByText(/^support\.read_document never answered/)).toHaveCount(2);
+  // The judge's row is in its own group, never mixed in with the evidence a rule decided.
+  await expect(ruled.getByText("Read document", { exact: true })).toBeVisible();
+  await expect(ruled.getByText("Resolve the incident")).toHaveCount(0);
+  const judgedRows = objectives.getByRole("table", { name: "Scored by a judge" });
+  await expect(judgedRows.getByText("Resolve the incident", { exact: true })).toBeVisible();
+  // The control judge read whether each turn was answered, and says so beside its pill; the
+  // whole of its reason, the judge by its published name with its version and model, the
+  // attempt and the brief it read open under each cell's Verdict details.
+  await expect(judgedRows.getByText(/^Offline control judge: it checks/)).toHaveCount(2);
+  const verdict = `Judged by experiment-resolution-quality-${unique}, version 1, on the deterministic control — attempt 1.`;
+  await expect(judgedRows.getByText(verdict)).toHaveCount(2);
+  await expect(judgedRows.getByText(verdict).first()).toBeHidden();
+  await judgedRows.getByRole("cell").first().getByText("Verdict details").click();
+  await expect(judgedRows.getByText(verdict).first()).toBeVisible();
   await expect(
-    judgeCard.getByText(
-      `Judged by experiment-resolution-quality-${unique}, version 1, on the deterministic control — attempt 1.`,
-    ),
-  ).toHaveCount(1);
+    judgedRows
+      .getByRole("cell")
+      .first()
+      .getByText(/^Brief /),
+  ).toBeVisible();
 
-  // The same results at a phone's width (ADR 0079): the rail is the strip, the matrices scroll
-  // inside their cards, the sheet's rows stack with each cell naming its arm (ADR 0080), and
-  // nothing — not a cell's screen-reader line, not Usage, not the bar — passes the viewport or
-  // sets the pane scrolling sideways.
+  // The same results at a phone's width (ADR 0079): the rail is the strip, the sheet's rows stack
+  // with each cell naming its arm (ADR 0080) — the objectives and the business state's fields as
+  // Usage does, none of them scrolling inside the page — and nothing passes the viewport or sets
+  // the pane scrolling sideways.
   const wide = page.viewportSize();
   await page.setViewportSize(PHONE);
   await expect(page.getByRole("button", { name: "Expand menu" })).toBeVisible();
   await expect(strip).toHaveCount(0);
-  // Stacked as blocks, the Usage table is still a table to the browser's own accessibility
-  // tree: each row a row, its label a row header, and a cell per arm (ADR 0080).
-  const stacked = await accessibleTable(page, "Usage");
-  expect(stacked?.[0]).toEqual(["columnheader", "columnheader", "columnheader"]);
-  expect(stacked?.length).toBeGreaterThan(1);
-  for (const row of stacked?.slice(1) ?? []) {
-    expect(row).toEqual(["rowheader", "cell", "cell"]);
+  // Stacked as blocks, each table is still a table to the browser's own accessibility tree: each
+  // row a row, its label a row header, and a cell per arm (ADR 0080).
+  for (const name of ["Usage", "Decided by a rule"]) {
+    const stacked = await accessibleTable(page, name);
+    expect(stacked?.[0], name).toEqual(["columnheader", "columnheader", "columnheader"]);
+    expect(stacked?.length, name).toBeGreaterThan(1);
+    for (const row of stacked?.slice(1) ?? []) {
+      expect(row, name).toEqual(["rowheader", "cell", "cell"]);
+    }
   }
   await expect(
     usage.getByRole("row", { name: /^Tool calls/, includeHidden: true }).getByText("Arm B"),
   ).toHaveCount(1);
-  await usage.scrollIntoViewIfNeeded();
-  expect(await pastTheViewport(page)).toEqual([]);
+  await expect(
+    ruled.getByRole("row", { name: /Read document/ }).getByText("Arm B", { exact: true }),
+  ).toHaveCount(1);
+  // Every changed field, on the sheet's rows: its group's heading row, then each path with each
+  // arm's value and the assessment the table adds, stacked rather than scrolled.
+  const businessState = card(page, "Business state");
+  await businessState.getByRole("button", { name: /^Every changed field of NS-10482 / }).click();
+  const fields = businessState.getByRole("table", {
+    name: "Every field of NS-10482 each arm changed",
+  });
+  const stackedFields = await accessibleTable(page, "Every field of NS-10482 each arm changed");
+  expect(stackedFields?.[0]).toEqual([
+    "columnheader",
+    "columnheader",
+    "columnheader",
+    "columnheader",
+  ]);
+  for (const row of stackedFields?.slice(1) ?? []) {
+    expect([["rowheader"], ["rowheader", "cell", "cell", "cell"]]).toContainEqual(row);
+  }
+  for (const section of [usage, objectives, businessState]) {
+    await section.scrollIntoViewIfNeeded();
+    expect(await pastTheViewport(page)).toEqual([]);
+  }
   await expectTopBarHoldsItsControls(page);
   if (wide !== null) {
     await page.setViewportSize(wide);
   }
 
-  // What actually moved each arm, read off its revisions rather than off what it answered.
-  const businessState = card(page, "Business state — verified, not claimed");
-  await expect(businessState.getByText(/orders\.apply_address_change · r1 → r2/)).toHaveCount(2);
-  // And what those revisions moved the world *to*, one line per arm: the order by its
-  // reference, then the groups that moved — the scenario's own fault moved the same world, so
-  // its fulfilment is in the same difference.
+  // What actually moved each arm, read off its revisions rather than off what it answered: each
+  // arm's write in its column, its name over the revision it moved the world across.
+  const agentWrite = businessState.getByRole("row", { name: /^Agent write/ });
+  await expect(agentWrite.getByText("orders.apply_address_change")).toHaveCount(2);
+  await expect(agentWrite.getByText("Revision r1 → r2")).toHaveCount(2);
+  // And what those revisions moved the world *to*: the order by its reference, then the groups
+  // that moved, one a line — the scenario's own fault moved the same world, so its fulfilment
+  // is in the same difference.
+  const order = businessState.getByRole("row", { name: /^Order NS-10482/ });
+  await expect(order.getByText("3 groups changed", { exact: true })).toHaveCount(2);
+  await expect(order.getByText("2 events added", { exact: true })).toHaveCount(2);
+  // The claim the section makes, checked against the whole document rather than assumed.
+  await expect(businessState.getByText("No other state changed.")).toHaveCount(2);
+  // The two arms did the same thing, and one row spanning them says so — counting what it set
+  // aside, since each arm ran at its own moments.
   await expect(
-    businessState.getByText(
-      "NS-10482 · 3 groups changed: shipping address, fulfillment, 2 events added",
-      { exact: true },
-    ),
-  ).toHaveCount(2);
-  // The claim the card makes, checked against the whole document rather than assumed.
-  await expect(businessState.getByText(/no other state changed/)).toHaveCount(2);
-  // The two arms did the same thing, and the card says so in one sentence — counting what it
-  // set aside, since each arm ran at its own moments.
-  await expect(
-    businessState.getByText(/^Both arms changed the same \d+ fields to the same values/),
+    businessState
+      .getByRole("row", { name: /^Compared/ })
+      .getByText(/^Both arms changed the same \d+ fields to the same values/),
   ).toBeVisible();
   // A revision counter is true of a redirected order and of a corrected typo alike, so the
-  // value on both sides is the evidence: the arms side by side, the city each left.
-  await businessState.getByRole("button", { name: /^Every changed field of NS-10482 / }).click();
-  const fields = businessState.getByRole("table", {
-    name: "Every field of NS-10482 each arm changed",
-  });
+  // value on both sides is the evidence: the field, what it was, the city each arm left, and the
+  // assessment, in that order.
   await expect(
     fields.getByRole("row", { name: /^shipping_address\.city Bordeaux Lyon Lyon / }),
   ).toBeVisible();
@@ -915,13 +943,18 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
     ),
   ).toBeVisible();
   await expect(
-    card(page, "Deterministic evidence")
+    card(page, "Objectives")
+      .getByRole("table", { name: "Decided by a rule" })
       .getByRole("cell")
       .filter({ hasText: /missed.*support\.read_document never/ }),
   ).toHaveCount(1);
   // What is *not* carried over: a verdict is a record about the arm it was scored on
   // (ADR 0031), so the derived arms are unjudged until somebody scores them.
-  await expect(card(page, "LLM judge evidence").getByText(/judge v1 · /)).toHaveCount(0);
+  await expect(
+    card(page, "Objectives")
+      .getByRole("table", { name: "Scored by a judge" })
+      .getByText("Verdict details"),
+  ).toHaveCount(0);
 
   // It says where it came from, and the link leads back to the run it reproduces.
   await page.getByRole("link", { name: `Prompt comparison ${unique}` }).click();
@@ -990,20 +1023,20 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
 });
 
 /**
- * A deciding-call link followed from a cell the operator has to scroll to (ADR 0030 amended
- * 2026-10-25, ADR 0079).
+ * A deciding-call link followed from a stacked results cell (ADR 0030 amended 2026-10-25,
+ * ADR 0080).
  *
  * The journey above records no `decided_by`: the control policy never opens the document its
- * objective asks for, so its rows are pending or missed and their lines are text. This run is
- * recorded through the public API (`recordDecidedRun`) on an objective the control meets, so
- * each arm's row is a link to the `orders.read_order` call that decided it — and a link carries
- * an absolutely placed `sr-only` line, which is what the matrices' `relative` scroller holds in.
+ * objective asks for, so its rows are pending or missed and draw no link. This run is recorded
+ * through the public API (`recordDecidedRun`) on an objective the control meets, so each arm's
+ * cell links to the `orders.read_order` call that decided it.
  *
- * At a phone's width the arm B column starts past the pane's edge, so the link is reached by
- * scrolling the matrix inside its card. Nothing passes the viewport while it is, and following
- * it lands on that very call in the execution timeline, focused and named as the event followed.
+ * At a phone's width the sheet's rows stack: arm B's cell is under arm A's, under a line naming
+ * its arm, and nothing on the page scrolls but the page — the matrix's own scroller is gone. The
+ * link is reached by the page's scroll, nothing passes the viewport while it is, and following it
+ * lands on that very call in the execution timeline, focused and named as the event followed.
  */
-test("a deciding call scrolled to inside the results matrix opens the call on the timeline", async ({
+test("a deciding call followed from a stacked results cell opens the call on the timeline", async ({
   page,
   request,
 }) => {
@@ -1036,36 +1069,42 @@ test("a deciding call scrolled to inside the results matrix opens the call on th
   expect(call, "arm B's row names no deciding call").toBeTruthy();
   if (!call) return;
   const anchor = `event-${armB}-${call.ordinal}-${call.attempt}-call-${call.sequence}`;
+  // And the arm's label, which the link is named with.
+  const recorded = await request.get(`/api/v1/shops/${lab.shopId}/experiments/${run.experimentId}`);
+  const { runs } = (await recorded.json()) as { runs: { run_id: string; label: string }[] };
+  const label = runs.find((entry) => entry.run_id === armB)?.label ?? "";
+  expect(label, "arm B has no label").not.toBe("");
 
   await page.setViewportSize(PHONE);
   await page.goto(`/lab/bench/${lab.shopId}/${run.experimentId}/results`);
-  const row = card(page, "Deterministic evidence").getByRole("row", { name: /Read the order/ });
+  const row = card(page, "Objectives")
+    .getByRole("table", { name: "Decided by a rule" })
+    .getByRole("row", { name: new RegExp(run.statement) });
   const cell = row.getByRole("cell").nth(1);
-  const link = cell.getByRole("link", { name: /orders\.read_order answered order:/ });
+  // The cell names its arm on a line of its own: at this width no column says it.
+  await expect(cell.getByText(label, { exact: true })).toBeVisible();
+  // Named with its objective and its arm, since every decided cell draws the same words.
+  const link = cell.getByRole("link", {
+    name: `Open the deciding event for ${run.statement}, ${label}`,
+  });
   await expect(link).toHaveAttribute(
     "href",
     `/lab/bench/${lab.shopId}/${run.experimentId}/results/timeline#${anchor}`,
   );
 
-  // Arm B's column is past the pane's edge: the link is in the page but not on screen, and the
-  // only way to it is the matrix's own scroller, which has not moved.
-  const scroller = link.locator("xpath=ancestor::div[contains(@class, 'overflow-x-auto')][1]");
-  await expect(scroller, "the matrix has no scroller of its own").toHaveCount(1);
-  await expect(link).not.toBeInViewport();
-  expect(await scroller.evaluate((element) => element.scrollLeft)).toBe(0);
-  // Off screen sideways, not merely below the fold: the link starts at or past the scroller's
-  // right edge, so only scrolling the matrix brings it in.
-  const [linkBox, scrollerBox] = [await link.boundingBox(), await scroller.boundingBox()];
-  expect(linkBox && scrollerBox, "the link or its scroller is not rendered").toBeTruthy();
-  if (!linkBox || !scrollerBox) return;
-  expect(linkBox.x, "arm B's link is not past the scroller's right edge").toBeGreaterThanOrEqual(
-    scrollerBox.x + scrollerBox.width,
-  );
+  // No table scrolls inside the page: the link has no scroller between it and the pane, and is
+  // inside the viewport's width, below the fold or not.
+  await expect(
+    link.locator("xpath=ancestor::*[contains(@class, 'overflow-x-auto')]"),
+    "the link sits in a scroller of its own",
+  ).toHaveCount(0);
+  const box = await link.boundingBox();
+  expect(box, "the link is not rendered").toBeTruthy();
+  if (!box) return;
+  expect(box.x + box.width).toBeLessThanOrEqual(PHONE.width);
 
   await link.scrollIntoViewIfNeeded();
   await expect(link).toBeInViewport();
-  expect(await scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
-  // The cell's `sr-only` line went with it: inside the scroller, not past the viewport.
   expect(await pastTheViewport(page)).toEqual([]);
 
   await link.click();

@@ -83,7 +83,7 @@ function entriesOf(changes: readonly FieldChangeSchema[]): FieldChangeSchema[][]
 }
 
 /** One group in the summary's words: "fulfillment", or "2 events added". */
-function groupPhrase(group: DiffGroup): string {
+export function groupPhrase(group: DiffGroup): string {
   if (!group.list) {
     return group.label;
   }
@@ -105,10 +105,12 @@ function groupPhrase(group: DiffGroup): string {
     .join(", ");
 }
 
-/** The line an order's diff opens with: "3 groups changed: shipping address, fulfillment, 2 events added". */
-export function summarizeGroups(groups: readonly DiffGroup[]): string {
-  const noun = groups.length === 1 ? "group" : "groups";
-  return `${groups.length} ${noun} changed: ${groups.map(groupPhrase).join(", ")}`;
+/**
+ * The line an order's diff opens with, "3 groups changed", over a line per group in
+ * `groupPhrase`'s words: one fact per line (ADR 0080).
+ */
+export function groupsChanged(groups: readonly DiffGroup[]): string {
+  return `${groups.length} ${groups.length === 1 ? "group" : "groups"} changed`;
 }
 
 /**

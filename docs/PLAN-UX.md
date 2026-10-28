@@ -140,98 +140,31 @@ The plan's decisions, where the operator's left a point open:
   sheet mockup draws others. A card that becomes a section takes the section's name.
 
 No slice touches the backend or a contract. The covered journeys are `experiment-start.spec.ts`
-(the results from :649 to :786, from History's *Open results* at :865 to :956, and the
-deciding-call journey at :964–1053), `tour-anchors.spec.ts` (the results tour,
-`lib/tours.ts:316–374`) and `sticky-header.spec.ts` (:686–691).
-
-### Slice 60 — The evidence on the sheet: objectives and business state
-
-- [ ] **Objectives** replaces *Deterministic evidence* and *LLM judge evidence*
-  (`ExperimentResultsPage.tsx:127–149`, :162–220): one section, two labelled groups, "Decided by
-  a rule" and "Scored by a judge", each with its empty sentence (:136–139, :171–174). A row per
-  objective names its statement, its slug, its severity as a tag, and "must never happen" when
-  forbidden (`components/ObjectiveEvidence.tsx:187–192`). Each arm's cell: the outcome as a pill,
-  glyph and word (`OUTCOMES`, `lib/evidence.ts:27`); the evidence line; and, where one call
-  decided it, "Open the deciding event" into the timeline (`ObjectiveEvidence.tsx:261–272`),
-  named with its objective and its arm.
-- [ ] A judged cell: the pill, the rationale's first sentence, the control judge's sentence
-  (`ObjectiveEvidence.tsx:285–289`), and one *Verdict details* disclosure holding the whole
-  rationale, the judge by its published name with its version and model (`judgementProvenance`),
-  the attempt and the brief's fingerprint. The `Verdicts` list
-  (`ExperimentResultsPage.tsx:518–552`) folds into it, a failed execution saying why
-  (`describeVerdict`, :561–566).
-- [ ] The judge picker, *Score again* and the scoring queue (:189–217) at the section's foot;
-  `aria-busy` on the judged group only (ADR 0065).
-- [ ] `EvidenceMatrix` and its scroller (`components/ObjectiveEvidence.tsx:147–210`) go; the
-  bench's compact matrix (:78–124) is unchanged.
-- [ ] **Business state** replaces its card (`ExperimentResultsPage.tsx:151–160`;
-  `BusinessStateComparison`, `components/StateDiff.tsx:21–106`): a row per fact, each arm's value
-  in its column, one fact per line — each scenario fault and agent write over its revision move,
-  each order moved ("Order NS-10482": "3 groups changed", then a group per line), *Changed
-  outside every order* with its glyph (:79–99), and "Fingerprint now" over where it started and
-  "No other state changed". The comparison sentence (:135–170) is a spanning row, and "Every
-  changed field of {order} ({n})" stays the disclosure (:176–252), its table on the sheet's rows
-  so that it stacks at a phone's width rather than scrolling, and a column per arm inside it
-  where the arms changed different paths (`ArmColumns`, :363). The disclosure keeps its name,
-  "Every changed field of {order} ({n})", and the table its name, "Every field of {order} each
-  arm changed" (:215).
-- [ ] Each of that table's rows keeps its accessible name in today's order — field, starting
-  value, each arm's value, assessment — which the journey reaches as
-  `/^shipping_address\.city Bordeaux Lyon Lyon /` (`experiment-start.spec.ts:714–721`): the
-  starting value is the row header's second line with no word before it ("Was" goes in the
-  column headers or is `aria-hidden`), and every row ends in a cell holding its assessment word —
-  *Difference*, *Same* or *Not compared* — one column more than the sheet primitive draws, which
-  the table adds. The order is the desktop one: at a phone's width each stacked cell's arm line
-  enters the name, and the journey reads these rows at the restored width.
-- [ ] Each card's footer becomes its section's note or its group's: the deterministic card's
-  (`ExperimentResultsPage.tsx:129–134`) and the judge card's (:164–169) under their groups, the
-  business state's (:153–157) under its section.
-- [ ] The tour's two evidence steps (`lib/tours.ts:341`, :349) anchor on the sections.
-
-Frames: sheet mockup :139–180 with :429–447; `Workspace.dc.html:2610–2622` and `RESULT_ROWS`
-(:5003).
-
-Authority: ADR 0030, ADR 0031, ADR 0035, ADR 0040, ADR 0080.
-
-Departures to record: `docs/design-direction.md`'s rows *A judged cell on the results*, *An
-objective's secondary text on the results* (the kind is now the group the row sits in) and *The
-state diff on the results*; ADR 0079's *The results' matrices keep their reading widths* and
-its *Verification* line on the deciding-call journey, superseded in ADR 0080 by the stacked
-rows; the sheet mockup's "Fulfilment" written "Fulfillment" (Milestone 13), and its judge named
-by the published name rather than "v1 · deterministic".
-
-Branch: `feat/results-sheet-evidence`. Checks: Vitest — `Experiments.test.tsx` (the two groups
-and their empty sentences, each cell's pill, line and link with its name and target, a judged
-cell's disclosure and a failed execution, the scoring queue, the state rows one fact per line,
-every path behind the disclosure, no `alert` on load, the bench's matrix unchanged);
-`tours.test.ts`. `make check`, `pnpm build`; `pnpm test:e2e` for `experiment-start.spec.ts`
-(:660–679, :694–722, :890–896, and the deciding-call journey at :964–1053, rewritten because
-the scroller it follows the link inside is gone) and `tour-anchors.spec.ts`.
-
-Slice evidence: the seeded run's Objectives and Business state at 1440 and 390, turn 2's refused
-proposal readable from its cell.
+(the results from :650 to :842, from History's *Open results* at :921 to :1017, and the
+deciding-call journey at :1025–1120), `tour-anchors.spec.ts` (the results tour,
+`lib/tours.ts:316–376`) and `sticky-header.spec.ts` (:686–691).
 
 ### Slice 61 — The record on the sheet: provenance, notes, and tags in the header
 
-- [ ] **Provenance** replaces the rail's card (`ExperimentResultsPage.tsx:232–244`): spanning
+- [ ] **Provenance** replaces the rail's card (`ExperimentResultsPage.tsx:153–170`): spanning
   rows — *Derived from* when `derived_from` is set (the source's link, and what it changed on a
   line of its own; `components/RunProvenance.tsx:77–92`, :157–169), *Starting state* and
   *Inputs* each with a copy button named for its fingerprint that says it copied in a polite
   status, *Participant*, *Scenario and fixtures* (the scenario and every other pin that is not a
   block, each a link, ADR 0068), *Blocks* (each by its published name, `usePinnedBlockNames`,
   with its kind) — then *Each arm's versions* in the arm columns. It carries
-  `data-tour="results-provenance"` (`lib/tours.ts:357`). The bench's `RunProvenance` card is
+  `data-tour="results-provenance"` (`lib/tours.ts:359`). The bench's `RunProvenance` card is
   unchanged, and both read one helper for the pin groups.
 - [ ] **Notes**, the last section, id `notes`: the composer first ("Add a note", *Add note*,
-  ADR 0078's touch), then each note's body over its time (`ExperimentResultsPage.tsx:467–506`).
-  The *Notes & tags* card (:301–509) goes, its footer (:389–393) the section's note, as
-  Provenance's footer (:235–240) is Provenance's.
+  ADR 0078's touch), then each note's body over its time (`ExperimentResultsPage.tsx:435–443`).
+  The *Notes & tags* card (:269–477) goes, its footer (:357–361) the section's note, as
+  Provenance's footer (:161–166) is Provenance's.
 - [ ] The header: the way back above the title, still "Back to the live bench"; the run's facts
   (`ExperimentResultsLayout.tsx:345–356`) as a list named "About this run" — the standing with
   its glyph, the scenario's version as a link, the seed, when it started (`formatTimestamp`);
   then *Filed under*, each tag with its remove ("Remove tag {tag}") and *+ Tag*, which opens the
   tag form in place ("Add a tag", *Add tag*, its refusal as today,
-  `ExperimentResultsPage.tsx:428–464`) and folds it on *Cancel* or Escape, focus returned to
+  `ExperimentResultsPage.tsx:396–432`) and folds it on *Cancel* or Escape, focus returned to
   *+ Tag*; a failed tag write is said in the header.
 - [ ] *Notes · N* among the header's actions, before Replay, a link to `#notes` on General from
   every tab, named with its count.
@@ -240,7 +173,7 @@ proposal readable from its cell.
   under the header. The inventory's H4 for C — one line, the long-action note only while one
   runs — is what they already draw: the line is one, and `ActionStatus` draws its note only
   while the derivation runs (`components/ActionStatus.tsx:83`).
-- [ ] The tour's last two steps (`lib/tours.ts:357–372`) anchor on Provenance and Notes, and say
+- [ ] The tour's last two steps (`lib/tours.ts:359–374`) anchor on Provenance and Notes, and say
   that tags are in the header.
 
 Frames: sheet mockup :41–81 and :195–239; `Workspace.dc.html:2561–2575` and :2639–2653.
@@ -257,7 +190,7 @@ a derived run's source and change, a copy writing the fingerprint and saying so,
 before the notes, the tags in the header with *+ Tag*, *Cancel* and Escape, a removal leaving a
 half-typed tag alone, a refusal muted then red, the *Notes · N* count and target from another
 tab); `WorkspaceChrome.test.tsx` if `PageHeader` gains a slot; `tours.test.ts`. `make check`,
-`pnpm build`; `pnpm test:e2e` for `experiment-start.spec.ts` (:725–732, :923–925),
+`pnpm build`; `pnpm test:e2e` for `experiment-start.spec.ts` (:775–782, :984–986),
 `tour-anchors.spec.ts` and `sticky-header.spec.ts` (:686–691: the taller header still scrolls
 away).
 
@@ -280,7 +213,7 @@ Slice evidence: the seeded run's header, Provenance and Notes at 1440 and 390, a
   disclosure at the foot that stays the region "Executed project code" — a `section` carrying
   the name, with the `summary` and its count of functions inside — so
   `card(page, "Executed project code")` still resolves; the list inside it is as today, and the
-  journey opens it before it reads the list's items (`experiment-start.spec.ts:762–770`). The
+  journey opens it before it reads the list's items (`experiment-start.spec.ts:818–824`). The
   *Arms* card (:147–166) goes.
 - [ ] **Traces** (`ExperimentTracesPage.tsx:105–171`): the attempts as a list on the left,
   buttons with `aria-pressed` naming the arm, the turn and the attempt, in the group still named
@@ -310,7 +243,7 @@ and each arm's calls and reply in its column, a message one arm never received, 
 spanning row and lanes, the folded code and its count, a followed event landing, the traces'
 list, the waterfall's bars at their offsets, the span region and the one-line strip, no *Arms*
 card on either tab); `tours.test.ts`. `make check`, `pnpm build`; `pnpm test:e2e` for
-`experiment-start.spec.ts` (:742–786, the executed code opened before it is read),
+`experiment-start.spec.ts` (:798–842, the executed code opened before it is read),
 `sticky-header.spec.ts` (:688–691) and `tour-anchors.spec.ts`.
 
 Slice evidence: the seeded run's three depth tabs at 1440 and 390, scrolled with the strip pinned.
