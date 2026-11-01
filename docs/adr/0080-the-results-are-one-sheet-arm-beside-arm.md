@@ -231,7 +231,11 @@ the header, under *Filed under*. A tag's remove is a `BusyButton`, held while an
 keyboard reader's focus (ADR 0065); once its chip is gone, focus still on it moves to *+ Tag*, or to
 the field where the form is open when the answer lands. `PageHeader` gains two slots for this,
 `lead` above the title row and `below` under everything else, since a chip list and a form cannot
-sit in its one line of description. *Notes · N* is a link to `…/results#notes` from every tab, named
+sit in its one line of description. A page with no ← holds its title and chips in one item of the
+title row, `flex-[1_1_16rem]` as the ← and its title already are (ADR 0066), so a long title wraps
+beside the actions rather than putting them on a line of their own. The mockup's 520px basis is
+not taken: on a page whose title is short it would still push the actions under it wherever the
+row is narrower than 520px and the actions together. *Notes · N* is a link to `…/results#notes` from every tab, named
 "Notes · N"; the router lands it as a chip's jump. The line on Replay and Fork, the reach line, the
 derivation queue and the Fork panel are unchanged, under the header. Inventory H4 for this direction
 — one line, the long-action note only while one runs — is what they already draw: `ActionStatus`

@@ -851,3 +851,41 @@ test("the depth tabs pin their strips, and a followed event lands clear of the a
   await waterfall.getByRole("button").nth(1).click();
   await expect(strip).toHaveText(/span agent\.answer$/);
 });
+
+test("a long results title wraps beside the header's actions, not above them", async ({
+  page,
+  lab,
+  request,
+}) => {
+  const run = await recordDecidedRun(request, lab);
+  // The seed's titles are short; the mockup's is "Wrong shipping address — Pydantic AI vs
+  // OpenAI Agents SDK (offline demo)", wider than the row the actions leave it at 1440.
+  const label =
+    "Wrong shipping address — Pydantic AI vs OpenAI Agents SDK, a long comparison (offline demo)";
+  await page.route(
+    `**/api/v1/shops/${lab.shopId}/experiments/${run.experimentId}`,
+    async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        json: { ...(await response.json()), label },
+      });
+    },
+  );
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/lab/bench/${lab.shopId}/${run.experimentId}/results`);
+
+  const title = page.getByRole("heading", { level: 1, name: label });
+  const replay = pageHeader(page).getByRole("button", { name: "Replay" });
+  await expect(title).toBeVisible();
+  const heading = await box(title);
+  const action = await box(replay);
+  // Beside: the actions start where the title ends, on the title's own lines.
+  expect(action.x, "the actions are not beside the title").toBeGreaterThanOrEqual(
+    heading.x + heading.width,
+  );
+  expect(action.y, "the actions are on a line of their own").toBeLessThan(
+    heading.y + heading.height,
+  );
+  expect(heading.height, "the long title did not wrap").toBeGreaterThan(40);
+});

@@ -187,10 +187,13 @@ export function PageHeader({
             {chips}
           </HeaderBack>
         ) : (
-          <>
+          // One item of the row, as `HeaderBack` is: a long title — the results' "… vs …" —
+          // wraps within it, beside the actions, rather than taking the row and pushing them
+          // onto a line of their own.
+          <div className="flex min-w-0 flex-[1_1_16rem] flex-wrap items-center gap-3">
             {name}
             {chips}
-          </>
+          </div>
         )}
         {/* The actions wrap among themselves once the row has already put them on a line of
             their own and they are still wider than it — a phone's width — rather than run off
