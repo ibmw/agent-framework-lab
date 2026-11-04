@@ -1,5 +1,10 @@
 # Agent Framework Capability Lab
 
+[![CI](https://github.com/ibmw/agent-framework-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/ibmw/agent-framework-lab/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)
+![Node 24+](https://img.shields.io/badge/node-24%2B-brightgreen.svg)
+
 **Run two AI agent frameworks on the same customer-support incident, from the same starting state,
 and compare what each one actually did — call by call, field by field.**
 
@@ -85,7 +90,7 @@ the columns are never added up into a winner.
 You need Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js 24+ and pnpm 11+.
 
 ```bash
-git clone <this repository> agent-framework-lab && cd agent-framework-lab
+git clone https://github.com/ibmw/agent-framework-lab.git && cd agent-framework-lab
 make install            # uv sync + pnpm install
 cp .env.example .env
 uv run prek install     # the repository's git hooks
