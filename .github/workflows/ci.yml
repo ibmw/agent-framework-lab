@@ -50,5 +50,5 @@ jobs:
           cache: pnpm
       - run: uv sync --all-packages --frozen
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm --filter @agent-lab/web exec playwright install --with-deps chromium
       - run: pnpm test:e2e
