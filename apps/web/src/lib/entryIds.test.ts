@@ -304,7 +304,9 @@ describe("nextReference", () => {
           }
         }
       }
-    });
+      // An enumeration, so its time is the machine's: about 1.3s alone, and past the default
+      // 5s on a shared two-core CI runner while the other suites run beside it.
+    }, 30_000);
   });
 });
 
